@@ -25,7 +25,7 @@ export function rectOf(s: Slot, cx: number = s.cx, cy: number = s.cy): Rect {
 }
 
 /** Which axis the Scroll/Pan slider moves, or null when the crop shows the whole image. */
-export function scrollAxis(s: Slot): 'x' | 'y' | null {
+export function scrollAxis(s: Pick<Slot, 'crop' | 'nw' | 'nh'>): 'x' | 'y' | null {
   const ar = cropRatio(s);
   const nr = s.nw / s.nh;
   if (Math.abs(ar - nr) < 0.01) return null;

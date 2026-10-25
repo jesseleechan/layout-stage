@@ -1,0 +1,30 @@
+/* Canvas tools: scroll on the canvas (Space-drag), the mini-map and the align / distribute row. */
+
+/* Space held: a layout whose crop hides part of the image shows a grab cursor; others can't scroll. */
+.stage.space .shot { cursor: default; }
+.stage.space .shot.scrollable { cursor: grab; }
+.stage.panning, .stage.panning .shot, .stage.panning .shot.scrollable { cursor: grabbing; }
+
+/* Mini-map: the whole image with the visible window outlined. */
+.minimap-box { display: flex; gap: 12px; align-items: flex-start; }
+.minimap-box.x { flex-direction: column; gap: 6px; }
+.minimap {
+  position: relative; flex: none; overflow: hidden; border-radius: 6px; border: 1px solid var(--line);
+  background: var(--field); cursor: pointer; touch-action: none; user-select: none; -webkit-user-select: none;
+}
+.minimap img { width: 100%; height: 100%; object-fit: fill; display: block; pointer-events: none; max-width: none; -webkit-user-drag: none; }
+.minimap-window {
+  position: absolute; border-radius: 3px; cursor: grab;
+  box-shadow: inset 0 0 0 2px var(--accent), 0 0 0 999px rgba(10, 12, 20, .42);
+}
+.minimap.y .minimap-window { left: 0; right: 0; }
+.minimap.x .minimap-window { top: 0; bottom: 0; }
+.minimap.dragging, .minimap.dragging .minimap-window { cursor: grabbing; }
+.minimap-text { display: grid; gap: 4px; min-width: 0; }
+.minimap-pct { font: 11.5px var(--font-num); font-variant-numeric: tabular-nums; color: var(--ink); }
+
+/* Align (3 + 3) and distribute (2): small icon buttons in one row. */
+.align-tools { display: flex; gap: 8px; }
+.align-tools [role="group"] { display: flex; gap: 3px; min-width: 0; }
+.align-tools .icon-btn { flex: 1 1 0; width: auto; min-width: 0; height: 28px; border-radius: 7px; }
+.align-tools svg { display: block; }

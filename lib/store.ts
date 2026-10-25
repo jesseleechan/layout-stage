@@ -18,6 +18,7 @@ import { capHeight, autoCrop, groupBounds, scrollAxis } from './render/units';
 import { loadImage, pruneImages, putImage, releaseImage } from './images';
 import { loadComposition, loadStyles, saveComposition, saveStyles } from './persist';
 import { exportComposition, renderComposition } from './render/export';
+import { alignLayouts, canAlign, distributeLayouts, type AlignEdge } from './align';
 
 export interface Toast {
   id: number;
@@ -128,6 +129,12 @@ export interface EditorState {
   closeCapture(): void;
   startCaptureJob(url: string, target: number | null): number;
   endCaptureJob(id: number): void;
+
+  /* --- canvas tools: align and distribute (lib/align.ts) --- */
+  /** Moves the other visible layouts so their edge or center lines up with the selected one. */
+  align(edge: AlignEdge): void;
+  /** Equal gaps between the visible layouts along an axis (needs 3). */
+  distribute(axis: 'h' | 'v'): void;
 }
 
 const NOT_IMAGE = 'That file isn’t an image. Use PNG, JPG or WebP.';
@@ -519,6 +526,23 @@ export const useEditor = create<EditorState>()((set, get) => {
     },
     endCaptureJob(id) {
       set({ captureJobs: get().captureJobs.filter((j) => j.id !== id) });
+    },
+
+    /* --- canvas tools: align and distribute (lib/align.ts) --- */
+    align(edge) {
+      const { doc, ui } = get();
+      const i = ui.selected;
+      if (i == null || i >= doc.count || !canAlign(doc)) return;
+      if (!alignLayouts(clone(doc), i, edge)) { toast('Already aligned.'); return; }
+      change((d) => { alignLayouts(d, i, edge); });
+    },
+    distribute(axis) {
+      const doc = get().doc;
+      if (!distributeLayouts(clone(doc), axis)) {
+        if (doc.count >= 3) toast('Already evenly spaced.');
+        return;
+      }
+      change((d) => { distributeLayouts(d, axis); });
     },
   };
 });

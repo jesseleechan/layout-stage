@@ -4,6 +4,8 @@ import { CROPS, type CropId } from '@/lib/model';
 import { useEditor } from '@/lib/store';
 import { scrollAxis } from '@/lib/render/units';
 import { Chips, RangeRow, type Option } from './controls';
+import MiniMap from './MiniMap';
+import AlignTools from './AlignTools';
 
 const CROP_OPTIONS: Option<CropId>[] = CROPS.map((c) => ({ value: c.id, label: c.label }));
 
@@ -35,6 +37,7 @@ export default function SelectedPanel() {
         <div className="stack" id="selBody">
           <div className="sub">Crop</div>
           <Chips id="cropChips" label="Crop" options={CROP_OPTIONS} value={v.crop} onPick={(c) => useEditor.getState().setCrop(i, c)} />
+          {axis && <MiniMap i={i} axis={axis} />}
           {axis && (
             <RangeRow
               id="scroll"
@@ -60,6 +63,7 @@ export default function SelectedPanel() {
             <button className="btn sm" type="button" onClick={() => useEditor.getState().layer(1)}>Bring forward</button>
             <button className="btn sm" type="button" onClick={() => useEditor.getState().layer(-1)}>Send back</button>
           </div>
+          <AlignTools i={i} />
         </div>
       )}
     </section>

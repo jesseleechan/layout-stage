@@ -2,10 +2,13 @@
 import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type DragEvent, type PointerEvent } from 'react';
 import { captureJobSlot, useEditor } from '@/lib/store';
 import { PRESETS, type Composition } from '@/lib/model';
-import { clampRadius, rectOf, safeArea, shadowCSS, unit } from '@/lib/render/units';
+import { clampRadius, rectOf, safeArea, scrollAxis, shadowCSS, unit } from '@/lib/render/units';
 import { drawBackground } from '@/lib/render/background';
 import { useImageUrl, useLoadedImage } from '@/lib/images';
 import { snap, snapThreshold } from '@/lib/snap';
+import { scrollAfterMove, scrollValue } from '@/lib/scroll';
+import { useExport } from './ExportSheet';
+import './canvas-tools.css';
 
 /* The live canvas. Preview and export must render identically: the shots below are the CSS twin of
    lib/render/shot.ts (radius, box-shadow, inset border, object-position cover crop); the background is
@@ -15,7 +18,18 @@ const BG_MAX_PX = 4.5e6; // preview background resolution cap
 
 type Drag =
   | { mode: 'move'; i: number; id: number; sx: number; sy: number; cx0: number; cy0: number; moved: boolean }
-  | { mode: 'resize'; i: number; id: number; l: number; t: number; ar: number; moved: boolean };
+  | { mode: 'resize'; i: number; id: number; l: number; t: number; ar: number; moved: boolean }
+  | { mode: 'scroll'; i: number; id: number; sx: number; sy: number; f0: number; axis: 'x' | 'y'; moved: boolean };
+
+/** Alt+wheel over the selected layout scrolls its crop; one undo step after this much idle. */
+const WHEEL_IDLE_MS = 350;
+
+/** Fields where Space types: holding Space there never starts scroll mode. */
+function isTextEntry(t: EventTarget | null): boolean {
+  if (!(t instanceof HTMLElement)) return false;
+  if (t.isContentEditable || t.tagName === 'TEXTAREA') return true;
+  return t instanceof HTMLInputElement && !['range', 'color', 'checkbox', 'radio', 'button', 'submit', 'reset', 'file'].includes(t.type);
+}
 
 const hasFiles = (e: { dataTransfer: DataTransfer | null }) =>
   !!e.dataTransfer && Array.from(e.dataTransfer.types || []).includes('Files');
@@ -56,7 +70,7 @@ function Shot({ i, doc, shadow, visible, onFocusRing }: ShotProps) {
   } as CSSProperties;
   return (
     <div
-      className={f.borderW > 0 ? 'shot has-border' : 'shot'} data-i={i} hidden={!visible} style={style}
+      className={(f.borderW > 0 ? 'shot has-border' : 'shot') + (scrollAxis(s) ? ' scrollable' : '')} data-i={i} hidden={!visible} style={style}
       tabIndex={0} role="button" aria-label={`Layout ${i + 1}`}
       onFocus={(e) => {
         useEditor.getState().select(i);
@@ -64,7 +78,7 @@ function Shot({ i, doc, shadow, visible, onFocusRing }: ShotProps) {
       }}
       onBlur={() => onFocusRing(null)}
       onKeyDown={(e) => {
-        if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); useEditor.getState().select(i); }
+        if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); if (!e.repeat) useEditor.getState().select(i); }
       }}
     >
       {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -93,6 +107,12 @@ export default function Stage() {
   const [toastOn, setToastOn] = useState(false);
   const [focusRing, setFocusRing] = useState<number | null>(null);
   const [painted, setPainted] = useState(false); // first background paint after hydration
+  // Scroll on the canvas: Space held (grab cursor), a Space-drag in progress (grabbing).
+  const spaceRef = useRef(false);
+  const overRef = useRef(false); // pointer over the board's viewport
+  const wheelTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const [space, setSpace] = useState(false);
+  const [panning, setPanning] = useState(false);
 
   const { W, H } = doc;
 
@@ -145,12 +165,18 @@ export default function Stage() {
       if (d.mode === 'move') {
         if (!d.moved && Math.hypot(e.clientX - d.sx, e.clientY - d.sy) < 3) return;
         d.moved = true;
-        const sn = snap(st.doc, d.i, d.cx0 + (e.clientX - d.sx) / k, d.cy0 + (e.clientY - d.sy) / k, snapThreshold(k), !e.altKey);
+        const safe = st.ui.showSafeArea ? safeArea(PRESETS[st.doc.preset].safe, st.doc.W, st.doc.H) : null;
+        const sn = snap(st.doc, d.i, d.cx0 + (e.clientX - d.sx) / k, d.cy0 + (e.clientY - d.sy) / k, snapThreshold(k), !e.altKey, safe);
         st.edit((doc) => {
           doc.slots[d.i].cx = Math.round(sn.cx * 10) / 10;
           doc.slots[d.i].cy = Math.round(sn.cy * 10) / 10;
         });
         st.setGuides(sn.gx, sn.gy);
+      } else if (d.mode === 'scroll') {
+        // The page follows the pointer: dragging up reveals lower content.
+        const dpx = (d.axis === 'y' ? e.clientY - d.sy : e.clientX - d.sx) / k;
+        st.setScroll(d.i, scrollAfterMove(st.doc.slots[d.i], d.f0, dpx));
+        d.moved = true;
       } else {
         const wrap = wrapRef.current;
         if (!wrap) return;
@@ -172,6 +198,7 @@ export default function Stage() {
       drag.current = null;
       const st = useEditor.getState();
       st.setGuides(null, null);
+      if (d.mode === 'scroll') setPanning(false);
       if (d.moved) st.commit();
     };
     window.addEventListener('pointermove', move);
@@ -181,6 +208,67 @@ export default function Stage() {
       window.removeEventListener('pointermove', move);
       window.removeEventListener('pointerup', end);
       window.removeEventListener('pointercancel', end);
+    };
+  }, []);
+
+  /* ---------- scroll on the canvas: Space-drag and Alt+wheel ---------- */
+  useEffect(() => {
+    const isSpace = (e: KeyboardEvent) => e.code === 'Space' || e.key === ' ';
+    const blocked = () => useExport.getState().open || useEditor.getState().captureDialog.open;
+    const down = (e: KeyboardEvent) => {
+      if (!isSpace(e) || e.metaKey || e.ctrlKey || isTextEntry(e.target) || blocked()) return;
+      // Over the canvas, Space is ours: no page scroll, no press on a focused button.
+      if (overRef.current || drag.current?.mode === 'scroll') e.preventDefault();
+      if (!spaceRef.current) { spaceRef.current = true; setSpace(true); }
+    };
+    const up = (e: KeyboardEvent) => {
+      if (!isSpace(e) || !spaceRef.current) return;
+      if (overRef.current) e.preventDefault();
+      spaceRef.current = false;
+      setSpace(false);
+    };
+    const reset = () => { spaceRef.current = false; setSpace(false); };
+    window.addEventListener('keydown', down);
+    window.addEventListener('keyup', up);
+    window.addEventListener('blur', reset);
+    return () => {
+      window.removeEventListener('keydown', down);
+      window.removeEventListener('keyup', up);
+      window.removeEventListener('blur', reset);
+    };
+  }, []);
+
+  /* Alt+wheel (Option on a Mac) over the selected layout scrolls its crop. Plain wheel is left to the
+     page (the editor scrolls on phones), ⌘/Ctrl+wheel and trackpad pinch are browser zoom, and
+     Shift+wheel is horizontal scrolling; Alt+wheel has no default we need. The page moves by the
+     wheel's pixels like a web page (wheel down reveals lower content); one undo step after idle. */
+  useEffect(() => {
+    const vp = viewportRef.current;
+    if (!vp) return;
+    const onWheel = (e: WheelEvent) => {
+      if (!e.altKey || e.ctrlKey || e.metaKey) return;
+      const st = useEditor.getState();
+      const i = st.ui.selected;
+      const wrap = wrapRef.current;
+      if (!st.hydrated || i == null || i >= st.doc.count || !wrap) return;
+      const s = st.doc.slots[i];
+      const f = scrollValue(s);
+      if (f == null) return;
+      const k = st.scale, b = wrap.getBoundingClientRect(), r = rectOf(s);
+      const x = (e.clientX - b.left) / k, y = (e.clientY - b.top) / k;
+      if (x < r.l || x > r.l + r.w || y < r.t || y > r.t + r.h) return;
+      e.preventDefault();
+      const px = e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? vp.clientHeight : 1;
+      const delta = (Math.abs(e.deltaY) >= Math.abs(e.deltaX) ? e.deltaY : e.deltaX) * px;
+      const v = scrollAfterMove(s, f, -delta / k);
+      if (v !== f) st.setScroll(i, v);
+      clearTimeout(wheelTimer.current);
+      wheelTimer.current = setTimeout(() => useEditor.getState().commit(), WHEEL_IDLE_MS);
+    };
+    vp.addEventListener('wheel', onWheel, { passive: false });
+    return () => {
+      vp.removeEventListener('wheel', onWheel);
+      clearTimeout(wheelTimer.current);
     };
   }, []);
 
@@ -196,7 +284,13 @@ export default function Stage() {
     const i = Number(shot.dataset.i);
     st.select(i);
     const s = st.doc.slots[i];
-    drag.current = { mode: 'move', i, id: e.pointerId, sx: e.clientX, sy: e.clientY, cx0: s.cx, cy0: s.cy, moved: false };
+    if (spaceRef.current) {
+      const axis = scrollAxis(s);
+      if (axis) {
+        drag.current = { mode: 'scroll', i, id: e.pointerId, sx: e.clientX, sy: e.clientY, f0: axis === 'y' ? s.fy : s.fx, axis, moved: false };
+        setPanning(true);
+      } else st.showToast('This crop shows the whole image.');
+    } else drag.current = { mode: 'move', i, id: e.pointerId, sx: e.clientX, sy: e.clientY, cx0: s.cx, cy0: s.cy, moved: false };
     e.currentTarget.setPointerCapture(e.pointerId);
     e.preventDefault();
     // Focus it so arrows and [ ] act on it right away.
@@ -270,9 +364,10 @@ export default function Stage() {
       <div
         className="viewport" id="viewport" ref={viewportRef}
         onPointerDown={(e) => { if (e.target === e.currentTarget) { useEditor.getState().select(null); blurShot(); } }}
+        onPointerEnter={() => { overRef.current = true; }} onPointerLeave={() => { overRef.current = false; }}
       >
         <div className="stage-wrap" id="stageWrap" ref={wrapRef} style={{ width: W * scale, height: H * scale, visibility: painted ? undefined : 'hidden' }}>
-          <div className="stage" id="stage" style={{ width: W, height: H, transform: `scale(${scale})` }} onPointerDown={onStageDown}>
+          <div className={'stage' + (space ? ' space' : '') + (panning ? ' panning' : '')} id="stage" style={{ width: W, height: H, transform: `scale(${scale})` }} onPointerDown={onStageDown}>
             <canvas id="bgCanvas" ref={bgRef} aria-hidden="true" />
             {[0, 1, 2].map((i) => (
               <Shot key={i} i={i} doc={doc} shadow={shadow} visible={hydrated && i < doc.count} onFocusRing={setFocusRing} />
@@ -307,7 +402,7 @@ export default function Stage() {
         <div className={toastOn ? 'toast show' : 'toast'} id="toast" role="status" aria-live="polite">{toast?.msg}</div>
       </div>
       <div className="boardbar">
-        <p className="hint">Drag to move · corner handle resizes · arrow keys nudge (Shift for 10) · hold Alt to skip snapping</p>
+        <p className="hint">Drag to move · corner handle resizes · arrow keys nudge (Shift for 10) · hold Alt to skip snapping · Space-drag or Alt-scroll scrolls a crop</p>
         <div className="bar-actions">
           <button className="btn sm" id="safeBtn" type="button" aria-pressed={showSafe} onClick={() => setUi({ showSafeArea: !showSafe })}>Safe area</button>
           <button className="btn sm" id="centerAllBtn" type="button" onClick={centerGroup}>Center group</button>

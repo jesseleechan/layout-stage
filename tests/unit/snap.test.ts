@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { defaultComposition } from '@/lib/arrange';
 import type { Composition } from '@/lib/model';
 import { snap, snapThreshold } from '@/lib/snap';
-import { rectOf } from '@/lib/render/units';
+import { rectOf, safeArea } from '@/lib/render/units';
 
 /** A 1000 × 1500 canvas (center lines x 500, y 750). Slot 0 is the dragged one, 200 × 200.
  *  Slot 1 is fixed: x 720 | 800 | 880, y 200 | 250 | 300. Slot 2 (hidden unless count is 3):
@@ -95,5 +95,50 @@ describe('snap', () => {
     const before = JSON.stringify(d);
     snap(d, 0, 504, 745, TH);
     expect(JSON.stringify(d)).toBe(before);
+  });
+});
+
+describe('snap to the safe area (overlay on)', () => {
+  // The pin's central 80%: x 100 | 500 | 900, y 150 | 750 | 1350.
+  const SAFE = safeArea('inset', 1000, 1500);
+
+  it('snaps the dragged edges to the safe area edges', () => {
+    const d = fixture(1);
+    // left edge (cx − 100) near 100, top edge (cy − 100) near 150
+    expect(snap(d, 0, 204, 246, TH, true, SAFE)).toEqual({ cx: 200, cy: 250, gx: 100, gy: 150 });
+    // right edge (cx + 100) near 900, bottom edge (cy + 100) near 1350
+    expect(snap(d, 0, 795, 1253, TH, true, SAFE)).toEqual({ cx: 800, cy: 1250, gx: 900, gy: 1350 });
+    // center near the safe area's left edge
+    expect(snap(d, 0, 103, 1400, TH, true, SAFE)).toMatchObject({ cx: 100, gx: 100 });
+  });
+
+  it('snaps to the safe area center lines', () => {
+    const d = fixture(1);
+    const r = { l: 0, t: 300, w: 600, h: 400 }; // an off-center rect: center x 300, y 500
+    expect(snap(d, 0, 304, 497, TH, true, r)).toEqual({ cx: 300, cy: 500, gx: 300, gy: 500 });
+  });
+
+  it('only while the overlay is on (a safe rect is passed), and never with Alt', () => {
+    const d = fixture(1);
+    expect(snap(d, 0, 204, 246, TH)).toEqual({ cx: 204, cy: 246, gx: null, gy: null });
+    expect(snap(d, 0, 204, 246, TH, true, null)).toEqual({ cx: 204, cy: 246, gx: null, gy: null });
+    expect(snap(d, 0, 204, 246, TH, false, SAFE)).toEqual({ cx: 204, cy: 246, gx: null, gy: null });
+  });
+
+  it('keeps the other targets and picks the closest', () => {
+    const d = fixture();
+    d.slots[0].w = 170; // half-width 85, so no two candidates tie
+    // right edge 898 is 2 from the safe edge 900; the other layout's left edge 720 is 8 from 728
+    expect(snap(d, 0, 813, 1400, 30, true, SAFE)).toMatchObject({ cx: 815, gx: 900 });
+    // left edge 718 is 2 from the other layout's left edge 720; the safe edge 900 is 12 from 888
+    expect(snap(d, 0, 803, 1400, 30, true, SAFE)).toMatchObject({ cx: 805, gx: 720 });
+  });
+
+  it('uses the Etsy 5:4 crop on a square canvas (y 100 | 500 | 900 on 1000)', () => {
+    const d = fixture(1);
+    d.W = 1000;
+    d.H = 1000;
+    const etsy = safeArea('etsy', 1000, 1000);
+    expect(snap(d, 0, 30, 205, TH, true, etsy)).toEqual({ cx: 30, cy: 200, gx: null, gy: 100 });
   });
 });
