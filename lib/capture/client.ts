@@ -69,19 +69,54 @@ export function captureUrl(url: string, options: CaptureOptions, signal?: AbortS
     } catch {
       throw new CaptureError(signal?.aborted ? 'aborted' : 'network');
     }
-    if (!res.ok || !(res.headers.get('Content-Type') || '').startsWith('image/')) {
+    const type = res.headers.get('Content-Type') || '';
+    const sliced = type.startsWith('multipart/form-data');
+    if (!res.ok || !(type.startsWith('image/') || sliced)) {
       const data = (await res.json().catch(() => null)) as { code?: unknown; message?: unknown } | null;
       const code = isCaptureErrorCode(data?.code) ? data.code : 'failed';
       throw new CaptureError(code, typeof data?.message === 'string' ? data.message : undefined);
     }
-    let blob: Blob;
+    let parts: Blob[];
     try {
-      blob = await res.blob();
+      parts = sliced ? (await res.formData()).getAll('part').filter((p): p is File => p instanceof Blob) : [await res.blob()];
     } catch {
       throw new CaptureError(signal?.aborted ? 'aborted' : 'network');
     }
+    if (!parts.length) throw new CaptureError('failed');
+    let blob: Blob;
+    try {
+      blob = parts.length === 1 ? parts[0] : await joinImages(parts);
+    } catch (e) {
+      console.error('[capture] joining the slices failed:', e);
+      throw new CaptureError('failed');
+    }
     return { blob, trimmed: res.headers.get('X-Capture-Trimmed') === '1', finalUrl: res.headers.get('X-Capture-Url') || url };
   });
+}
+
+/** Joins image slices of the same width top to bottom into one PNG. Hosted, a capture too big for
+ *  one response arrives as WebP slices (each under WebP's height limit); from here on it stays
+ *  lossless. Browser only; self-contained (tests run it in a page). */
+export async function joinImages(parts: Blob[]): Promise<Blob> {
+  const bitmaps = await Promise.all(parts.map((p) => createImageBitmap(p)));
+  const canvas = document.createElement('canvas');
+  try {
+    canvas.width = bitmaps[0].width;
+    canvas.height = bitmaps.reduce((h, b) => h + b.height, 0);
+    const ctx = canvas.getContext('2d');
+    if (!ctx) throw new Error('no 2D canvas');
+    let y = 0;
+    for (const b of bitmaps) {
+      ctx.drawImage(b, 0, y);
+      y += b.height;
+    }
+    const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, 'image/png'));
+    if (!blob) throw new Error(`could not encode a ${canvas.width}×${canvas.height} canvas`);
+    return blob;
+  } finally {
+    bitmaps.forEach((b) => b.close());
+    canvas.width = canvas.height = 0; // release the pixels now, not at garbage collection
+  }
 }
 
 /* ---------------- recent URLs ---------------- */

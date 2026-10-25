@@ -4,6 +4,9 @@ import { CAPTURE_MESSAGES, CaptureError } from '@/lib/capture/errors';
 import { clampOptions, parseCaptureRequest } from '@/lib/capture/options';
 import { createSerialQueue } from '@/lib/capture/queue';
 import { bypassesProxy, parseAuthority, upstreamFromEnv } from '@/lib/capture/guard-proxy';
+import { browserArgs, chromiumPackUrl, DEFAULT_CHROMIUM_PACK_URL, HOSTED_RESPONSE_BUDGET, responseBudget } from '@/lib/capture/server';
+import serverlessChromium from '@sparticuz/chromium-min';
+import { readFileSync } from 'node:fs';
 
 describe('parseCaptureRequest', () => {
   it('passes valid input through', () => {
@@ -124,5 +127,42 @@ describe('guard proxy helpers', () => {
     expect(parseAuthority('[2606:4700::1]:443')).toEqual({ host: '[2606:4700::1]', port: 443 });
     expect(parseAuthority('1.2.3.4:80')).toEqual({ host: '1.2.3.4', port: 80 });
     for (const a of ['example.com', 'example.com:0', 'example.com:70000', '[::1:443', 'a b:443', 'http://x:1']) expect(parseAuthority(a)).toBeNull();
+  });
+});
+
+describe('capture browser launch', () => {
+  const OWN = ['--proxy-server=http://127.0.0.1:4321', '--proxy-bypass-list=<-loopback>', '--disable-quic', '--force-webrtc-ip-handling-policy=disable_non_proxied_udp', '--disable-dev-shm-usage'];
+  const names = (args: string[]) => args.map((a) => a.split('=', 1)[0]);
+
+  it('uses the serverless Chromium on Vercel or when a pack URL is set, Playwright’s otherwise', () => {
+    expect(chromiumPackUrl({})).toBeNull();
+    expect(chromiumPackUrl({ CHROMIUM_PACK_URL: '  ' })).toBeNull();
+    expect(chromiumPackUrl({ VERCEL: '1' })).toBe(DEFAULT_CHROMIUM_PACK_URL);
+    expect(chromiumPackUrl({ CHROMIUM_PACK_URL: ' https://cdn.example/pack.tar ' })).toBe('https://cdn.example/pack.tar');
+    expect(chromiumPackUrl({ VERCEL: '1', CHROMIUM_PACK_URL: 'https://cdn.example/pack.tar' })).toBe('https://cdn.example/pack.tar');
+  });
+  it('keeps hosted responses under the host’s body cap, and local ones unlimited', () => {
+    expect(responseBudget({})).toBe(Infinity);
+    expect(responseBudget({ VERCEL: '1' })).toBe(HOSTED_RESPONSE_BUDGET);
+    expect(responseBudget({ CHROMIUM_PACK_URL: 'https://cdn.example/pack.tar' })).toBe(HOSTED_RESPONSE_BUDGET);
+    expect(HOSTED_RESPONSE_BUDGET).toBeLessThan(4.5e6); // Vercel Functions: 4.5 MB
+  });
+  it('defaults to the x64 pack of the installed chromium-min version', () => {
+    const { version } = JSON.parse(readFileSync('node_modules/@sparticuz/chromium-min/package.json', 'utf8')) as { version: string };
+    expect(DEFAULT_CHROMIUM_PACK_URL).toBe(`https://github.com/Sparticuz/chromium/releases/download/v${version}/chromium-v${version}-pack.x64.tar`);
+  });
+  it('locally passes only our own flags', () => {
+    expect(browserArgs('http://127.0.0.1:4321')).toEqual(OWN);
+  });
+  it('keeps chromium-min’s serverless flags, minus those that would undo Playwright’s or ours', () => {
+    const args = browserArgs('http://127.0.0.1:4321', serverlessChromium.args);
+    expect(args.slice(-OWN.length)).toEqual(OWN);
+    for (const kept of ['--single-process', '--no-zygote', '--no-sandbox', '--in-process-gpu', '--use-angle=swiftshader']) expect(args).toContain(kept);
+    for (const dropped of ['--enable-features', '--disable-features', '--disable-web-security', '--allow-running-insecure-content']) expect(names(args)).not.toContain(dropped);
+    expect(new Set(names(args)).size).toBe(args.length); // no switch twice: Chromium would keep only the last
+  });
+  it('never lets extra flags redirect or bypass the guard proxy', () => {
+    const hostile = ['--proxy-server=http://elsewhere:1', '--PROXY-BYPASS-LIST=*', '--proxy-pac-url=http://x/p.pac', '--no-proxy-server', '--proxy-auto-detect', '--host-resolver-rules=MAP * 10.0.0.1', '--disable-quic', '--mute-audio'];
+    expect(browserArgs('http://127.0.0.1:4321', hostile)).toEqual(['--mute-audio', ...OWN]);
   });
 });

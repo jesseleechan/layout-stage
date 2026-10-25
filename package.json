@@ -12,6 +12,7 @@
     "test:e2e": "playwright test"
   },
   "dependencies": {
+    "@sparticuz/chromium-min": "153.0.0",
     "idb-keyval": "6.3.0",
     "next": "16.4.3",
     "playwright": "1.63.0",

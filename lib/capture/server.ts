@@ -1,10 +1,12 @@
-/* URL capture with Playwright's Chromium. This is the only file to change when hosting needs a
-   different browser (e.g. puppeteer-core + @sparticuz/chromium-min on Vercel): keep the
-   captureScreenshot() signature, launch the browser behind the guard proxy, throw CaptureError.
-   Server only. */
-import { readFile } from 'node:fs/promises';
+/* URL capture, driven by Playwright. Locally the browser is Playwright's own Chromium; on Vercel (or
+   whenever CHROMIUM_PACK_URL is set) it is @sparticuz/chromium-min's serverless Chromium, which is
+   downloaded once per function instance and unpacked to /tmp. This is the only file to change when
+   hosting needs a different browser: keep the captureScreenshot() signature, launch the browser
+   behind the guard proxy, throw CaptureError. Server only. */
+import { readFile, rm } from 'node:fs/promises';
+import os from 'node:os';
 import path from 'node:path';
-import { chromium, type Browser, type BrowserContext, type Page, type Request as PwRequest } from 'playwright';
+import { chromium, type Browser, type BrowserContext, type LaunchOptions, type Page, type Request as PwRequest } from 'playwright';
 import type { CaptureOptions } from '../model';
 import { navError, pageError } from './detect';
 import { CaptureError, NOT_FOUND_MESSAGE, SCHEME_MESSAGE } from './errors';
@@ -24,11 +26,73 @@ const BANNERS_ID = '__layout-stage-banners';
 /** CAPTURE_DEBUG=1 logs each phase's timing and, on a load timeout, the requests still open. */
 const DEBUG = !!process.env.CAPTURE_DEBUG;
 
+/** The Chromium pack that matches @sparticuz/chromium-min's version (x64, which is what Vercel
+ *  functions run on). Keep the two in step when upgrading. */
+export const DEFAULT_CHROMIUM_PACK_URL = 'https://github.com/Sparticuz/chromium/releases/download/v153.0.0/chromium-v153.0.0-pack.x64.tar';
+
+/** Where the serverless Chromium comes from: CHROMIUM_PACK_URL, else the default pack on Vercel.
+ *  null means Playwright's own Chromium (local use). */
+export function chromiumPackUrl(env: Record<string, string | undefined> = process.env): string | null {
+  const url = env.CHROMIUM_PACK_URL?.trim();
+  if (url) return url;
+  return env.VERCEL ? DEFAULT_CHROMIUM_PACK_URL : null;
+}
+
+const switchName = (arg: string) => arg.split('=', 1)[0].toLowerCase();
+
+/** chromium-min flags left out. Chromium keeps only the last --enable-features / --disable-features,
+ *  so chromium-min's would replace Playwright's own (its request routing and screenshots rely on
+ *  them); a capture should load pages the way Chrome does, so no --disable-web-security or
+ *  --allow-running-insecure-content; and the guard proxy alone decides where the browser connects. */
+const DROPPED_SWITCHES = new Set([
+  '--enable-features',
+  '--disable-features',
+  '--disable-web-security',
+  '--allow-running-insecure-content',
+  '--no-proxy-server',
+  '--host-resolver-rules',
+]);
+
+/** The browser's command-line flags: the serverless build's own (when there is one), then ours,
+ *  which nothing may override. Every connection goes through the guard proxy, loopback included. */
+export function browserArgs(proxyUrl: string, serverlessArgs: readonly string[] = []): string[] {
+  const own = [
+    `--proxy-server=${proxyUrl}`,
+    '--proxy-bypass-list=<-loopback>',
+    '--disable-quic',
+    '--force-webrtc-ip-handling-policy=disable_non_proxied_udp',
+    '--disable-dev-shm-usage',
+  ];
+  const taken = new Set(own.map(switchName));
+  const extra = serverlessArgs.filter((arg) => {
+    const name = switchName(arg);
+    return !taken.has(name) && !DROPPED_SWITCHES.has(name) && !name.startsWith('--proxy-');
+  });
+  return [...extra, ...own];
+}
+
+/** Hosted, the route's response body has to stay under the host's cap (Vercel Functions: 4.5 MB),
+ *  and a full-page 2× PNG is often 10–20 MB. Locally there is no cap and captures stay PNG. */
+export const HOSTED_RESPONSE_BUDGET = 4_000_000;
+export function responseBudget(env: Record<string, string | undefined> = process.env): number {
+  return chromiumPackUrl(env) ? HOSTED_RESPONSE_BUDGET : Infinity;
+}
+/** WebP qualities tried in turn until the slices fit the budget (stripe.com, full page at 2×:
+ *  17.7 MB as PNG, 3.6 MB as WebP at 0.92, 2.4 MB at 0.8). */
+const WEBP_QUALITIES = [0.92, 0.8, 0.65];
+export const TOO_LARGE_MESSAGE = 'That page is too big to send back in one piece. Try First screen or 1× sharpness.';
+
 export interface CaptureInput extends CaptureOptions {
   url: string;
 }
+export interface CaptureImage {
+  type: 'image/png' | 'image/webp';
+  data: Buffer;
+}
 export interface CaptureResult {
-  png: Buffer;
+  /** One PNG; or, when that would be over the run's maxBytes, WebP slices of the same width,
+   *  top to bottom (each at most 6000 px tall), for the client to join. */
+  images: CaptureImage[];
   trimmed: boolean;
   finalUrl: string;
 }
@@ -36,6 +100,8 @@ export interface CaptureRunOptions {
   signal?: AbortSignal;
   /** Which hosts may be contacted. Defaults to DNS + public addresses only; tests swap it. */
   policy?: HostPolicy;
+  /** Most bytes the images may take together (default: no limit). See responseBudget(). */
+  maxBytes?: number;
 }
 
 /* One browser (behind one guard proxy) and one queue per server process, kept on globalThis so
@@ -43,6 +109,9 @@ export interface CaptureRunOptions {
 interface Session {
   browser: Browser;
   proxy: GuardProxy;
+  /** The serverless Chromium runs as a single process, which can't start a renderer for a second
+   *  browser context: it serves one capture and closes (relaunching from /tmp is quick). */
+  singleUse: boolean;
 }
 interface Shared {
   session: Promise<Session> | null;
@@ -52,17 +121,21 @@ interface Shared {
 const g = globalThis as typeof globalThis & { __layoutStageCapture?: Shared };
 const shared: Shared = (g.__layoutStageCapture ??= { session: null, queue: createSerialQueue() });
 
-/** Captures a public web page as a PNG. One capture runs at a time; the rest wait their turn.
- *  Throws CaptureError. */
+/** Captures a public web page as a PNG (or WebP slices, see CaptureResult). One capture runs at a
+ *  time; the rest wait their turn. Throws CaptureError. */
 export function captureScreenshot(input: CaptureInput, opts: CaptureRunOptions = {}): Promise<CaptureResult> {
   return shared.queue(async () => {
     if (opts.signal?.aborted) throw new CaptureError('aborted');
     clearTimeout(shared.idle);
     try {
-      return await capture(input, opts.policy ?? publicOnly(), opts.signal);
+      return await capture(input, opts.policy ?? publicOnly(), opts.maxBytes ?? Infinity, opts.signal);
     } finally {
-      shared.idle = setTimeout(() => void shutdownCapture(), IDLE_CLOSE_MS);
-      shared.idle.unref?.();
+      if ((await shared.session?.catch(() => null))?.singleUse) {
+        await shutdownCapture();
+      } else {
+        shared.idle = setTimeout(() => void shutdownCapture(), IDLE_CLOSE_MS);
+        shared.idle.unref?.();
+      }
     }
   });
 }
@@ -96,26 +169,36 @@ async function getSession(): Promise<Session> {
 
 async function launch(): Promise<Session> {
   const proxy = await startGuardProxy(createRequestGuard());
+  const pack = chromiumPackUrl();
+  const t0 = Date.now();
   try {
-    const browser = await chromium.launch({
-      headless: true,
-      args: [
-        `--proxy-server=${proxy.url}`, // every connection goes through the guard proxy …
-        '--proxy-bypass-list=<-loopback>', // … loopback included
-        '--disable-quic',
-        '--force-webrtc-ip-handling-policy=disable_non_proxied_udp',
-        '--disable-dev-shm-usage',
-      ],
-    });
+    const options: LaunchOptions = pack ? await serverlessChromium(pack, proxy.url) : { headless: true, args: browserArgs(proxy.url) };
+    const browser = await chromium.launch(options);
+    if (DEBUG) console.log(`[capture] browser ${browser.version()} up in ${Date.now() - t0}ms${pack ? ' (serverless)' : ''}`);
     browser.on('disconnected', () => void proxy.close().catch(() => undefined));
-    return { browser, proxy };
+    return { browser, proxy, singleUse: !!pack };
   } catch (e) {
     await proxy.close().catch(() => undefined);
+    // An unpack cut short leaves a broken binary that chromium-min would reuse; unpack again next time.
+    if (pack) await rm(path.join(os.tmpdir(), 'chromium'), { force: true }).catch(() => undefined);
     const err = navError(e);
-    if (err.code === 'no_browser') throw err;
+    if (err.code === 'no_browser' && !pack) throw err;
     console.error('[capture] browser launch failed:', e);
     throw new CaptureError('failed');
   }
+}
+
+/** @sparticuz/chromium-min's Chromium. The first launch on a fresh instance downloads the pack
+ *  (about 65 MB) and unpacks it to /tmp, which makes that capture several seconds slower; later
+ *  launches on the same instance reuse it. WebGL is off: its software renderer on one vCPU stalls
+ *  for minutes on pages with animated 3D (vercel.com), so such canvases show their fallback. */
+async function serverlessChromium(pack: string, proxyUrl: string): Promise<LaunchOptions> {
+  const { default: serverless } = await import('@sparticuz/chromium-min');
+  serverless.setGraphicsMode = false;
+  const t0 = Date.now();
+  const executablePath = await serverless.executablePath(pack);
+  if (DEBUG) console.log(`[capture] serverless Chromium unpacked in ${Date.now() - t0}ms`);
+  return { headless: true, executablePath, args: browserArgs(proxyUrl, serverless.args) };
 }
 
 /** Desktop Chrome's own user agent (headless Chromium announces itself, which trips bot walls),
@@ -157,10 +240,10 @@ function refusal(v: RequestVerdict): CaptureError {
   return new CaptureError('private');
 }
 
-async function capture(input: CaptureInput, policy: HostPolicy, signal?: AbortSignal): Promise<CaptureResult> {
+async function capture(input: CaptureInput, policy: HostPolicy, maxBytes: number, signal?: AbortSignal): Promise<CaptureResult> {
   const target = await checkUrl(input.url, policy);
   const guard = createRequestGuard(policy);
-  const { browser, proxy } = await getSession();
+  const { browser, proxy, singleUse } = await getSession();
   proxy.setGuard(guard);
   const phone = input.width === 390;
   let context: BrowserContext;
@@ -181,10 +264,12 @@ async function capture(input: CaptureInput, policy: HostPolicy, signal?: AbortSi
     console.error('[capture] new context failed:', e);
     throw new CaptureError('failed');
   }
-  const onAbort = () => void context.close().catch(() => undefined);
+  // A busy single-process browser may not get round to closing a context; closing the browser
+  // ends it (Playwright kills the process if it doesn't close in time).
+  const onAbort = () => void (singleUse ? browser : context).close().catch(() => undefined);
   signal?.addEventListener('abort', onAbort, { once: true });
   try {
-    return await run(context, target, input, guard);
+    return await untilBrowserExits(browser, run(context, target, input, guard, maxBytes));
   } catch (e) {
     if (signal?.aborted) throw new CaptureError('aborted');
     const err = navError(e);
@@ -192,11 +277,22 @@ async function capture(input: CaptureInput, policy: HostPolicy, signal?: AbortSi
     throw err;
   } finally {
     signal?.removeEventListener('abort', onAbort);
-    await context.close().catch(() => undefined);
+    if (browser.isConnected()) await context.close().catch(() => undefined);
   }
 }
 
-async function run(context: BrowserContext, target: URL, input: CaptureInput, guard: RequestGuard): Promise<CaptureResult> {
+/** Settles like `work`, or fails as soon as the browser exits (a crash): Playwright can leave calls
+ *  that were waiting on it pending for good, which would hold up every later capture. */
+function untilBrowserExits<T>(browser: Browser, work: Promise<T>): Promise<T> {
+  let onExit = () => undefined as void;
+  const exited = new Promise<never>((_, reject) => {
+    onExit = () => reject(new Error('The capture browser exited during the capture.'));
+    browser.once('disconnected', onExit);
+  });
+  return Promise.race([work, exited]).finally(() => browser.off('disconnected', onExit));
+}
+
+async function run(context: BrowserContext, target: URL, input: CaptureInput, guard: RequestGuard, maxBytes: number): Promise<CaptureResult> {
   let page: Page | null = null;
   const isMainDocument = (req: PwRequest) => {
     try {
@@ -286,27 +382,66 @@ async function run(context: BrowserContext, target: URL, input: CaptureInput, gu
 
   const height = await main.evaluate(() => Math.max(document.documentElement.scrollHeight, document.body ? document.body.scrollHeight : 0));
   const trimmed = input.fullPage && height > MAX_CAPTURE_HEIGHT;
-  const png = input.fullPage
-    ? await fullPageShot(main, input.width, Math.min(Math.max(height, VIEWPORT_HEIGHT), MAX_CAPTURE_HEIGHT), input.scale)
-    : await main.screenshot({ animations: 'disabled', type: 'png', timeout: SHOT_TIMEOUT });
-  log(`screenshot ${png.length} bytes, page height ${height}`);
-  return { png, trimmed, finalUrl: main.url() };
+  const finalUrl = main.url();
+  const shotHeight = Math.min(Math.max(height, VIEWPORT_HEIGHT), MAX_CAPTURE_HEIGHT);
+  // The top `shotHeight` CSS px, in slices of at most 6000 device px: in one go, Chromium leaves
+  // the lower part of tall 2× captures of busy pages blank.
+  const shot = (y: number, h: number) =>
+    main.screenshot({ fullPage: true, clip: { x: 0, y, width: input.width, height: h }, animations: 'disabled', type: 'png', timeout: SHOT_TIMEOUT });
+  const slices: Buffer[] = [];
+  if (input.fullPage) {
+    const step = Math.floor(SLICE_DEVICE_PX / input.scale);
+    for (let y = 0; y < shotHeight; y += step) slices.push(await shot(y, Math.min(step, shotHeight - y)));
+  } else {
+    slices.push(await main.screenshot({ animations: 'disabled', type: 'png', timeout: SHOT_TIMEOUT }));
+  }
+  log(`screenshot ${slices.length} slice(s), ${byteLength(slices)} bytes, page height ${height}`);
+
+  // One PNG when it fits the budget, else WebP slices that do.
+  if (byteLength(slices) <= maxBytes) {
+    const png = await stitchPngs(slices).catch((e) => {
+      console.warn('[capture] joining slices failed; taking one screenshot instead:', e);
+      return shot(0, shotHeight);
+    });
+    if (png.length <= maxBytes) return { images: [{ type: 'image/png', data: png }], trimmed, finalUrl };
+  }
+  const images = await toWebp(main, slices, maxBytes);
+  log(`re-encoded as ${images.length} WebP slice(s), ${byteLength(images.map((i) => i.data))} bytes`);
+  return { images, trimmed, finalUrl };
 }
 
-/** The top `height` CSS px of the page. Taken in slices of at most 6000 device px and joined:
- *  in one go, Chromium leaves the lower part of tall 2× captures of busy pages blank. */
-async function fullPageShot(page: Page, width: number, height: number, scale: number): Promise<Buffer> {
-  const shot = (y: number, h: number) =>
-    page.screenshot({ fullPage: true, clip: { x: 0, y, width, height: h }, animations: 'disabled', type: 'png', timeout: SHOT_TIMEOUT });
-  const step = Math.floor(SLICE_DEVICE_PX / scale);
-  const slices: Buffer[] = [];
-  for (let y = 0; y < height; y += step) slices.push(await shot(y, Math.min(step, height - y)));
-  try {
-    return await stitchPngs(slices);
-  } catch (e) {
-    console.warn('[capture] joining slices failed; taking one screenshot instead:', e);
-    return shot(0, height);
+const byteLength = (bufs: Buffer[]) => bufs.reduce((n, b) => n + b.length, 0);
+
+/** Re-encodes PNG slices as WebP in the capture browser (no image library on the server), trying
+ *  lower qualities until they fit in maxBytes. Leaves the page on about:blank. Slices stay at most
+ *  6000 px tall, well inside WebP's 16383 px limit. */
+async function toWebp(page: Page, slices: Buffer[], maxBytes: number): Promise<CaptureImage[]> {
+  await page.goto('about:blank'); // a clean page: the captured site's scripts can't interfere
+  const pngs = slices.map((s) => s.toString('base64'));
+  for (const quality of WEBP_QUALITIES) {
+    const images: CaptureImage[] = [];
+    for (const png of pngs) {
+      const webp = await page.evaluate(
+        async ({ png, quality }) => {
+          const bytes = Uint8Array.from(atob(png), (c) => c.charCodeAt(0));
+          const bitmap = await createImageBitmap(new Blob([bytes], { type: 'image/png' }));
+          const canvas = new OffscreenCanvas(bitmap.width, bitmap.height);
+          canvas.getContext('2d')!.drawImage(bitmap, 0, 0);
+          bitmap.close();
+          const blob = await canvas.convertToBlob({ type: 'image/webp', quality });
+          if (blob.type !== 'image/webp') throw new Error('this browser has no WebP encoder');
+          const out = new Uint8Array(await blob.arrayBuffer());
+          let s = '';
+          for (let i = 0; i < out.length; i += 0x8000) s += String.fromCharCode(...out.subarray(i, i + 0x8000));
+          return btoa(s);
+        },
+        { png, quality },
+      );
+      images.push({ type: 'image/webp', data: Buffer.from(webp, 'base64') });
+    }
+    if (byteLength(images.map((i) => i.data)) <= maxBytes) return images;
   }
+  throw new CaptureError('failed', TOO_LARGE_MESSAGE);
 }
 
 async function checkPage(page: Page, status: number): Promise<CaptureError | null> {
