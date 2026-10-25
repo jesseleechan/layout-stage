@@ -1,5 +1,5 @@
 /* Autosave and saved styles, in IndexedDB. Browser only. */
-import { createStore, get, set, type UseStore } from 'idb-keyval';
+import { createStore, del, get, set, type UseStore } from 'idb-keyval';
 import { clone, PRESETS, type Composition, type Style } from './model';
 import { defaultComposition } from './arrange';
 import { cleanSelectors } from './capture/selectors';
@@ -36,6 +36,17 @@ export async function setValue(key: string, value: unknown): Promise<boolean> {
     const s = db();
     if (!s) return false;
     await set(key, value, s);
+    return true;
+  } catch {
+    return false;
+  }
+}
+/** Projects (lib/projects/local.ts): removes a key. */
+export async function deleteValue(key: string): Promise<boolean> {
+  try {
+    const s = db();
+    if (!s) return false;
+    await del(key, s);
     return true;
   } catch {
     return false;

@@ -11,6 +11,7 @@ import StylesPanel from './StylesPanel';
 import OverlaysPanel from './OverlaysPanel';
 import ExportSheet from './ExportSheet';
 import CaptureDialog from './CaptureDialog';
+import ProjectsSheet from './ProjectsSheet';
 import { useShortcuts } from './useShortcuts';
 
 /* Three-column editor: layouts + frame left, the live canvas center, background + styles right. */
@@ -41,6 +42,7 @@ export default function Editor() {
       </div>
       <ExportSheet />
       <CaptureDialog />
+      <ProjectsSheet />
     </>
   );
 }

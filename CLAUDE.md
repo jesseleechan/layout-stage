@@ -49,6 +49,13 @@ npx playwright install chromium          # once per machine, for URL capture and
   (basic-auth credentials: per request, origin-bound, never stored), `recapture.ts` + `jobs.ts`
   (re-capture keeping framing, desktop + phone), `client.ts`; route in `app/api/capture/route.ts`.
   `CAPTURE_DEBUG=1` logs timings.
+- `lib/projects/` projects library and sync: `model.ts` pure rules (store layout, `planSync`, names,
+  upload rules), `local.ts` projects in IndexedDB (the autosave is the open project's canvas; migrates
+  the old single autosave), `library.ts` `useProjects` (list, actions, background sync), `api.ts`
+  browser transfers; `blob-upload.ts` and `server/blob-store.ts` are the only Vercel Blob code;
+  `server/fs-store.ts` the local store (`.data/sync`, `PROJECTS_STORE_DIR`, `off` disables);
+  `server/api.ts` route logic for `app/api/projects/`. UI: `components/ProjectsControl.tsx`,
+  `components/ProjectsSheet.tsx`
 - `components/` one file per panel / surface
 - `proxy.ts` (Next 16's request interceptor, formerly `middleware.ts`): every request needs HTTP Basic
   auth when `ACCESS_PASSWORD` is set (any user name)
@@ -82,4 +89,9 @@ stay under 4.5 MB: a capture over 4 MB as PNG is sent as WebP slices (`multipart
 - Positions are canvas px; frame and background sizes are units of 1/1000 of the canvas's short side.
 - Live edits (`edit`) never save an undo step; `commit()` on drag end / slider release; discrete
   actions commit themselves. Every undo step autosaves to IndexedDB.
-- Ask before adding a dependency the handoff doesn't name.
+- Switching projects calls `showProject`: it resets history like a reload and is not an undo step.
+- Nothing big passes through a function (4.5 MB cap): captures use WebP slices; project images use
+  Blob client uploads and presigned GETs (locally, 4 MB chunks). Keep project pushes spaced out (Hobby
+  Blob operation budget).
+- Ask before adding a dependency the handoff doesn't name (approved so far: `@vercel/blob`,
+  `@sparticuz/chromium-min`; `zod` is pinned to a patched 4.x through `overrides`).

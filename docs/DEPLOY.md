@@ -12,6 +12,7 @@ URL capture is one serverless function, `/api/capture`, that drives a real Chrom
 | Capture size | Always PNG | PNG up to 4 MB; bigger captures come back as WebP slices that the editor joins into one PNG (Vercel caps a function's response at 4.5 MB) |
 | WebGL | On | Off (software WebGL on one vCPU stalls for minutes on animated 3D pages) |
 | Password gate | Off unless `ACCESS_PASSWORD` is set | On when `ACCESS_PASSWORD` is set |
+| Projects sync | Files under `.data/sync` (`PROJECTS_STORE_DIR`; `off` turns it off) | Private Blob store `layout-stage-projects` via `BLOB_READ_WRITE_TOKEN`; without it the editor shows "Sync off" |
 
 The switch is automatic: `lib/capture/server.ts` uses the serverless Chromium whenever `VERCEL` (set by
 Vercel) or `CHROMIUM_PACK_URL` is present. Every connection the capture browser makes still goes
@@ -36,6 +37,7 @@ scratch:
    | `ACCESS_PASSWORD` | A long random password, letters and digits only (a password manager's generator is fine) | Before the site is reachable without a Vercel login, for example once you add a custom domain or change Deployment Protection. Set it for Production, and for Preview too if you like. |
    | `CHROMIUM_PACK_URL` | Optional. The URL of `chromium-v153.0.0-pack.x64.tar` | Only if you want to host the Chromium pack yourself (for example on Vercel Blob). The default is the asset on GitHub's v153.0.0 release of Sparticuz/chromium. |
    | `CAPTURE_DEBUG` | `1` | Optional. Logs each capture's timings in the function logs. |
+   | `BLOB_READ_WRITE_TOKEN` | Set by Vercel when the Blob store is connected to the project | Connect the `layout-stage-projects` store for Production **and** Preview (Storage → the store → Projects). |
 
    Environment variable changes take effect on the next deployment.
 4. Deploy: push to `main` (or use **Redeploy** in the dashboard).
@@ -74,9 +76,11 @@ service on your account.
   files (for example Noto Sans CJK, Noto Color Emoji) to a `fonts/` folder at the project root and
   add `'./fonts/**'` to `outputFileTracingIncludes['/api/capture']` in `next.config.ts`. They are
   deployed to `/var/task/fonts`, one of the folders the serverless Chromium searches.
-- **Your work stays in your browser.** Autosave, saved styles and recent URLs live in this browser's
-  IndexedDB. Another browser, device or private window starts empty. Vercel stores nothing: captures
-  pass straight through to your browser.
+- **Projects sync across your devices** through the private Blob store `layout-stage-projects`.
+  Images go straight between the browser and Blob (client uploads and short-lived signed download
+  URLs), never through a function. Hobby includes 1 GB and 2,000 advanced operations a month; going
+  over stops Blob for 30 days, so pushes are spaced out (constants at the top of
+  `lib/projects/library.ts`). Saved styles and recent URLs still live in each browser.
 
 ## Check a deployment
 
@@ -87,10 +91,14 @@ service on your account.
 3. **From URL** → `stripe.com`, **Full page**, **2×** → **Capture**. Expect a 2880 × 24000 image and
    the "first 12,000 px" note within about a minute. This is the WebP path.
 4. **From URL** → `192.168.1.1` → "Only public web addresses can be captured."
-5. In the dashboard, **Logs** filtered to `/api/capture` should show no errors. With
+5. **Projects**: the projects list shows "Synced". Add a ~25 MB screenshot on one device and open the
+   project on another (network: a PUT to `vercel.com/api/blob`, a GET from
+   `*.private.blob.vercel-storage.com`, no 413 or CORS errors). Deleting a project removes
+   `projects/<id>/` in the store browser.
+6. In the dashboard, **Logs** filtered to `/api/capture` should show no errors. With
    `CAPTURE_DEBUG=1`, each capture logs lines such as `serverless Chromium unpacked in …ms` and
    `re-encoded as 4 WebP slice(s), … bytes`.
-6. If a custom domain is attached and `ACCESS_PASSWORD` is set, the domain should ask for the
+7. If a custom domain is attached and `ACCESS_PASSWORD` is set, the domain should ask for the
    password. Check with `curl -I https://your-domain/`, which should return `401` with
    `www-authenticate: Basic realm="Layout Stage"`.
 

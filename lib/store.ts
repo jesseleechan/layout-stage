@@ -16,7 +16,8 @@ import { arrange, defaultComposition, pageMeasure } from './arrange';
 import { History } from './history';
 import { capHeight, autoCrop, groupBounds, scrollAxis } from './render/units';
 import { ingestImage, loadImage, pruneImages, releaseImage } from './images';
-import { loadComposition, loadStyles, saveComposition, saveStyles } from './persist';
+import { loadStyles, saveStyles } from './persist';
+import { localImageIds, openStartupProject, saveOpenProject } from './projects/local';
 import { exportComposition, renderComposition } from './render/export';
 import { alignLayouts, canAlign, distributeLayouts, type AlignEdge } from './align';
 import { nextSiteBackground, paletteOf } from './palette';
@@ -169,6 +170,11 @@ export interface EditorState {
   editPinText(field: PinField, value: string): void;
   /** Discrete: the field follows its suggestion again. One undo step. */
   resetPinText(field: PinField): void;
+
+  /* --- projects (lib/projects) --- */
+  /** Shows another project's canvas with a fresh undo history, like a reload. Doesn't autosave: the
+   *  doc is that project's saved canvas. */
+  showProject(doc: Composition): void;
 }
 
 const NOT_IMAGE = 'That file isn’t an image. Use PNG, JPG or WebP.';
@@ -198,9 +204,10 @@ function referencedIds(d: Composition): Set<string> {
 }
 
 export const useEditor = create<EditorState>()((set, get) => {
-  /** Autosave: stores the last undo step (never a half-finished drag) as soon as it's saved. */
+  /** Autosave: stores the last undo step (never a half-finished drag) as soon as it's saved, as the
+   *  open project's canvas (lib/projects/local.ts). */
   const persist = () => {
-    if (autosave) void saveComposition(history.current);
+    if (autosave) void saveOpenProject(history.current);
   };
   const syncHistory = () => set({ canUndo: history.canUndo, canRedo: history.canRedo });
   const edit = (recipe: (d: Composition) => void) => {
@@ -305,7 +312,7 @@ export const useEditor = create<EditorState>()((set, get) => {
     async init() {
       if (initStarted) return;
       initStarted = true;
-      const [loaded, styles] = await Promise.all([loadComposition(), loadStyles()]);
+      const [loaded, styles] = await Promise.all([openStartupProject(), loadStyles()]);
       const saved = loaded.doc;
       if (saved) {
         history = new History(saved);
@@ -325,8 +332,9 @@ export const useEditor = create<EditorState>()((set, get) => {
       autosave = true;
       // A failed read isn't a first run: keep the stored canvas and images untouched.
       if (loaded.ok) {
-        void pruneImages(referencedIds(get().doc));
         if (!saved) persist();
+        // Every project in this browser keeps its images (null: a canvas couldn't be read, prune nothing).
+        void localImageIds(referencedIds(get().doc)).then((keep) => keep && pruneImages(keep));
       }
     },
     edit,
@@ -663,6 +671,18 @@ export const useEditor = create<EditorState>()((set, get) => {
         delete d.pin[field];
         if (!Object.keys(d.pin).length) delete d.pin;
       });
+    },
+
+    /* --- projects (lib/projects) --- */
+    showProject(doc) {
+      clearTimeout(nudgeTimer);
+      history = new History(doc);
+      set({
+        doc: clone(doc),
+        guides: { gx: null, gy: null },
+        ui: { ...get().ui, selected: null, exportScale: PRESETS[doc.preset].scale, showSafeArea: PRESETS[doc.preset].safe === 'etsy' },
+      });
+      syncHistory();
     },
   };
 });
