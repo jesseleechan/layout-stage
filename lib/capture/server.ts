@@ -12,6 +12,7 @@ import { redactAuth, type CaptureAuth } from './auth';
 import { authError, navError, pageError } from './detect';
 import { CaptureError, NOT_FOUND_MESSAGE, SCHEME_MESSAGE } from './errors';
 import { startGuardProxy, type GuardProxy } from './guard-proxy';
+import { memoryProbe, type MemoryProbe } from './memory';
 import { stitchPngs } from './png';
 import { createSerialQueue, type Serial } from './queue';
 import { selectorCss } from './selectors';
@@ -29,7 +30,7 @@ const BAND_IMAGE_WAIT_MS = 800; // most a band waits for images that start loadi
 const IDLE_CLOSE_MS = 10 * 60_000; // free the browser after 10 idle minutes
 const BANNERS_CSS = path.join(process.cwd(), 'lib/capture/banners.css');
 const BANNERS_ID = '__layout-stage-banners';
-/** CAPTURE_DEBUG=1 logs each phase's timing and, on a load timeout, the requests still open. */
+/** CAPTURE_DEBUG=1 logs each phase's timing and memory and, on a load timeout, the requests still open. */
 const DEBUG = !!process.env.CAPTURE_DEBUG;
 
 /** The Chromium pack that matches @sparticuz/chromium-min's version (x64, which is what Vercel
@@ -281,14 +282,16 @@ async function capture(input: CaptureInput, policy: HostPolicy, maxBytes: number
   // ends it (Playwright kills the process if it doesn't close in time).
   const onAbort = () => void (singleUse ? browser : context).close().catch(() => undefined);
   signal?.addEventListener('abort', onAbort, { once: true });
+  const probe = DEBUG ? memoryProbe() : null;
   try {
-    return await untilBrowserExits(browser, run(context, target, input, guard, maxBytes, bands ?? singleUse));
+    return await untilBrowserExits(browser, run(context, target, input, guard, maxBytes, bands ?? singleUse, probe));
   } catch (e) {
     if (signal?.aborted) throw new CaptureError('aborted');
     const err = navError(e);
-    if (err.code === 'failed') console.error('[capture] failed:', loggable(e, input.auth));
+    if (err.code === 'failed') console.error('[capture] failed:', loggable(e, input.auth), probe ? `(${probe.note()})` : '');
     throw err;
   } finally {
+    probe?.stop();
     signal?.removeEventListener('abort', onAbort);
     if (browser.isConnected()) await context.close().catch(() => undefined);
   }
@@ -311,7 +314,7 @@ function untilBrowserExits<T>(browser: Browser, work: Promise<T>): Promise<T> {
   return Promise.race([work, exited]).finally(() => browser.off('disconnected', onExit));
 }
 
-async function run(context: BrowserContext, target: URL, input: CaptureInput, guard: RequestGuard, maxBytes: number, bands: boolean): Promise<CaptureResult> {
+async function run(context: BrowserContext, target: URL, input: CaptureInput, guard: RequestGuard, maxBytes: number, bands: boolean, probe: MemoryProbe | null): Promise<CaptureResult> {
   let page: Page | null = null;
   const isMainDocument = (req: PwRequest) => {
     try {
@@ -344,7 +347,7 @@ async function run(context: BrowserContext, target: URL, input: CaptureInput, gu
   page = await context.newPage();
   const main = page;
   const t0 = Date.now();
-  const log = DEBUG ? (msg: string) => console.log(`[capture] ${target.host} +${Date.now() - t0}ms ${msg}`) : () => undefined;
+  const log = probe ? (msg: string) => console.log(`[capture] ${target.host} +${Date.now() - t0}ms ${msg} (${probe.note()})`) : () => undefined;
   const open = new Map<PwRequest, number>();
   if (DEBUG) {
     main.on('request', (r) => open.set(r, Date.now()));
@@ -408,8 +411,9 @@ async function run(context: BrowserContext, target: URL, input: CaptureInput, gu
   const shot = (y: number, h: number) =>
     main.screenshot({ fullPage: true, clip: { x: 0, y, width: input.width, height: h }, animations: 'disabled', type: 'png', timeout: SHOT_TIMEOUT });
   let slices: Buffer[] = [];
+  log(`page height ${height}; capturing ${shotHeight} px`);
   if (input.fullPage && bands && shotHeight * input.scale > BAND_FROM_DEVICE_PX) {
-    slices = await bandShots(main, input.width, shotHeight);
+    slices = await bandShots(main, input.width, shotHeight, log);
   } else if (input.fullPage) {
     const step = Math.floor(SLICE_DEVICE_PX / input.scale);
     for (let y = 0; y < shotHeight; y += step) slices.push(await shot(y, Math.min(step, shotHeight - y)));
@@ -444,7 +448,7 @@ const byteLength = (bufs: Buffer[]) => bufs.reduce((n, b) => n + b.length, 0);
  *  screen), sticky elements stay where they sit at the top of the page, and "scrolled" states
  *  (headers, backgrounds) stay off. Content that reveals itself when it comes into view still does:
  *  IntersectionObserver sees the transform. */
-async function bandShots(page: Page, width: number, shotHeight: number): Promise<Buffer[]> {
+async function bandShots(page: Page, width: number, shotHeight: number, log: (msg: string) => void): Promise<Buffer[]> {
   const vh = await page.evaluate(() => {
     window.scrollTo({ top: 0, behavior: 'instant' });
     return window.innerHeight;
@@ -475,6 +479,7 @@ async function bandShots(page: Page, width: number, shotHeight: number): Promise
         { y, settle: BAND_SETTLE_MS, wait: BAND_IMAGE_WAIT_MS },
       );
       bands.push(await page.screenshot({ clip: { x: 0, y: 0, width, height: h }, animations: 'disabled', type: 'png', timeout: SHOT_TIMEOUT }));
+      log(`band ${bands.length} at ${y}`);
     }
   } finally {
     await page.evaluate(() => document.documentElement.style.removeProperty('transform')).catch(() => undefined);
