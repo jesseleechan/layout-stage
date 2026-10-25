@@ -1,22 +1,40 @@
 /* Golden export test (milestone 5): a fixed composition exports to a PNG that matches a stored
    reference within a small pixel tolerance, for each canvas preset.
 
-   Goldens live in tests/e2e/__golden__/ and are machine and font dependent (the sample sites draw
-   text with system fonts; canvas antialiasing differs between platforms and GPUs). After an
-   intended rendering change, or on a new machine, regenerate them and look at every PNG:
-     PORT=3104 npx playwright test golden --update-snapshots
+   Goldens live in tests/e2e/__golden__/. The sample sites draw their text with the fonts bundled in
+   public/fonts (lib/samples.ts), not system fonts, so the goldens hold across Linux machines that
+   run this Playwright's Chromium; another OS or GPU can still antialias differently. After an
+   intended rendering change, regenerate them and look at every PNG:
+     npm run test:e2e:update            (or the "Update goldens" workflow, on CI's runner)
    Tolerance (maxDiffPixelRatio, threshold) is set in playwright.config.ts. */
-import { expect, test, type Page } from '@playwright/test';
+import type { Page } from '@playwright/test';
 import type { Composition } from '../../lib/model';
+import { SAMPLE_FONTS } from '../../lib/samples';
 import { GOLDEN_CASES, usesWide, wideSourceDoc, withWideId } from './fixtures';
+import { expect, test } from './local';
 
-/** Opens the editor with web requests to other hosts blocked (the samples use system fonts only),
- *  and waits until the store has restored its (empty) autosave. */
+/** Opens the editor (other hosts are blocked, see ./local) and waits until the store has restored
+ *  its (empty) autosave. */
 async function openEditor(page: Page) {
-  await page.route((url) => url.hostname !== 'localhost' && url.hostname !== '127.0.0.1', (r) => r.abort());
   await page.goto('/');
   await page.waitForFunction(() => window.__layoutStage?.store.getState().hydrated === true, null, { timeout: 45_000 });
 }
+
+/** The bundled sample fonts the page has loaded, as "family weight style". A missing one means the
+ *  samples fell back to system fonts, which differ per machine. */
+async function loadedSampleFonts(page: Page): Promise<string[]> {
+  const families = [...new Set(SAMPLE_FONTS.map((f) => f.family))];
+  return page.evaluate(
+    (families) =>
+      Array.from(document.fonts)
+        .map((f) => ({ family: f.family.replace(/^"|"$/g, ''), weight: f.weight, style: f.style, status: f.status }))
+        .filter((f) => families.includes(f.family) && f.status === 'loaded')
+        .map((f) => `${f.family} ${f.weight} ${f.style}`)
+        .sort(),
+    families,
+  );
+}
+const SAMPLE_FACES = SAMPLE_FONTS.map((f) => `${f.family} ${f.weight} ${f.style}`).sort();
 
 /** Builds the wide test image (two samples side by side) in the page and adds it to the image store
  *  through the normal add-image path. Returns its image id. */
@@ -77,6 +95,7 @@ test.describe('golden exports', () => {
       await openEditor(page);
       const doc = usesWide(c.doc) ? withWideId(c.doc, await addWideImage(page)) : c.doc;
       const r = await render(page, doc, c.m);
+      expect(await loadedSampleFonts(page), 'the samples drew with every bundled font').toEqual(SAMPLE_FACES);
       const png = Buffer.from(r.b64, 'base64');
       expect(r.type).toBe('image/png');
       expect([r.w, r.h]).toEqual(c.size);
@@ -84,6 +103,19 @@ test.describe('golden exports', () => {
       expect(png).toMatchSnapshot(`${c.preset}.png`);
     });
   }
+});
+
+test.describe('sample fonts', () => {
+  test('samples still draw, with the fallback fonts, when the bundled fonts cannot load', async ({ page }) => {
+    await page.route('**/fonts/**', (route) => route.fulfill({ status: 404 }));
+    await openEditor(page);
+    const px = await page.evaluate(async (src: Composition) => {
+      const c = await window.__layoutStage!.renderComposition(src, 0.1);
+      return Array.from(c.getContext('2d')!.getImageData(2, 20, 1, 1).data);
+    }, wideSourceDoc());
+    expect(px).toEqual([0xff, 0xf7, 0xf4, 0xff]); // Juniper's page color
+    expect(await loadedSampleFonts(page)).toEqual([]);
+  });
 });
 
 test.describe('export file', () => {
