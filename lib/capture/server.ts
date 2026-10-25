@@ -6,7 +6,7 @@
 import { open, readFile, rm, statfs } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import { chromium, type Browser, type BrowserContext, type LaunchOptions, type Page, type Request as PwRequest } from 'playwright';
+import { chromium, type Browser, type BrowserContext, type CDPSession, type LaunchOptions, type Page, type Request as PwRequest } from 'playwright';
 import type { CaptureOptions } from '../model';
 import { redactAuth, type CaptureAuth } from './auth';
 import { authError, navError, pageError } from './detect';
@@ -236,6 +236,11 @@ async function serverlessChromium(pack: string, proxyUrl: string): Promise<Launc
    caps them at DISCARDABLE_LIMIT, about what it got with the download still there. stripe.com then peaks
    ~30 MB short of full. Don't go lower: at a 64–96 MB cap apple.com's carousel lost images (black tiles). */
 const DISCARDABLE_LIMIT = 128 * MB;
+/** Bands: with less than this free in /tmp, a band starts with Chromium told that memory is critical,
+ *  which drops its caches (decoded images above all) so the band has room for its own; one band can take
+ *  ~60 MB more than the last. Only when needed: the timing change it brings can show a lazily filled
+ *  carousel item still empty (apple.com, 1 run in 3 with a purge before every band). */
+const PURGE_BELOW = 128 * MB;
 
 /** How much of `free` bytes in /tmp to hold back while the browser starts (see DISCARDABLE_LIMIT). */
 export function tempReserve(free: number): number {
@@ -526,9 +531,15 @@ async function bandShots(page: Page, width: number, shotHeight: number, log: (ms
     return window.innerHeight;
   }).then((h) => (h > 0 ? h : VIEWPORT_HEIGHT));
   const bands: Buffer[] = [];
+  let cdp: CDPSession | null = null;
   try {
     for (let y = 0; y < shotHeight; y += vh) {
       const h = Math.min(vh, shotHeight - y);
+      if ((await tempFree()) < PURGE_BELOW) {
+        cdp ??= await page.context().newCDPSession(page);
+        await cdp.send('Memory.simulatePressureNotification', { level: 'critical' }).catch(() => undefined);
+        log(`low on ${os.tmpdir()}: caches dropped before band ${bands.length + 1}`);
+      }
       await page.evaluate(
         async ({ y, settle, wait }) => {
           document.documentElement.style.setProperty('transform', `translateY(${-y}px)`, 'important');
@@ -554,6 +565,7 @@ async function bandShots(page: Page, width: number, shotHeight: number, log: (ms
       log(`band ${bands.length} at ${y}`);
     }
   } finally {
+    await cdp?.detach().catch(() => undefined);
     await page.evaluate(() => document.documentElement.style.removeProperty('transform')).catch(() => undefined);
   }
   return bands;
