@@ -8,8 +8,8 @@
 'use client';
 import { create } from 'zustand';
 import {
-  applyStyleTo, clone, CUSTOM_MAX, CUSTOM_MIN, GRADS, MESHES, PRESETS, SHADOWS, defaultUi,
-  type Background, type BackgroundType, type Composition, type CropId, type Frame, type PresetId,
+  applyStyleTo, barOf, clone, CUSTOM_MAX, CUSTOM_MIN, GRADS, MESHES, PRESETS, SHADOWS, defaultUi,
+  type Background, type BackgroundType, type Composition, type CropId, type Frame, type FrameBar, type PresetId,
   type Shadow, type ShadowPreset, type SlotSource, type Style, type UiState,
 } from './model';
 import { arrange, defaultComposition, pageMeasure } from './arrange';
@@ -109,6 +109,8 @@ export interface EditorState {
 
   /* --- frame & background (discrete; commit) --- */
   setShadowPreset(p: Exclude<ShadowPreset, 'custom'>): void;
+  /** Window bar on every layout (lib/render/bar.ts). */
+  setFrameBar(bar: FrameBar): void;
   setBackgroundType(t: BackgroundType): void;
   pickSolid(color: string): void;
   pickGradient(index: number): void;
@@ -473,6 +475,9 @@ export const useEditor = create<EditorState>()((set, get) => {
 
     setShadowPreset(p) {
       change((d) => { Object.assign(d.frame.shadow, SHADOWS[p], { preset: p }); });
+    },
+    setFrameBar(bar) {
+      change((d) => { d.frame.bar = barOf(bar); });
     },
     setBackgroundType(t) {
       change((d) => { d.background.type = t; });

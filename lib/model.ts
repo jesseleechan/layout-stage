@@ -6,6 +6,8 @@ export type PresetId = 'pin' | 'etsy43' | 'etsy11' | 'p45' | 'custom';
 export type CropId = 'full' | '16:10' | '4:3' | '1:1' | '4:5' | '9:16';
 export type ShadowPreset = 'none' | 'soft' | 'lifted' | 'float' | 'hard' | 'custom';
 export type BackgroundType = 'solid' | 'gradient' | 'mesh' | 'image';
+/** A browser-window bar across the top of every layout (lib/render/bar.ts). */
+export type FrameBar = 'none' | 'light' | 'dark';
 
 export interface CaptureOptions {
   width: 1440 | 1280 | 834 | 390;
@@ -49,6 +51,8 @@ export interface Frame {
   radius: number;
   borderW: number;
   borderC: string;
+  /** Window bar; anything but 'light' / 'dark' (e.g. a style saved before bars) draws none. */
+  bar: FrameBar;
   shadow: Shadow;
 }
 
@@ -63,6 +67,7 @@ export interface Background {
   blur: number; // units
   dim: number; // 0–0.7
   grain: number; // 0–40
+  texture: number; // 0–100, mottled plaster/paper texture over any type (lib/render/background.ts)
 }
 
 export interface Composition {
@@ -148,38 +153,66 @@ export const SHADOW_PRESETS: { id: Exclude<ShadowPreset, 'custom'>; label: strin
   { id: 'hard', label: 'Hard' },
 ];
 
+/* ---------------- window bar ---------------- */
+
+export const FRAME_BARS: { id: FrameBar; label: string }[] = [
+  { id: 'none', label: 'None' },
+  { id: 'light', label: 'Light' },
+  { id: 'dark', label: 'Dark' },
+];
+/** Any value → a valid bar ('none' unless it is 'light' or 'dark'). */
+export const barOf = (v: unknown): FrameBar => (v === 'light' || v === 'dark' ? v : 'none');
+
 /* ---------------- built-in styles ---------------- */
 
 export const STYLES: Style[] = [
   {
     name: 'Blush mesh',
-    frame: { radius: 14, borderW: 0, borderC: '#FFFFFF', shadow: { preset: 'lifted', blur: 80, x: 0, y: 40, opacity: 0.28, color: '#4A2533' } },
-    background: { type: 'mesh', mesh: ['#FBEDEA', '#F4B6C2', '#F7D9A8', '#C7D7F5'], meshSeed: 3, grain: 10 },
+    frame: { radius: 14, borderW: 0, borderC: '#FFFFFF', bar: 'none', shadow: { preset: 'lifted', blur: 80, x: 0, y: 40, opacity: 0.28, color: '#4A2533' } },
+    background: { type: 'mesh', mesh: ['#FBEDEA', '#F4B6C2', '#F7D9A8', '#C7D7F5'], meshSeed: 3, grain: 10, texture: 0 },
   },
   {
     name: 'Gallery white',
-    frame: { radius: 10, borderW: 1, borderC: '#E1E1DC', shadow: { preset: 'soft', blur: 50, x: 0, y: 18, opacity: 0.16, color: '#1D1D1B' } },
-    background: { type: 'solid', solid: '#F5F5F2', grain: 0 },
+    frame: { radius: 10, borderW: 1, borderC: '#E1E1DC', bar: 'none', shadow: { preset: 'soft', blur: 50, x: 0, y: 18, opacity: 0.16, color: '#1D1D1B' } },
+    background: { type: 'solid', solid: '#F5F5F2', grain: 0, texture: 0 },
   },
   {
     name: 'Midnight',
-    frame: { radius: 16, borderW: 1, borderC: '#343B5C', shadow: { preset: 'float', blur: 140, x: 0, y: 80, opacity: 0.55, color: '#000000' } },
-    background: { type: 'gradient', grad: { a: '#1B2244', b: '#3B2452', angle: 155 }, grain: 12 },
+    frame: { radius: 16, borderW: 1, borderC: '#343B5C', bar: 'none', shadow: { preset: 'float', blur: 140, x: 0, y: 80, opacity: 0.55, color: '#000000' } },
+    background: { type: 'gradient', grad: { a: '#1B2244', b: '#3B2452', angle: 155 }, grain: 12, texture: 0 },
   },
   {
     name: 'Sage paper',
-    frame: { radius: 8, borderW: 0, borderC: '#FFFFFF', shadow: { preset: 'soft', blur: 50, x: 0, y: 18, opacity: 0.22, color: '#2E3A28' } },
-    background: { type: 'solid', solid: '#DCE3D2', grain: 24 },
+    frame: { radius: 8, borderW: 0, borderC: '#FFFFFF', bar: 'none', shadow: { preset: 'soft', blur: 50, x: 0, y: 18, opacity: 0.22, color: '#2E3A28' } },
+    background: { type: 'solid', solid: '#DCE3D2', grain: 24, texture: 0 },
   },
   {
     name: 'Poster',
-    frame: { radius: 6, borderW: 4, borderC: '#16161A', shadow: { preset: 'hard', blur: 0, x: 14, y: 14, opacity: 1, color: '#16161A' } },
-    background: { type: 'solid', solid: '#FFD54A', grain: 0 },
+    frame: { radius: 6, borderW: 4, borderC: '#16161A', bar: 'none', shadow: { preset: 'hard', blur: 0, x: 14, y: 14, opacity: 1, color: '#16161A' } },
+    background: { type: 'solid', solid: '#FFD54A', grain: 0, texture: 0 },
   },
   {
     name: 'Dusk',
-    frame: { radius: 18, borderW: 0, borderC: '#FFFFFF', shadow: { preset: 'lifted', blur: 80, x: 0, y: 40, opacity: 0.45, color: '#140A1E' } },
-    background: { type: 'mesh', mesh: ['#2A1838', '#F08A6C', '#7C4DA6', '#F5C27A'], meshSeed: 7, grain: 14 },
+    frame: { radius: 18, borderW: 0, borderC: '#FFFFFF', bar: 'none', shadow: { preset: 'lifted', blur: 80, x: 0, y: 40, opacity: 0.45, color: '#140A1E' } },
+    background: { type: 'mesh', mesh: ['#2A1838', '#F08A6C', '#7C4DA6', '#F5C27A'], meshSeed: 7, grain: 14, texture: 0 },
+  },
+  {
+    // Flat cool grey, a whisper of shadow, square corners.
+    name: 'Slate',
+    frame: { radius: 0, borderW: 0, borderC: '#FFFFFF', bar: 'none', shadow: { preset: 'custom', blur: 40, x: 0, y: 16, opacity: 0.16, color: '#26313A' } },
+    background: { type: 'solid', solid: '#B7BCBF', grain: 6, texture: 0 },
+  },
+  {
+    // Textured grey: soft plaster / concrete clouds plus grain.
+    name: 'Concrete',
+    frame: { radius: 0, borderW: 0, borderC: '#FFFFFF', bar: 'none', shadow: { preset: 'custom', blur: 60, x: 0, y: 24, opacity: 0.3, color: '#1A1A1A' } },
+    background: { type: 'solid', solid: '#8E8E8C', grain: 34, texture: 70 },
+  },
+  {
+    // Dark warm mesh, layouts as light browser windows.
+    name: 'Editorial',
+    frame: { radius: 10, borderW: 0, borderC: '#FFFFFF', bar: 'light', shadow: { preset: 'lifted', blur: 80, x: 0, y: 40, opacity: 0.45, color: '#120D09' } },
+    background: { type: 'mesh', mesh: ['#3A342E', '#5C5046', '#2B2521', '#4B4038'], meshSeed: 5, grain: 14, texture: 20 },
   },
 ];
 
@@ -227,13 +260,14 @@ export function sampleSlot(i: number): Slot {
 export function defaultBackground(): Background {
   return {
     type: 'mesh', solid: '#F5F5F2', grad: { a: '#FFE6C7', b: '#FF9A8B', angle: 160 }, mesh: ['#FBEDEA', '#F4B6C2', '#F7D9A8', '#C7D7F5'],
-    meshSeed: 3, imageId: null, imageName: '', blur: 0, dim: 0, grain: 10,
+    meshSeed: 3, imageId: null, imageName: '', blur: 0, dim: 0, grain: 10, texture: 0,
   };
 }
 
-/** Applies a style in place: the frame is replaced, the background fields it names are merged in. */
+/** Applies a style in place: the frame is replaced, the background fields it names are merged in.
+ *  A style saved before window bars has no `bar`: it applies as none. */
 export function applyStyleTo(doc: Composition, st: Style): void {
-  doc.frame = clone(st.frame);
+  doc.frame = { ...clone(st.frame), bar: barOf(st.frame.bar) };
   Object.assign(doc.background, clone(st.background));
 }
 

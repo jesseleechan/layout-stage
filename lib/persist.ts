@@ -1,6 +1,6 @@
 /* Autosave and saved styles, in IndexedDB. Browser only. */
 import { createStore, del, get, set, type UseStore } from 'idb-keyval';
-import { clone, PRESETS, type Composition, type Style } from './model';
+import { barOf, clone, PRESETS, type Composition, type Style } from './model';
 import { defaultComposition } from './arrange';
 import { cleanSelectors } from './capture/selectors';
 import { sanitizeOverlays } from './overlays';
@@ -73,6 +73,10 @@ export function sanitizeComposition(raw: unknown): Composition | null {
     pin: sanitizePinText(r.pin),
   } as Composition;
   if (!out.pin) delete out.pin;
+  // Window bar and texture came later: none for anything saved before them, or anything unusable.
+  out.frame.bar = barOf(out.frame.bar);
+  const tex = Number(out.background.texture);
+  out.background.texture = Number.isFinite(tex) ? Math.max(0, Math.min(100, tex)) : 0;
   // Capture options added later (dark mode, hide elements): defaults for captures saved before them.
   for (const s of out.slots) {
     const o = s.source?.kind === 'url' ? s.source.options : null;

@@ -7,6 +7,7 @@ import { lchToHex, type Palette, type Swatch } from '../palette';
 import { loadImage } from '../images';
 import { drawBackground, makeCanvas } from './background';
 import { drawShot } from './shot';
+import { imageRect } from './bar';
 import { hexA, roundRectPath, unit } from './units';
 
 const SANS = '"Instrument Sans", "Helvetica Neue", Helvetica, Arial, sans-serif';
@@ -145,7 +146,9 @@ export async function renderPaletteCard(doc: Composition, slot: Slot, palette: P
   // The card: 80% of the width (at most 74% of the height), 1.5 : 1.
   const w = Math.round(Math.min(doc.W * 0.8, doc.H * 0.74 * 1.5));
   const h = Math.round(w / 1.5);
-  const face = drawFace(Math.round(w * m), Math.round(h * m), cardTitle(slot), palette);
+  // The face fills the card below its window bar (if the frame has one) exactly, so nothing is cropped.
+  const faceH = imageRect({ l: 0, t: 0, w, h }, doc.frame.bar).h;
+  const face = drawFace(Math.round(w * m), Math.round(faceH * m), cardTitle(slot), palette);
   const card: Slot = { ...slot, crop: 'full', nw: w, nh: h, fx: 50, fy: 50, cx: doc.W / 2, cy: doc.H / 2, w };
   drawShot(x, card, doc.frame, unit(doc.W, doc.H), m, face);
   face.width = face.height = 0;

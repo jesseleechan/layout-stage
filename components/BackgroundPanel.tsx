@@ -29,7 +29,7 @@ export default function BackgroundPanel() {
       return {
         type: bg.type, solid: bg.solid, ga: bg.grad.a, gb: bg.grad.b, angle: bg.grad.angle,
         m0: bg.mesh[0], m1: bg.mesh[1], m2: bg.mesh[2], m3: bg.mesh[3],
-        imageId: bg.imageId, imageName: bg.imageName, blur: bg.blur, dim: bg.dim, grain: bg.grain,
+        imageId: bg.imageId, imageName: bg.imageName, blur: bg.blur, dim: bg.dim, grain: bg.grain, texture: bg.texture,
         blurOf: (sel != null && sel < s.doc.count ? sel : 0) + 1,
       };
     }),
@@ -149,6 +149,7 @@ export default function BackgroundPanel() {
       )}
 
       <RangeRow id="bgGrain" label="Grain" min={0} max={40} value={b.grain} onInput={(v) => editBackground({ grain: v })} />
+      <RangeRow id="bgTexture" label="Texture" min={0} max={100} value={b.texture} onInput={(v) => editBackground({ texture: v })} />
       <input
         ref={fileRef}
         type="file"

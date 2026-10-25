@@ -2,7 +2,8 @@
 import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type DragEvent, type PointerEvent } from 'react';
 import { captureJobSlot, useEditor } from '@/lib/store';
 import { PRESETS, type Composition } from '@/lib/model';
-import { clampRadius, rectOf, safeArea, scrollAxis, shadowCSS, unit } from '@/lib/render/units';
+import { clampRadius, rectOf, safeArea, scrollAxis, shadowCSS, unit, type Rect } from '@/lib/render/units';
+import { windowBar, type WindowBar } from '@/lib/render/bar';
 import { drawBackground } from '@/lib/render/background';
 import { useImageUrl, useLoadedImage } from '@/lib/images';
 import { snap, snapThreshold } from '@/lib/snap';
@@ -12,8 +13,9 @@ import OverlayCanvas from './OverlayCanvas';
 import './canvas-tools.css';
 
 /* The live canvas. Preview and export must render identically: the shots below are the CSS twin of
-   lib/render/shot.ts (radius, box-shadow, inset border, object-position cover crop); the background is
-   drawn by lib/render/background.ts for both. Change both or neither. */
+   lib/render/shot.ts (radius, box-shadow, inset border, object-position cover crop, window bar from
+   lib/render/bar.ts); the background is drawn by lib/render/background.ts for both. Change both or
+   neither. */
 
 const BG_MAX_PX = 4.5e6; // preview background resolution cap
 
@@ -53,12 +55,29 @@ interface ShotProps {
   onFocusRing(i: number | null): void;
 }
 
+/** Absolute box in the shot's own px (the bar geometry is computed with l = t = 0). */
+const box = (q: Rect, extra: CSSProperties): CSSProperties => ({ left: q.l, top: q.t, width: q.w, height: q.h, ...extra });
+
+/** The window bar, painted like lib/render/bar.ts drawWindowBar. SVG shapes sit at their exact
+ *  fractional coordinates and antialias like the canvas; boxes would snap to whole pixels. */
+function ShotBar({ b }: { b: WindowBar }) {
+  return (
+    <svg className="shot-bar" width={b.bar.w} height={b.bar.h} aria-hidden="true">
+      <rect x={b.bar.l} y={b.bar.t} width={b.bar.w} height={b.bar.h} fill={b.colors.bar} />
+      <rect x={b.line.l} y={b.line.t} width={b.line.w} height={b.line.h} fill={b.colors.line} />
+      {b.dots.map((d) => <circle key={d.color} cx={d.cx} cy={d.cy} r={d.r} fill={d.color} />)}
+      <rect x={b.field.l} y={b.field.t} width={b.field.w} height={b.field.h} rx={b.field.h / 2} fill={b.colors.field} />
+    </svg>
+  );
+}
+
 function Shot({ i, doc, shadow, visible, onFocusRing }: ShotProps) {
   const s = doc.slots[i];
   const f = doc.frame;
   const url = useImageUrl(s.imageId);
   const r = rectOf(s);
   const u = unit(doc.W, doc.H);
+  const bar = windowBar({ l: 0, t: 0, w: r.w, h: r.h }, f.bar);
   const style = {
     transform: `translate(${r.l}px, ${r.t}px)`,
     width: r.w,
@@ -83,7 +102,11 @@ function Shot({ i, doc, shadow, visible, onFocusRing }: ShotProps) {
       }}
     >
       {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img src={url ?? undefined} alt="" draggable={false} style={{ objectPosition: `${s.fx}% ${s.fy}%` }} />
+      <img
+        src={url ?? undefined} alt="" draggable={false}
+        style={bar ? box(bar.image, { position: 'absolute', objectPosition: `${s.fx}% ${s.fy}%` }) : { objectPosition: `${s.fx}% ${s.fy}%` }}
+      />
+      {bar && <ShotBar b={bar} />}
     </div>
   );
 }
