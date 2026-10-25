@@ -396,7 +396,7 @@ const MULTI_COPY: Record<MultiMode, { title: string; lede: string }> = {
   sizes: { title: 'All sizes', lede: 'The same layouts and style, arranged for each size.' },
   variations: { title: 'Variations', lede: 'Takes on this canvas from the same pages: other layouts, another page in front, backgrounds from the site’s colors. Post several as fresh pins, or put one on the canvas.' },
   pages: { title: 'All pages', lede: 'Every page in Media in one grid, with your background and frame. Good as an Etsy “what’s included” photo.' },
-  etsy: { title: 'Etsy listing set', lede: 'Listing photos at 3000 × 2250. Etsy shows up to 10 per listing.' },
+  etsy: { title: 'Etsy listing set', lede: 'Listing photos at 3000 × 2250, in listing order. Etsy takes up to 20 per listing.' },
 };
 
 function MultiSheet({ mode }: { mode: MultiMode }) {

@@ -244,7 +244,7 @@ function ExportMenu({ disabled, dims }: { disabled: boolean; dims: string }) {
             ['Export', `This canvas · ${dims}`, ex.run],
             ['Export all sizes', 'Pin 2:3 and 9:16, Etsy 4:3 and square', ex.runAllSizes],
             ['Variations', 'Six takes on this canvas, for fresh pins', ex.runVariations],
-            ['Etsy listing set', 'Hero, all pages, close-ups and palette at 4:3', ex.runEtsySet],
+            ['Etsy listing set', 'Up to 20 photos at 4:3: hero, all pages, close-ups, each page, palette', ex.runEtsySet],
             ['All pages image', 'Every page in Media in one grid', ex.runPagesGrid],
             ['Scrolling video…', 'MP4 of a page scrolling in its frame', ex.openVideo],
           ] as const).map(([label, hint, run], k) => (

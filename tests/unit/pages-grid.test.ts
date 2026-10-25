@@ -68,6 +68,21 @@ describe('in the exports', () => {
     expect(pages.kind === 'pages' && [pages.doc.W, pages.doc.H, pages.pages.length]).toEqual([3000, 2250, 6]);
   });
 
+  it('the Etsy set then has each page not on the hero on its own, the palette last, at most 20', () => {
+    const src = withMedia(6);
+    for (const [i, k] of [[0, 0], [1, 1]] as const) Object.assign(src.slots[i], item(k));
+    const set = etsySet(src, null);
+    const pages = set.filter((i) => i.key.startsWith('page-'));
+    expect(pages.map((i) => i.label)).toEqual(['2.png', '3.png', '4.png', '5.png']);
+    for (const p of pages) expect(p.kind === 'composition' && [p.doc.W, p.doc.count, p.doc.arrangement, p.doc.slots[0].crop]).toEqual([3000, 1, 'showcase', 'full']);
+    expect(set.at(-1)!.key).toBe('palette');
+    const big = withMedia(12);
+    const all = etsySet(big, null);
+    expect(all.length).toBeLessThanOrEqual(20);
+    expect(all.at(-1)!.key).toBe('palette');
+    expect(all.filter((i) => i.key.startsWith('page-')).length).toBe(12);
+  });
+
   it('All pages comes at Etsy 4:3, pin and Etsy square', () => {
     expect(pagesImages(withMedia(4)).map((i) => [i.doc.W, i.doc.H, i.pages.length])).toEqual([[3000, 2250, 4], [1000, 1500, 4], [2000, 2000, 4]]);
   });
