@@ -6,6 +6,7 @@ import { loadImage } from '../images';
 import { drawBackground, makeCanvas } from './background';
 import { drawShot } from './shot';
 import { exportScale, unit } from './units';
+import { paintOverlays } from './overlays';
 
 /** Draws the composition at m output px per canvas px. */
 export async function renderComposition(doc: Composition, m: number): Promise<HTMLCanvasElement> {
@@ -19,6 +20,7 @@ export async function renderComposition(doc: Composition, m: number): Promise<HT
   drawBackground(x, doc.background, doc.W, doc.H, m, bgImg);
   const u = unit(doc.W, doc.H);
   doc.order.filter((i) => i < doc.count).forEach((i) => drawShot(x, doc.slots[i], doc.frame, u, m, imgs[i]));
+  await paintOverlays(x, doc, m);
   return c;
 }
 

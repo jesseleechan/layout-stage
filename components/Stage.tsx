@@ -8,6 +8,7 @@ import { useImageUrl, useLoadedImage } from '@/lib/images';
 import { snap, snapThreshold } from '@/lib/snap';
 import { scrollAfterMove, scrollValue } from '@/lib/scroll';
 import { useExport } from './ExportSheet';
+import OverlayCanvas from './OverlayCanvas';
 import './canvas-tools.css';
 
 /* The live canvas. Preview and export must render identically: the shots below are the CSS twin of
@@ -373,6 +374,7 @@ export default function Stage() {
               <Shot key={i} i={i} doc={doc} shadow={shadow} visible={hydrated && i < doc.count} onFocusRing={setFocusRing} />
             ))}
           </div>
+          <OverlayCanvas />
           <div className="overlay" id="overlay">
             <div className="safe-clip">
               <div className="safe" id="safe" hidden={!safe} style={safe ? px(safe) : undefined}>

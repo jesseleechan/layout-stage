@@ -2,6 +2,7 @@
 import { createStore, get, set, type UseStore } from 'idb-keyval';
 import { clone, PRESETS, type Composition, type Style } from './model';
 import { defaultComposition } from './arrange';
+import { sanitizeOverlays } from './overlays';
 
 const LEGACY_STYLES_KEY = 'layoutStage.styles.v1'; // the prototype kept saved styles in localStorage
 const K_DOC = 'composition';
@@ -55,6 +56,7 @@ export function sanitizeComposition(raw: unknown): Composition | null {
     order: Array.isArray(r.order) && r.order.length === 3 && [0, 1, 2].every((i) => r.order!.includes(i)) ? [...r.order] : [0, 1, 2],
     frame: { ...d.frame, ...clone(r.frame), shadow: { ...d.frame.shadow, ...clone(r.frame?.shadow) } },
     background: { ...d.background, ...clone(r.background) },
+    overlays: sanitizeOverlays(r.overlays),
   } as Composition;
   return out;
 }

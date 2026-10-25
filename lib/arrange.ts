@@ -2,6 +2,7 @@
    everything stays freely draggable. */
 import { applyStyleTo, defaultBackground, sampleSlot, STYLES, clone, type Composition } from './model';
 import { cropRatio } from './render/units';
+import { defaultOverlays } from './overlays';
 
 type Spot = [fx: number, fy: number, fw: number];
 const SPOTS: Record<'port' | 'sq' | 'land', Record<1 | 2 | 3, Spot[]>> = {
@@ -42,6 +43,7 @@ export function defaultComposition(): Composition {
     order: [0, 1, 2],
     frame: clone(STYLES[0].frame),
     background: defaultBackground(),
+    overlays: defaultOverlays(),
   };
   applyStyleTo(doc, STYLES[0]);
   arrange(doc);
