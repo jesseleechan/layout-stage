@@ -1,6 +1,6 @@
-/* URL capture through the real route and dialog. Offline by default; CAPTURE_ONLINE=1 also
-   captures a real public page (needs internet access). */
-import { expect, test } from '@playwright/test';
+/* URL capture through the real route and dialog. Offline by default (the page itself always is, see
+   ./local); CAPTURE_ONLINE=1 also captures a real public page (the server needs internet access). */
+import { expect, test } from './local';
 
 const PUBLIC_ONLY = 'Only public web addresses can be captured.';
 

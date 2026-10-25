@@ -1,14 +1,55 @@
 /* The three sample sites, drawn on a canvas (not loaded). Ported line for line from
    reference/layout-stage.html (siteJuniper, siteNorthbeam, siteFieldnote and the helpers
-   T, B, Lines, Dot); every coordinate, color and font comes from there. Browser only. */
+   T, B, Lines, Dot); every coordinate, color and font comes from there, except that the text is
+   drawn with bundled fonts so a sample looks the same on every machine. Browser only. */
 import { SAMPLE_H, SAMPLE_IDS, SAMPLE_W } from './model';
 import { roundRectPath as rr } from './render/units';
 
 export type SampleId = (typeof SAMPLE_IDS)[number];
 type Ctx = CanvasRenderingContext2D;
 
-const SERIF = 'Georgia, "Times New Roman", serif';
-const SANS = '"Helvetica Neue", Helvetica, Arial, sans-serif';
+/* Bundled fonts, so a sample draws the same on every machine (the prototype's system fonts do not,
+   which made the golden export tests machine dependent). Files in public/fonts, SIL OFL 1.1, with
+   the license beside them. The family names are our own, so an installed or UI copy never mixes in.
+   - Gelasio 1.008 (Fontsource 5.3.0 Latin subset) for Georgia: metric compatible with it, so serif
+     text keeps the prototype's widths.
+   - Inter 4.001 (inter-ui 4.1.1 web fonts) for Helvetica / Arial, subset because the stock Latin
+     subset lacks the → the samples draw: pyftsubset Inter-<Weight>.woff2 --flavor=woff2
+     --unicodes=U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,
+     U+0329,U+2000-206F,U+20AC,U+2122,U+2190-2195,U+2212,U+2215,U+FEFF,U+FFFD */
+export const SAMPLE_FONTS: readonly { family: string; file: string; weight: string; style: string }[] = [
+  { family: 'Sample Gelasio', file: '/fonts/gelasio/gelasio-latin-400-normal.woff2', weight: '400', style: 'normal' },
+  { family: 'Sample Gelasio', file: '/fonts/gelasio/gelasio-latin-400-italic.woff2', weight: '400', style: 'italic' },
+  { family: 'Sample Gelasio', file: '/fonts/gelasio/gelasio-latin-700-normal.woff2', weight: '700', style: 'normal' },
+  ...['400', '500', '600', '700', '800'].map((weight) => ({ family: 'Sample Inter', file: `/fonts/inter/inter-latin-${weight}-normal.woff2`, weight, style: 'normal' })),
+];
+/** How long a sample waits for its fonts before drawing with the fallbacks in the stack. */
+const FONT_WAIT_MS = 10_000;
+
+// The bundled family first; the prototype's stack follows as the fallback.
+const SERIF = '"Sample Gelasio", Georgia, "Times New Roman", serif';
+const SANS = '"Sample Inter", "Helvetica Neue", Helvetica, Arial, sans-serif';
+
+let fontsReady: Promise<void> | null = null;
+
+/** Loads the bundled sample fonts (once) into document.fonts. A face that fails to load is left
+ *  out, so its text falls back to the next family in the stack. */
+export function loadSampleFonts(): Promise<void> {
+  fontsReady ??= Promise.race([
+    Promise.all(
+      SAMPLE_FONTS.map(async ({ family, file, weight, style }) => {
+        try {
+          const face = new FontFace(family, `url(${file}) format("woff2")`, { weight, style });
+          document.fonts.add(await face.load());
+        } catch {
+          /* missing or blocked: the fallback fonts draw this text */
+        }
+      }),
+    ).then(() => undefined),
+    new Promise<void>((res) => setTimeout(res, FONT_WAIT_MS)),
+  ]);
+  return fontsReady;
+}
 
 /** Text. `weight` may include a style, e.g. 'italic 400'. `ls` is letter spacing in px. */
 function T(x: Ctx, s: string, px: number, py: number, size: number, weight: string, fam: string, color: string, align: CanvasTextAlign = 'left', ls = 0): void {
@@ -183,7 +224,8 @@ const SITES: Record<SampleId, () => HTMLCanvasElement> = {
   'sample:fieldnote': siteFieldnote,
 };
 
-/** Draws the sample site at full size (1440 × 2560). Browser only. */
-export function drawSample(id: SampleId): HTMLCanvasElement {
+/** Draws the sample site at full size (1440 × 2560), once its fonts have loaded. Browser only. */
+export async function drawSample(id: SampleId): Promise<HTMLCanvasElement> {
+  await loadSampleFonts();
   return SITES[id]();
 }

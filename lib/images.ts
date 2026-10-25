@@ -56,7 +56,7 @@ async function getBlob(id: string): Promise<Blob | null> {
   const hit = blobs.get(id);
   if (hit) return hit;
   if (isSampleId(id)) {
-    const c = drawSample(id as SampleId);
+    const c = await drawSample(id as SampleId);
     const b = await new Promise<Blob | null>((res) => c.toBlob(res, 'image/png'));
     if (b) blobs.set(id, b);
     return b;
