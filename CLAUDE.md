@@ -38,7 +38,8 @@ npx playwright install chromium          # once per machine, for URL capture and
 - `lib/arrange.ts` (starting positions: `showcase` Scroll / Columns / Editorial, whole pages running off the
   canvas, the default; `classic` cascades; leaves room for a top/bottom headline via `layoutRoom`),
   `lib/canvas-size.ts` (switching canvas sizes keeps the work: per-size placements, re-arrange when fresh,
-  else scale as one piece),
+  else scale as one piece), `lib/media.ts` (the media gallery, `doc.media`: every image added, up to 12,
+  oldest unused ones make room; `putImage` / `slotFor` place any image in a layout),
   `lib/snap.ts` (incl. safe-area targets), `lib/align.ts` (align/distribute), `lib/scroll.ts` (moving a
   crop's visible window), `lib/samples.ts`
 - Outputs: `lib/sets.ts` (derived compositions for Export all sizes and the Etsy listing set),
@@ -62,7 +63,8 @@ npx playwright install chromium          # once per machine, for URL capture and
   `server/api.ts` route logic for `app/api/projects/`. UI: `components/ProjectsControl.tsx`,
   `components/ProjectsSheet.tsx`
 - `components/` one file per panel / surface: `Editor.tsx` (the shell), `TopBar.tsx` (the three top
-  clusters), `LeftPanel.tsx` (Mockup: screenshots, styles, frame; Canvas: background, text & logo),
+  clusters), `LeftPanel.tsx` (Mockup: screenshots, `MediaPanel.tsx` the gallery, styles, frame; Canvas:
+  background, text & logo),
   `RightPanel.tsx` (`LayoutPresets.tsx` live thumbnails drawn with `renderComposition`, then the selected
   layout), `Stage.tsx` (canvas + floating toolbar); `controls.tsx` holds the pill slider and `Tiles`
 - `proxy.ts` (Next 16's request interceptor, formerly `middleware.ts`): every request needs HTTP Basic

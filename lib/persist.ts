@@ -4,6 +4,7 @@ import { clone, PRESETS, type Composition, type Style } from './model';
 import { defaultComposition } from './arrange';
 import { cleanSelectors } from './capture/selectors';
 import { sanitizePlacements } from './canvas-size';
+import { keepShownInMedia, sanitizeMedia } from './media';
 import { sanitizeOverlays } from './overlays';
 import { sanitizePinText } from './pin-text';
 
@@ -75,16 +76,19 @@ export function sanitizeComposition(raw: unknown): Composition | null {
     overlays: sanitizeOverlays(r.overlays),
     pin: sanitizePinText(r.pin),
     placements: sanitizePlacements(r.placements),
+    media: sanitizeMedia(r.media),
   } as Composition;
   if (!out.pin) delete out.pin;
   if (!out.placements) delete out.placements;
+  // The gallery came later: the layouts' images join it (addMedia drops it when empty).
+  keepShownInMedia(out);
   // Texture came later: none for anything saved before it, or anything unusable. (A window bar
   // option existed briefly and was dropped; its field is removed.)
   delete (out.frame as { bar?: unknown }).bar;
   const tex = Number(out.background.texture);
   out.background.texture = Number.isFinite(tex) ? Math.max(0, Math.min(100, tex)) : 0;
   // Capture options added later (dark mode, hide elements): defaults for captures saved before them.
-  for (const s of out.slots) {
+  for (const s of [...out.slots, ...(out.media ?? [])]) {
     const o = s.source?.kind === 'url' ? s.source.options : null;
     if (o) Object.assign(o, { darkMode: o.darkMode === true, hideSelectors: cleanSelectors(o.hideSelectors) });
   }

@@ -3,6 +3,7 @@ import { useRef, useState, type DragEvent } from 'react';
 import { captureJobSlot, useEditor, type CaptureJob } from '@/lib/store';
 import { canContinuePage, pageMeasure } from '@/lib/arrange';
 import { useThumbUrl } from '@/lib/images';
+import { MEDIA_DRAG } from '@/lib/media';
 import { recapture, recaptureAll } from '@/lib/capture/jobs';
 import { hostOf, recapturable } from '@/lib/capture/recapture';
 import ReplaceMenu, { type MenuItem } from './ReplaceMenu';
@@ -31,6 +32,7 @@ const RecaptureIcon = () => (
 );
 
 const hasFiles = (e: DragEvent) => !!e.dataTransfer && Array.from(e.dataTransfer.types || []).includes('Files');
+const hasMedia = (e: DragEvent) => !!e.dataTransfer && Array.from(e.dataTransfer.types || []).includes(MEDIA_DRAG);
 
 function SlotRow({ i, count, on, busy, onReplace }: { i: number; count: number; on: boolean; busy: boolean; onReplace: (i: number) => void }) {
   const imageId = useEditor((s) => s.doc.slots[i].imageId);
@@ -47,7 +49,7 @@ function SlotRow({ i, count, on, busy, onReplace }: { i: number; count: number; 
   const meta = busy ? 'Capturing…' : `${nw}×${nh}${kind === 'sample' ? ' · sample' : kind === 'url' ? ' · from URL' : ''}`;
 
   const onDragOver = (e: DragEvent<HTMLLIElement>) => {
-    if (!hasFiles(e)) return;
+    if (!hasFiles(e) && !hasMedia(e)) return;
     e.preventDefault();
     e.dataTransfer.dropEffect = 'copy';
     setOver(true);
@@ -56,6 +58,13 @@ function SlotRow({ i, count, on, busy, onReplace }: { i: number; count: number; 
     if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setOver(false);
   };
   const onDrop = (e: DragEvent<HTMLLIElement>) => {
+    if (hasMedia(e)) {
+      e.preventDefault();
+      setOver(false);
+      const id = e.dataTransfer.getData(MEDIA_DRAG);
+      if (id) useEditor.getState().placeMedia(id, i);
+      return;
+    }
     if (!hasFiles(e)) return;
     e.preventDefault();
     e.stopPropagation();
@@ -193,7 +202,7 @@ export default function LayoutsPanel() {
           From URL…
         </button>
       </div>
-      <p className="fine">Or drop up to three files on the canvas, or paste one with Ctrl/⌘&nbsp;V.</p>
+      <p className="fine">Or drop files on the canvas, or paste one with Ctrl/⌘&nbsp;V. Past three, the rest wait in Media.</p>
       <input
         ref={manyRef}
         type="file"

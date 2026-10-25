@@ -9,13 +9,13 @@
 import { create } from 'zustand';
 import {
   applyStyleTo, clone, CUSTOM_MAX, CUSTOM_MIN, GRADS, MESHES, PRESETS, SHADOWS, defaultUi,
-  type Arrangement, type Background, type BackgroundType, type Composition, type CropId, type Frame, type PresetId,
-  type Shadow, type ShadowPreset, type Slot, type SlotSource, type Style, type UiState,
+  type Arrangement, type Background, type BackgroundType, type Composition, type CropId, type Frame, type MediaItem,
+  type PresetId, type Shadow, type ShadowPreset, type Slot, type SlotSource, type Style, type UiState,
 } from './model';
 import { applyArrangement, arrange, arrangementOf, defaultComposition, pageMeasure, showcaseCrop, showFirstPage } from './arrange';
 import { isArranged, resizeCanvas } from './canvas-size';
 import { History } from './history';
-import { capHeight, autoCrop, cropRatio, groupBounds, scrollAxis } from './render/units';
+import { capHeight, cropRatio, groupBounds, scrollAxis } from './render/units';
 import { ingestImage, loadImage, pruneImages, releaseImage } from './images';
 import { loadStyles, saveStyles } from './persist';
 import { localImageIds, openStartupProject, saveOpenProject } from './projects/local';
@@ -24,6 +24,7 @@ import { alignLayouts, canAlign, distributeLayouts, type AlignEdge } from './ali
 import { nextSiteBackground, paletteOf } from './palette';
 import { dropSlot, reframe } from './capture/recapture';
 import { patchOverlay, type OverlayKey, type Overlays } from './overlays';
+import { addMedia, keepShownInMedia, MAX_MEDIA, mediaOf, putImage, removeMedia, replaceMedia, slotFor } from './media';
 import { PIN_LIMITS, type PinField } from './pin-text';
 
 export interface Toast {
@@ -129,11 +130,20 @@ export interface EditorState {
   deleteStyle(index: number): Promise<void>;
 
   /* --- images in --- */
-  /** Upload / drop / paste. target = slot to replace, or null (several files fill 1..n; one file
-   *  fills the first sample slot, else adds a layout, else replaces layout 1). */
+  /** Upload / drop / paste. target = slot to replace, or null (several files fill 1..3; one file
+   *  fills the first sample slot, else adds a layout, else replaces layout 1). Every image also goes
+   *  into the media gallery (up to MAX_MEDIA files: the ones past three wait there). */
   placeFiles(files: File[], target: number | null): Promise<void>;
   /** One image from anywhere (e.g. a URL capture), placed by the single-file rule. */
   addImage(img: NewImage, target: number | null): Promise<boolean>;
+
+  /* --- media gallery (lib/media.ts) --- */
+  /** Adds images to the gallery only, as one undo step. */
+  addMediaFiles(files: File[]): Promise<void>;
+  /** Puts a gallery image in layout `target` (null: the single-file rule) and selects it. */
+  placeMedia(id: string, target: number | null): void;
+  /** Takes an image out of the gallery (not one a visible layout shows). */
+  removeMediaItem(id: string): void;
 
   /* --- capture --- */
   openCapture(target: number | null): void;
@@ -210,8 +220,13 @@ function referencedIds(d: Composition): Set<string> {
   const ids = new Set(d.slots.map((s) => s.imageId));
   if (d.background.imageId) ids.add(d.background.imageId);
   if (d.overlays?.watermark.imageId) ids.add(d.overlays.watermark.imageId);
+  for (const m of mediaOf(d)) ids.add(m.imageId);
   return ids;
 }
+
+/** What a toast says when adding images pushed older ones out of the gallery. */
+const mediaFull = (n: number) =>
+  `Media keeps ${MAX_MEDIA}: ${n === 1 ? 'the oldest unused image was' : `the ${n} oldest unused images were`} removed.`;
 
 export const useEditor = create<EditorState>()((set, get) => {
   /** Autosave: stores the last undo step (never a half-finished drag) as soon as it's saved, as the
@@ -258,9 +273,9 @@ export const useEditor = create<EditorState>()((set, get) => {
     ids.forEach((id) => id && !keep.has(id) && releaseImage(id));
   };
 
-  /** Stores (downscaled when over the storage budget) and decodes an image. Returns what puts it into
-   *  a slot, or null (with a toast). */
-  const loadSlotImage = async (img: NewImage): Promise<((d: Composition, i: number) => void) | null> => {
+  /** Stores (downscaled when over the storage budget) and decodes an image. Returns it as a gallery
+   *  image for putImage(), or null (with a toast). */
+  const ingest = async (img: NewImage): Promise<MediaItem | null> => {
     if (!isImageFile(img.blob)) {
       toast(NOT_IMAGE);
       return null;
@@ -270,49 +285,38 @@ export const useEditor = create<EditorState>()((set, get) => {
       toast(`Couldn’t read ${img.name || 'that image'}.`);
       return null;
     }
-    const { id, nw, nh } = got;
-    return (d, i) => {
-      const s = d.slots[i];
-      const top = topOf(s);
-      Object.assign(s, { imageId: id, name: img.name || 'Pasted image', source: img.source, nw, nh, fx: 50, fy: 0 });
-      // Showcase: the page whole, as wide as the layout it replaces and from the same top edge.
-      if (arrangementOf(d) === 'showcase') {
-        s.crop = showcaseCrop;
-        keepTop(s, top);
-      } else {
-        s.crop = autoCrop(nw, nh);
-        capHeight(s, d.H);
-      }
-    };
+    return { imageId: got.id, name: img.name || 'Pasted image', source: img.source, nw: got.nw, nh: got.nh };
   };
   /** Showcase layouts still where arrange() put them are placed again after an image changes size. */
   const freshShowcase = (d: Composition) => arrangementOf(d) === 'showcase' && isArranged(d, pageMeasure());
 
-  /** The single-image rule: target slot, else the first sample slot, else add a layout, else layout 1.
-   *  The slot is picked once the image has loaded, from the layouts as they are then. */
-  const placeOne = async (img: NewImage, target: number | null): Promise<boolean> => {
-    const put = await loadSlotImage(img);
-    if (!put) return false;
+  /** The single-image rule (slotFor): target slot, else the first sample slot, else add a layout,
+   *  else layout 1, picked from the layouts as they are now. One step (async: through step());
+   *  the image and `also` go into the gallery. Returns how many gallery images made room. */
+  const placeOne = (item: MediaItem, target: number | null, also: MediaItem[] = []): number => {
     const doc = get().doc;
-    let i = target != null && target < doc.count ? target : -1;
-    let added = false;
-    if (i < 0) {
-      i = doc.slots.slice(0, doc.count).findIndex((s) => s.source.kind === 'sample');
-      if (i < 0) {
-        if (doc.count < 3) { i = doc.count; added = true; } else i = 0;
-      }
-    }
-    const idx = i;
-    const old = doc.slots[idx].imageId;
+    const { i, added } = slotFor(doc, target);
+    const old = doc.slots[i].imageId;
     const fresh = freshShowcase(doc);
+    let dropped = 0;
     step((d) => {
-      put(d, idx);
-      if (added) d.count = (idx + 1) as 1 | 2 | 3;
+      putImage(d, i, item);
+      if (added) d.count = (i + 1) as 1 | 2 | 3;
       if (added || fresh) arrange(d, d.count, pageMeasure());
+      dropped = addMedia(d, [item, ...also]);
     });
-    setUi({ selected: idx });
+    setUi({ selected: i });
     releaseUnused([old]);
-    return true;
+    return dropped;
+  };
+  /** Ingests files one by one (the gallery's limit at most), skipping ones that can't be read. */
+  const ingestFiles = async (files: File[]): Promise<MediaItem[]> => {
+    const items: MediaItem[] = [];
+    for (const f of files.filter(isImageFile).slice(0, MAX_MEDIA)) {
+      const it = await ingest({ blob: f, name: f.name, source: { kind: 'file' } });
+      if (it) items.push(it);
+    }
+    return items;
   };
 
   return {
@@ -405,6 +409,7 @@ export const useEditor = create<EditorState>()((set, get) => {
         if (arrangementOf(d) === 'showcase') d.slots.forEach((s, i) => { if (i >= d.count && i < n) s.crop = showcaseCrop; });
         d.count = n;
         arrange(d, n, pageMeasure());
+        keepShownInMedia(d);
       });
       const sel = get().ui.selected;
       if (sel != null && sel >= n) setUi({ selected: n - 1 });
@@ -579,27 +584,64 @@ export const useEditor = create<EditorState>()((set, get) => {
     },
 
     async placeFiles(files, target) {
-      const imgs = files.filter(isImageFile).slice(0, 3);
-      if (!imgs.length) { toast('Use PNG, JPG or WebP images.'); return; }
-      if (imgs.length > 1 && target == null) {
-        const puts: (((d: Composition, i: number) => void) | null)[] = [];
-        for (const f of imgs) puts.push(await loadSlotImage({ blob: f, name: f.name, source: { kind: 'file' } }));
-        if (!puts.some(Boolean)) return;
+      if (!files.some(isImageFile)) { toast('Use PNG, JPG or WebP images.'); return; }
+      const items = await ingestFiles(files);
+      if (!items.length) return;
+      const waiting = (n: number) => (n === 1 ? ' 1 more is in Media.' : n > 1 ? ` ${n} more are in Media.` : '');
+      if (items.length > 1 && target == null) {
+        const placed = items.slice(0, 3);
         const olds = get().doc.slots.map((s) => s.imageId);
+        let dropped = 0;
         step((d) => {
-          puts.forEach((put, k) => put?.(d, k));
-          d.count = imgs.length as 1 | 2 | 3;
+          placed.forEach((it, k) => putImage(d, k, it));
+          d.count = placed.length as 1 | 2 | 3;
           arrange(d, d.count, pageMeasure());
+          dropped = addMedia(d, items);
         });
         setUi({ selected: 0 });
-        toast(`Placed ${imgs.length} layouts.`);
+        toast(`Placed ${placed.length} layouts.${waiting(items.length - placed.length)}${dropped ? ' ' + mediaFull(dropped) : ''}`);
         releaseUnused(olds);
       } else {
-        await placeOne({ blob: imgs[0], name: imgs[0].name, source: { kind: 'file' } }, target);
+        const dropped = placeOne(items[0], target, items.slice(1));
+        if (items.length > 1 || dropped) toast(`${waiting(items.length - 1).trim()}${dropped ? ' ' + mediaFull(dropped) : ''}`.trim());
       }
     },
-    addImage(img, target) {
-      return placeOne(img, target);
+    async addImage(img, target) {
+      const item = await ingest(img);
+      if (!item) return false;
+      const dropped = placeOne(item, target);
+      if (dropped) toast(mediaFull(dropped));
+      return true;
+    },
+
+    async addMediaFiles(files) {
+      if (!files.some(isImageFile)) { toast('Use PNG, JPG or WebP images.'); return; }
+      const items = await ingestFiles(files);
+      if (!items.length) return;
+      let dropped = 0;
+      step((d) => { dropped = addMedia(d, items); });
+      const n = items.length;
+      toast(`Added ${n === 1 ? 'an image' : `${n} images`} to Media.${dropped ? ' ' + mediaFull(dropped) : ''}`);
+    },
+    placeMedia(id, target) {
+      const doc = get().doc;
+      const item = mediaOf(doc).find((m) => m.imageId === id);
+      if (!item) return;
+      const { i, added } = slotFor(doc, target);
+      if (!added && doc.slots[i].imageId === id) { setUi({ selected: i }); return; }
+      const old = doc.slots[i].imageId;
+      const fresh = freshShowcase(doc);
+      change((d) => {
+        putImage(d, i, item);
+        if (added) d.count = (i + 1) as 1 | 2 | 3;
+        if (added || fresh) arrange(d, d.count, pageMeasure());
+      });
+      setUi({ selected: i });
+      releaseUnused([old]);
+    },
+    removeMediaItem(id) {
+      if (!removeMedia(clone(get().doc), id)) return;
+      change((d) => { removeMedia(d, id); });
     },
 
     openCapture(target) {
@@ -658,8 +700,8 @@ export const useEditor = create<EditorState>()((set, get) => {
       set({ captureDialog: { open: true, target: i, recapture: true } });
     },
     async landCapture(img, { targetId, keepFraming = false, avoidId = null }) {
-      const put = await loadSlotImage(img);
-      if (!put) return null;
+      const item = await ingest(img);
+      if (!item) return null;
       const doc = get().doc;
       const visible = (id: string | null) => (id == null ? -1 : doc.slots.findIndex((s, k) => k < doc.count && s.imageId === id));
       const target = visible(targetId);
@@ -667,14 +709,18 @@ export const useEditor = create<EditorState>()((set, get) => {
       const { i, added } = target >= 0 ? { i: target, added: false } : dropSlot(doc, visible(avoidId));
       const old = doc.slots[i].imageId;
       const fresh = !keep && freshShowcase(doc);
+      let dropped = 0;
       step((d) => {
         const prev = clone(d.slots[i]);
-        put(d, i);
+        putImage(d, i, item);
         if (keep) Object.assign(d.slots[i], reframe(prev, d.slots[i], d.H));
         if (added) d.count = (i + 1) as 1 | 2 | 3;
         if (added || fresh) arrange(d, d.count, pageMeasure());
+        // A re-capture takes the old capture's place in Media.
+        dropped = keep ? replaceMedia(d, prev.imageId, item) : addMedia(d, [item]);
       });
       if (!keep) setUi({ selected: i });
+      if (dropped) toast(mediaFull(dropped));
       releaseUnused([old]);
       return get().doc.slots[i].imageId;
     },
@@ -731,7 +777,8 @@ useEditor.subscribe((s, prev) => {
   if (s.doc === prev.doc) return;
   const shown = shownIds(s.doc), refs = referencedIds(s.doc), was = shownIds(prev.doc);
   referencedIds(prev.doc).forEach((id) => {
-    if (was.has(id) ? !shown.has(id) : !refs.has(id)) releaseImage(id);
+    // An image leaving the canvas but still in the doc (the gallery, a hidden layout) keeps its thumbnail.
+    if (was.has(id) ? !shown.has(id) : !refs.has(id)) releaseImage(id, refs.has(id));
   });
 });
 

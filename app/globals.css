@@ -387,6 +387,7 @@ a.btn { text-decoration: none; }
 /* Keyboard focus on a layout: the stage is scaled down, so the ring is drawn on the unscaled overlay. */
 .shot:focus-visible { outline: none; }
 .focus-ring { position: absolute; outline: 2px solid var(--accent); outline-offset: 4px; border-radius: 3px; }
+.drop-ring { background: var(--accent-soft); outline-offset: 0; }
 /* URL capture in progress for a layout. */
 .capturing {
   position: absolute; transform: translate(-50%, -50%); display: flex; align-items: center; gap: 7px;

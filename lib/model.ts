@@ -36,6 +36,9 @@ export interface Slot {
   w: number; // width, canvas px; height = w / cropRatio
 }
 
+/** An image in a project's media gallery (lib/media.ts): what a layout needs to show it again. */
+export type MediaItem = Pick<Slot, 'imageId' | 'name' | 'source' | 'nw' | 'nh'>;
+
 export interface Shadow {
   preset: ShadowPreset;
   blur: number;
@@ -102,6 +105,8 @@ export interface Composition {
   overlays?: Overlays;
   /** Pin text the user edited (lib/pin-text.ts). Absent fields show their suggestion. */
   pin?: PinText;
+  /** The media gallery, oldest first (lib/media.ts). Absent: empty. */
+  media?: MediaItem[];
 }
 
 /** A style is a frame plus a background, never the images. Built-ins only name the background

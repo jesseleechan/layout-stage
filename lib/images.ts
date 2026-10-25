@@ -148,17 +148,20 @@ export function getImageUrl(id: string | null | undefined): string | null {
   return e && e.img ? e.url : null;
 }
 
-/** Revokes the object URLs of an image and its thumbnail and drops the decoded image (the blobs stay
- *  stored, so undo can bring the image back). */
-export function releaseImage(id: string | null | undefined): void {
+/** Revokes the object URLs of an image and its thumbnail (unless `keepThumb`: the image is still
+ *  listed somewhere) and drops the decoded image (the blobs stay stored, so undo can bring the image
+ *  back). */
+export function releaseImage(id: string | null | undefined, keepThumb = false): void {
   if (!id || isSampleId(id)) return;
   const e = entries.get(id);
-  const t = thumbs.get(id);
+  const t = keepThumb ? undefined : thumbs.get(id);
   if (!e && !t) return;
   entries.delete(id);
   if (e?.url) URL.revokeObjectURL(e.url);
-  thumbs.delete(id);
-  if (t?.url) URL.revokeObjectURL(t.url);
+  if (t) {
+    thumbs.delete(id);
+    if (t.url) URL.revokeObjectURL(t.url);
+  }
   emit();
 }
 

@@ -1,14 +1,15 @@
 'use client';
 import { useEffect, useState } from 'react';
 import LayoutsPanel from './LayoutsPanel';
+import MediaPanel from './MediaPanel';
 import StylesPanel from './StylesPanel';
 import FramePanel from './FramePanel';
 import BackgroundPanel from './BackgroundPanel';
 import OverlaysPanel from './OverlaysPanel';
 import { Seg, type Option } from './controls';
 
-/* The left panel, as in Shots: Mockup (the screenshots and how they're framed) and Canvas (what's
-   behind and above them). The open tab is remembered in this browser. */
+/* The left panel, as in Shots: Mockup (the screenshots, the media gallery and how they're framed) and
+   Canvas (what's behind and above them). The open tab is remembered in this browser. */
 type Tab = 'mockup' | 'canvas';
 const TAB_KEY = 'layoutStage.leftTab';
 const TABS: Option<Tab>[] = [
@@ -42,6 +43,7 @@ export default function LeftPanel() {
       {tab === 'mockup' ? (
         <>
           <LayoutsPanel />
+          <MediaPanel />
           <StylesPanel />
           <FramePanel />
         </>
