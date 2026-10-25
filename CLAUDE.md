@@ -63,7 +63,7 @@ npx playwright install chromium          # once per machine, for URL capture and
   read at run time), `options.ts` + `selectors.ts` (option and hide-selector validation), `auth.ts`
   (basic-auth credentials: per request, origin-bound, never stored), `recapture.ts` + `jobs.ts`
   (re-capture keeping framing, desktop + phone), `client.ts`; route in `app/api/capture/route.ts`.
-  `CAPTURE_DEBUG=1` logs timings.
+  `CAPTURE_DEBUG=1` logs timings, memory and free `/tmp` space (`memory.ts`).
 - `lib/projects/` projects library and sync: `model.ts` pure rules (store layout, `planSync`, names,
   upload rules), `local.ts` projects in IndexedDB (the autosave is the open project's canvas; migrates
   the old single autosave), `library.ts` `useProjects` (list, actions, background sync), `api.ts`
@@ -84,7 +84,11 @@ npx playwright install chromium          # once per machine, for URL capture and
 
 Vercel (`docs/DEPLOY.md`). On Vercel (or with `CHROMIUM_PACK_URL`), `lib/capture/server.ts` launches
 `@sparticuz/chromium-min`'s Chromium through Playwright: downloaded to `/tmp` on a cold start,
-single-process (one browser per capture), WebGL off. Locally it uses Playwright's own Chromium. Keep
+single-process (one browser per capture), WebGL off. Locally it uses Playwright's own Chromium.
+`/tmp` (525 MB, no `/dev/shm`) holds the unpacked browser and all its shared memory; running out crashes
+the browser ("too heavy" message). So the download is deleted after unpacking, the browser starts with part
+of `/tmp` held back to cap its decoded-image memory (`DISCARDABLE_LIMIT`), and bands drop Chromium's
+caches when `/tmp` runs low (`PURGE_BELOW`, both in `server.ts`). Keep
 chromium-min, `DEFAULT_CHROMIUM_PACK_URL` and Playwright's Chromium major in step. Hosted responses must
 stay under 4.5 MB: a capture over 4 MB as PNG is sent as WebP slices (`multipart/form-data`) that
 `captureUrl` joins into one PNG; local captures are always PNG.

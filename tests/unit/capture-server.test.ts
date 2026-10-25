@@ -4,7 +4,7 @@ import { CAPTURE_MESSAGES, CaptureError } from '@/lib/capture/errors';
 import { clampOptions, parseCaptureRequest } from '@/lib/capture/options';
 import { createSerialQueue } from '@/lib/capture/queue';
 import { bypassesProxy, parseAuthority, upstreamFromEnv } from '@/lib/capture/guard-proxy';
-import { browserArgs, chromiumPackUrl, DEFAULT_CHROMIUM_PACK_URL, HOSTED_RESPONSE_BUDGET, responseBudget } from '@/lib/capture/server';
+import { browserArgs, chromiumPackUrl, DEFAULT_CHROMIUM_PACK_URL, exitError, HOSTED_RESPONSE_BUDGET, responseBudget, tempReserve, TOO_HEAVY_MESSAGE } from '@/lib/capture/server';
 import serverlessChromium from '@sparticuz/chromium-min';
 import { readFileSync } from 'node:fs';
 
@@ -199,5 +199,17 @@ describe('capture browser launch', () => {
   it('never lets extra flags redirect or bypass the guard proxy', () => {
     const hostile = ['--proxy-server=http://elsewhere:1', '--PROXY-BYPASS-LIST=*', '--proxy-pac-url=http://x/p.pac', '--no-proxy-server', '--proxy-auto-detect', '--host-resolver-rules=MAP * 10.0.0.1', '--disable-quic', '--mute-audio'];
     expect(browserArgs('http://127.0.0.1:4321', hostile)).toEqual(['--mute-audio', ...OWN]);
+  });
+  it('starts the serverless browser with /tmp held to twice its decoded-image cap (128 MB)', () => {
+    const MB = 1024 * 1024;
+    expect(tempReserve(316 * MB)).toBe(60 * MB); // Vercel, after unpacking: Chromium sees 256 MB free
+    expect(tempReserve(256 * MB)).toBe(0);
+    expect(tempReserve(100 * MB)).toBe(0); // never less than nothing
+    expect(tempReserve(NaN)).toBe(0); // free space unknown
+  });
+  it('says what to try when the hosted browser dies mid-capture', () => {
+    expect(exitError(true)).toMatchObject({ code: 'failed', message: TOO_HEAVY_MESSAGE });
+    expect(TOO_HEAVY_MESSAGE).toMatch(/First screen or 1× sharpness/);
+    expect(exitError(false)).toMatchObject({ code: 'failed', message: CAPTURE_MESSAGES.failed });
   });
 });

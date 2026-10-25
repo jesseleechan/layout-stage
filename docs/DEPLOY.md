@@ -8,6 +8,7 @@ URL capture is one serverless function, `/api/capture`, that drives a real Chrom
 | | Local (`npm run dev`) | Vercel |
 | --- | --- | --- |
 | Capture browser | Playwright's own Chromium (`npx playwright install chromium`) | `@sparticuz/chromium-min`'s serverless Chromium 153, downloaded to `/tmp` on a cold start |
+| Temp folder | Plenty | `/tmp` holds 525 MB: the unpacked browser (about 210 MB) and the browser's shared memory (there is no `/dev/shm`) |
 | Browser lifetime | One browser, reused, closed after 10 idle minutes | One browser per capture (it runs as a single process, which can't serve a second capture) |
 | Capture size | Always PNG | PNG up to 4 MB; bigger captures come back as WebP slices that the editor joins into one PNG (Vercel caps a function's response at 4.5 MB) |
 | WebGL | On | Off (software WebGL on one vCPU stalls for minutes on animated 3D pages) |
@@ -36,7 +37,7 @@ scratch:
    | --- | --- | --- |
    | `ACCESS_PASSWORD` | A long random password, letters and digits only (a password manager's generator is fine) | Before the site is reachable without a Vercel login, for example once you add a custom domain or change Deployment Protection. Set it for Production, and for Preview too if you like. |
    | `CHROMIUM_PACK_URL` | Optional. The URL of `chromium-v153.0.0-pack.x64.tar` | Only if you want to host the Chromium pack yourself (for example on Vercel Blob). The default is the asset on GitHub's v153.0.0 release of Sparticuz/chromium. |
-   | `CAPTURE_DEBUG` | `1` | Optional. Logs each capture's timings in the function logs. |
+   | `CAPTURE_DEBUG` | `1` | Optional. Logs each capture's timings, memory and free `/tmp` space in the function logs. |
    | `BLOB_READ_WRITE_TOKEN` | Set by Vercel when the Blob store is connected to the project | Connect the `layout-stage-projects` store for Production **and** Preview (Storage → the store → Projects). |
 
    Environment variable changes take effect on the next deployment.
@@ -56,7 +57,7 @@ service on your account.
 ## What to expect
 
 - **The first capture after a quiet spell is slower.** A fresh function instance downloads the
-  Chromium pack (about 65 MB) and unpacks it to `/tmp`. In testing this took 5.5–6.5 s, and a simple
+  Chromium pack (about 65 MB) and unpacks it to `/tmp` (the download is deleted afterwards). In testing this took 5.5–6.5 s, and a simple
   page's first capture took about 18 s in total. Later captures on the same instance start the
   browser in about 50 ms. A full-page 2× capture of a long page such as stripe.com takes about
   50–60 s on one CPU.
@@ -68,6 +69,16 @@ service on your account.
   browser. stripe.com went from 17.7 MB to 3.6 MB with no visible difference at 100%. If even the
   lowest quality doesn't fit, the dialog says "That page is too big to send back in one piece. Try
   First screen or 1× sharpness."
+- **Very heavy pages can be too much for the hosted browser.** Its shared memory (raster tiles,
+  frames, decoded images) lives in `/tmp`, which holds 525 MB, and the unpacked browser takes about
+  210 MB of that. To make room, tall pages are captured band by band with Chromium's caches dropped
+  before the first band and whenever `/tmp` runs low. Full page at 2×, stripe.com then leaves about
+  55–60 MB of `/tmp` free at its peak and apple.com 15–30 MB. A page that needs more crashes the browser,
+  and the dialog says "This page is too heavy to capture on the hosted app. Try First screen or 1×
+  sharpness, or run Layout Stage on your computer." (the log shows `[capture] failed: Error: The
+  capture browser exited during the capture.`). First screen and 1× need far less; a local copy has
+  no such limit. Dropping caches pauses the page for a moment, which some carousels notice: on
+  apple.com an item occasionally stays empty. Capture again if that happens.
 - **3D and WebGL effects don't render**, so animated canvases show whatever the page falls back to.
 - **Fonts.** A page's own web fonts load normally. Text that relies on the computer's built-in fonts
   falls back to Open Sans, the only font in the serverless Chromium. Latin, Greek and Cyrillic
@@ -97,7 +108,9 @@ service on your account.
    `projects/<id>/` in the store browser.
 6. In the dashboard, **Logs** filtered to `/api/capture` should show no errors. With
    `CAPTURE_DEBUG=1`, each capture logs lines such as `serverless Chromium unpacked in …ms` and
-   `re-encoded as 4 WebP slice(s), … bytes`.
+   `re-encoded as 4 WebP slice(s), … bytes`, each with the memory and free `/tmp` space at that
+   point (`/tmp free 52MB (least 32MB of 525MB)`). Set `DEBUG=pw:browser` too to see how the
+   browser process ended (`<process did exit: exitCode=null, signal=SIGTRAP>`).
 7. If a custom domain is attached and `ACCESS_PASSWORD` is set, the domain should ask for the
    password. Check with `curl -I https://your-domain/`, which should return `401` with
    `www-authenticate: Basic realm="Layout Stage"`.
@@ -126,6 +139,14 @@ CHROMIUM_PACK_URL=https://github.com/Sparticuz/chromium/releases/download/v153.0
 
 Behind an HTTPS proxy, also set `NODE_USE_ENV_PROXY=1` so the pack download uses it. Remove
 `/tmp/chromium` to force a fresh download and unpack.
+
+Your `/tmp` is likely much bigger than Vercel's. To capture within the same 525 MB, give the server
+a temp folder of that size (as root):
+
+```bash
+sudo mkdir -p /mnt/vercel-tmp && sudo mount -t tmpfs -o size=525m tmpfs /mnt/vercel-tmp
+TMPDIR=/mnt/vercel-tmp CHROMIUM_PACK_URL=… CAPTURE_DEBUG=1 npx next start -p 3105
+```
 
 ## Upgrading the serverless Chromium
 
