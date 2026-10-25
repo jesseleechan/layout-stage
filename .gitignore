@@ -7,3 +7,6 @@ test-results/
 playwright-report/
 .DS_Store
 .env*.local
+
+# subagent git worktrees
+.claude/worktrees/
