@@ -27,13 +27,17 @@ npx playwright install chromium          # once per machine, for URL capture and
 
 - `lib/model.ts` types, defaults, presets, built-in styles, swatches
 - `lib/store.ts` Zustand store (single source of truth) + actions; `lib/history.ts` 80-step undo
-- `lib/render/` units/geometry, background, shot, export — shared by preview and export
+- `lib/render/` units/geometry, background (incl. texture), shot, `bar.ts` (window bar geometry), export —
+  shared by preview and export
 - `lib/images.ts` image blobs in IndexedDB + object URLs + stored thumbnails (`useThumbUrl`); images
   are downscaled at ingest by the budget in `lib/image-sizing.ts`; `lib/persist.ts` autosave + saved styles
 - `lib/overlays.ts` headline / badge / watermark model, fonts and sanitizer; `lib/render/overlay-layout.ts`
   (pure, scale-free text layout), `lib/render/overlays.ts` (`drawOverlays`, the one drawing function for
   the preview's overlay canvas and the export), `lib/render/overlay-fonts.ts` (FontFace loading, measure)
-- `lib/arrange.ts` (starting positions; leaves room for a top/bottom headline via `layoutRoom`),
+- `lib/arrange.ts` (starting positions: `showcase` Scroll / Columns / Editorial, whole pages running off the
+  canvas, the default; `classic` cascades; leaves room for a top/bottom headline via `layoutRoom`),
+  `lib/canvas-size.ts` (switching canvas sizes keeps the work: per-size placements, re-arrange when fresh,
+  else scale as one piece),
   `lib/snap.ts` (incl. safe-area targets), `lib/align.ts` (align/distribute), `lib/scroll.ts` (moving a
   crop's visible window), `lib/samples.ts`
 - Outputs: `lib/sets.ts` (derived compositions for Export all sizes and the Etsy listing set),
@@ -77,7 +81,8 @@ stay under 4.5 MB: a capture over 4 MB as PNG is sent as WebP slices (`multipart
   one real-capture test.
 - **Sample fonts**: the samples draw text with bundled OFL fonts in `public/fonts/` (Gelasio for Georgia,
   Inter for Helvetica), loaded with the FontFace API in `lib/samples.ts` before a sample is drawn, so
-  goldens don't depend on installed fonts. Keep sample text inside the subset (Latin plus arrows).
+  goldens don't depend on installed fonts. Keep sample text inside the subset (Latin plus arrows). The
+  e2e browser renders text unhinted on every machine (`tests/e2e/fonts.conf` via `FONTCONFIG_FILE`).
 - **Refresh goldens** after an intended rendering change with `npm run test:e2e:update`, then look at
   every PNG. If CI renders differently, run the **Update goldens** workflow on the branch (Actions → Run
   workflow); it regenerates them on the runner, commits changed PNGs and starts CI.

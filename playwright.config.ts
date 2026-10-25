@@ -1,4 +1,5 @@
 import { defineConfig, devices } from '@playwright/test';
+import path from 'node:path';
 
 const PORT = Number(process.env.PORT || 3100);
 const CI = !!process.env.CI;
@@ -21,6 +22,8 @@ export default defineConfig({
     ...devices['Desktop Chrome'],
     viewport: { width: 1440, height: 900 },
     deviceScaleFactor: 1,
+    // The same text rendering on every machine (no hinting), so the goldens hold on CI's runner too.
+    launchOptions: { env: { ...process.env, FONTCONFIG_FILE: path.join(__dirname, 'tests/e2e/fonts.conf') } },
     trace: CI ? 'on-first-retry' : 'off',
   },
   webServer: {
