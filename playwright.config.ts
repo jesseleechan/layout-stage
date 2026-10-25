@@ -8,7 +8,10 @@ export default defineConfig({
   fullyParallel: false,
   workers: 1,
   reporter: 'list',
-  expect: { toMatchSnapshot: { maxDiffPixelRatio: 0.002, threshold: 0.1 } },
+  // Golden exports render exactly (0 px diff) run to run on one machine. threshold 0.02 (~5 grey
+  // levels per pixel) and 0.1% of pixels catch a +0.05 darken, a +0.05 shadow strength, a 1-unit
+  // border or a 2% pan, which 0.1 / 0.2% let through; the slack still absorbs edge antialiasing.
+  expect: { toMatchSnapshot: { maxDiffPixelRatio: 0.001, threshold: 0.02 } },
   snapshotPathTemplate: '{testDir}/__golden__/{arg}{ext}',
   use: { baseURL: `http://localhost:${PORT}`, ...devices['Desktop Chrome'], viewport: { width: 1440, height: 900 }, deviceScaleFactor: 1 },
   webServer: {
