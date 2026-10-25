@@ -31,7 +31,10 @@ npx playwright install chromium          # once per machine, for URL capture and
 - `lib/images.ts` image blobs in IndexedDB + object URLs; `lib/persist.ts` autosave + saved styles
 - `lib/arrange.ts`, `lib/snap.ts`, `lib/samples.ts`
 - `lib/capture/` URL capture: `server.ts` (Playwright, the only file to touch when swapping the
-  browser for hosting), `url-guard.ts`, `banners.css`, `client.ts`; route in `app/api/capture/route.ts`
+  browser for hosting), `url-guard.ts` + `address.ts` (public addresses only), `guard-proxy.ts`
+  (every capture-browser connection is checked here; Playwright routing misses redirect hops),
+  `png.ts` (tall pages are captured in slices and joined), `banners.css` (consent-banner selectors,
+  read at run time), `client.ts`; route in `app/api/capture/route.ts`. `CAPTURE_DEBUG=1` logs timings.
 - `components/` one file per panel / surface
 
 ## Conventions
