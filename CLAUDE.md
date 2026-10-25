@@ -45,6 +45,8 @@ npx playwright install chromium          # once per machine, for URL capture and
   `lib/snap.ts` (incl. safe-area targets), `lib/align.ts` (align/distribute), `lib/scroll.ts` (moving a
   crop's visible window), `lib/samples.ts`
 - Outputs: `lib/sets.ts` (derived compositions for Export all sizes and the Etsy listing set),
+  `lib/pages-grid.ts` + `lib/render/pages-grid.ts` (All pages: every page in Media in a grid, drawn with
+  `drawShot`; in the Etsy set and its own export),
   `lib/render/palette-card.ts`, `lib/palette.ts` (site colors; Match site colors), `lib/zip.ts`
   (stored ZIP writer), `lib/video/` (scrolling video: `timing.ts`, `render.ts` drawing each frame with the
   shared renderers, `mp4.ts` a small MP4 muxer for WebCodecs H.264), `lib/pin-text.ts` (Pin text

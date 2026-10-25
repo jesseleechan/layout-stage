@@ -9,7 +9,9 @@ import { renderPaletteCard } from '@/lib/render/palette-card';
 import { exportScale } from '@/lib/render/units';
 import { loadImage } from '@/lib/images';
 import { paletteOf } from '@/lib/palette';
-import { allSizes, ALL_SIZES_ZIP, etsySet, ETSY_SET_ZIP, setFileName, type SetItem } from '@/lib/sets';
+import { allSizes, ALL_SIZES_ZIP, etsySet, ETSY_SET_ZIP, pagesImages, PAGES_ZIP, setFileName, type SetItem } from '@/lib/sets';
+import { hasPages } from '@/lib/pages-grid';
+import { renderPagesGrid } from '@/lib/render/pages-grid';
 import { zipBlobs } from '@/lib/zip';
 import PinTextSection from './PinText';
 import VideoBody from './VideoSheet';
@@ -18,7 +20,8 @@ import './export.css';
 export const fmtBytes = (b: number) => (b > 1048576 ? (b / 1048576).toFixed(1) + ' MB' : Math.max(1, Math.round(b / 1024)) + ' KB');
 
 type Format = UiState['exportFormat'];
-type Mode = 'single' | 'sizes' | 'etsy' | 'video';
+type Mode = 'single' | 'sizes' | 'etsy' | 'pages' | 'video';
+type MultiMode = Exclude<Mode, 'single' | 'video'>;
 
 /** One file of a multi-image export. */
 export interface SheetItem {
@@ -56,6 +59,8 @@ interface ExportState {
   runAllSizes(returnTo?: string): Promise<void>;
   /** The Etsy listing set from the current canvas. */
   runEtsySet(returnTo?: string): Promise<void>;
+  /** Every page in Media in one grid, at Etsy 4:3, pin and Etsy square (lib/pages-grid.ts). */
+  runPagesGrid(returnTo?: string): Promise<void>;
   /** Opens the scrolling video sheet (components/VideoSheet.tsx). */
   openVideo(returnTo?: string): Promise<void>;
   /** Shows a short message inside the sheet. */
@@ -109,7 +114,7 @@ export const useExport = create<ExportState>()((set, get) => {
 
   /** Renders `plan` one file at a time into the open sheet, then zips the files. */
   const runMulti = async (
-    mode: 'sizes' | 'etsy',
+    mode: MultiMode,
     plan: { key: string; label: string; render(): Promise<HTMLCanvasElement>; name(w: number, h: number): string }[],
     zipName: string,
     format: Format,
@@ -200,6 +205,7 @@ export const useExport = create<ExportState>()((set, get) => {
       const render = (it: SetItem) => async () => {
         const m = exportScale(it.doc.W, it.doc.H, scale);
         if (it.kind === 'composition') return renderComposition(it.doc, m);
+        if (it.kind === 'pages') return renderPagesGrid(it.doc, it.pages, it.doc.W, it.doc.H, m);
         const slot = it.doc.slots[it.slot];
         const pal = await paletteOf(slot.imageId, loadImage);
         if (!pal) throw new Error('no colors');
@@ -212,6 +218,21 @@ export const useExport = create<ExportState>()((set, get) => {
         name: (w: number, h: number) => setFileName(i, it.key, w, h, format),
       }));
       return runMulti('etsy', plan, ETSY_SET_ZIP, format, returnTo);
+    },
+    async runPagesGrid(returnTo = 'exportBtn') {
+      const { doc, ui, showToast } = useEditor.getState();
+      if (!hasPages(doc)) {
+        showToast('Add two or more pages to Media first: upload them, or capture a whole site.');
+        return;
+      }
+      const format = ui.exportFormat;
+      const plan = pagesImages(clone(doc)).map((it) => ({
+        key: it.key,
+        label: it.label,
+        render: () => renderPagesGrid(it.doc, it.pages, it.doc.W, it.doc.H, exportScale(it.doc.W, it.doc.H, PRESETS[it.preset].scale)),
+        name: (w: number, h: number) => `layout-stage-all-pages-${PRESETS[it.preset].slug}-${w}x${h}.${format === 'jpg' ? 'jpg' : 'png'}`,
+      }));
+      return runMulti('pages', plan, PAGES_ZIP, format, returnTo);
     },
     async openVideo(returnTo = 'exportBtn') {
       if (get().rendering) return;
@@ -349,12 +370,13 @@ function VideoSheet() {
   );
 }
 
-const MULTI_COPY: Record<'sizes' | 'etsy', { title: string; lede: string }> = {
+const MULTI_COPY: Record<MultiMode, { title: string; lede: string }> = {
   sizes: { title: 'All sizes', lede: 'The same layouts and style, arranged for each size.' },
+  pages: { title: 'All pages', lede: 'Every page in Media in one grid, with your background and frame. Good as an Etsy “what’s included” photo.' },
   etsy: { title: 'Etsy listing set', lede: 'Listing photos at 3000 × 2250. Etsy shows up to 10 per listing.' },
 };
 
-function MultiSheet({ mode }: { mode: 'sizes' | 'etsy' }) {
+function MultiSheet({ mode }: { mode: MultiMode }) {
   const items = useExport((s) => s.items);
   const zip = useExport((s) => s.zip);
   const rendering = useExport((s) => s.rendering);

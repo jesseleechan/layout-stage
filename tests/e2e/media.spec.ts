@@ -64,3 +64,16 @@ test('the media gallery keeps every image added and puts any of them in a layout
   await expect(page.locator('#mediaCount')).toHaveText('4 of 12');
   await expect(media.locator('img')).toHaveCount(4);
 });
+
+test('All pages: every page in Media in one grid, at three sizes', async ({ page }) => {
+  await openEditor(page);
+  await page.setInputFiles('#mediaFiles', await pngs(page, ['#F2E8DA', '#DCE8F5', '#E3F2E1', '#F5DCE4', '#EDE4F7']));
+  await expect(page.locator('#mediaCount')).toHaveText('5 of 12');
+  await page.click('#exportMenuBtn');
+  await page.getByRole('menuitem', { name: 'All pages image' }).click();
+  await expect(page.locator('#sheetTitle')).toHaveText('All pages');
+  await expect(page.locator('#multiGrid .multi-item[data-status="done"]')).toHaveCount(3, { timeout: 30_000 });
+  await expect(page.locator('#multiGrid')).toContainText('3000 × 2250 px');
+  await expect(page.locator('#multiGrid')).toContainText('2000 × 3000 px');
+  await expect(page.locator('#sheetSaveAll')).toHaveAttribute('download', 'layout-stage-all-pages.zip');
+});
