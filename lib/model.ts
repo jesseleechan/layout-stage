@@ -3,7 +3,8 @@ import type { Overlays } from './overlays';
 import type { PinText } from './pin-text';
 
 export type PresetId = 'pin' | 'etsy43' | 'etsy11' | 'p45' | 'custom';
-export type CropId = 'full' | '16:10' | '4:3' | '1:1' | '4:5' | '9:16';
+/** 'custom': a free height (Slot.ar), set with the Height slider or the layout's bottom handle (lib/crop.ts). */
+export type CropId = 'full' | '16:10' | '4:3' | '1:1' | '4:5' | '2:3' | '9:16' | '1:2' | 'custom';
 export type ShadowPreset = 'none' | 'soft' | 'lifted' | 'float' | 'hard' | 'custom';
 export type BackgroundType = 'solid' | 'gradient' | 'mesh' | 'image';
 
@@ -34,6 +35,7 @@ export interface Slot {
   cx: number;
   cy: number; // center, canvas px
   w: number; // width, canvas px; height = w / cropRatio
+  ar?: number; // width / height of the 'custom' crop (only read for it)
 }
 
 /** An image in a project's media gallery (lib/media.ts): what a layout needs to show it again. */
@@ -157,7 +159,9 @@ export const CROPS: { id: CropId; label: string; ratio: number | null }[] = [
   { id: '4:3', label: '4:3', ratio: 4 / 3 },
   { id: '1:1', label: '1:1', ratio: 1 },
   { id: '4:5', label: '4:5', ratio: 0.8 },
+  { id: '2:3', label: '2:3', ratio: 2 / 3 },
   { id: '9:16', label: '9:16', ratio: 9 / 16 },
+  { id: '1:2', label: '1:2', ratio: 0.5 },
 ];
 
 /* ---------------- shadows ---------------- */

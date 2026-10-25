@@ -5,7 +5,10 @@ import { CROPS, EXPORT_MAX_SIDE, type Composition, type CropId, type Shadow, typ
 /** 1 unit = 1/1000 of the canvas's short side. Radius, border, shadow and background blur are in units. */
 export const unit = (W: number, H: number) => Math.min(W, H) / 1000;
 
-export function cropRatio(s: Pick<Slot, 'crop' | 'nw' | 'nh'>): number {
+/** Width / height of the slot's frame: the preset's, the free height's (a custom crop), or the
+ *  image's own (Full). */
+export function cropRatio(s: Pick<Slot, 'crop' | 'nw' | 'nh' | 'ar'>): number {
+  if (s.crop === 'custom') return s.ar && s.ar > 0 ? s.ar : s.nw / s.nh;
   const c = CROPS.find((c) => c.id === s.crop);
   return c && c.ratio ? c.ratio : s.nw / s.nh;
 }
@@ -25,7 +28,7 @@ export function rectOf(s: Slot, cx: number = s.cx, cy: number = s.cy): Rect {
 }
 
 /** Which axis the Scroll/Pan slider moves, or null when the crop shows the whole image. */
-export function scrollAxis(s: Pick<Slot, 'crop' | 'nw' | 'nh'>): 'x' | 'y' | null {
+export function scrollAxis(s: Pick<Slot, 'crop' | 'nw' | 'nh' | 'ar'>): 'x' | 'y' | null {
   const ar = cropRatio(s);
   const nr = s.nw / s.nh;
   if (Math.abs(ar - nr) < 0.01) return null;

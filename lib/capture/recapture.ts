@@ -3,7 +3,7 @@
 import type { CaptureOptions, Composition, Slot } from '../model';
 import { coverSource, cropRatio, scrollAxis } from '../render/units';
 
-export type Framing = Pick<Slot, 'crop' | 'fx' | 'fy' | 'cx' | 'cy' | 'w'>;
+export type Framing = Pick<Slot, 'crop' | 'ar' | 'fx' | 'fy' | 'cx' | 'cy' | 'w'>;
 
 const clampPct = (v: number) => Math.max(0, Math.min(100, v));
 const round2 = (v: number) => Math.round(v * 100) / 100;
@@ -29,7 +29,7 @@ export function reframe(prev: Slot, next: Pick<Slot, 'nw' | 'nh'>, H: number): F
       s.fy = hidden > 0 ? round2(clampPct(((was.sy / prev.nw) * s.nw * 100) / hidden)) : 0;
     }
   }
-  return { crop: s.crop, fx: s.fx, fy: s.fy, cx: s.cx, cy: s.cy, w: s.w };
+  return { crop: s.crop, ...(s.crop === 'custom' ? { ar: s.ar } : {}), fx: s.fx, fy: s.fy, cx: s.cx, cy: s.cy, w: s.w };
 }
 
 /** The drop-elsewhere rule for one image (as for an upload): the first sample layout, else a new

@@ -39,7 +39,9 @@ npx playwright install chromium          # once per machine, for URL capture and
   canvas, the default; `classic` cascades; leaves room for a top/bottom headline via `layoutRoom`),
   `lib/canvas-size.ts` (switching canvas sizes keeps the work: per-size placements, re-arrange when fresh,
   else scale as one piece), `lib/media.ts` (the media gallery, `doc.media`: every image added, up to 12,
-  oldest unused ones make room; `putImage` / `slotFor` place any image in a layout),
+  oldest unused ones make room; `putImage` / `slotFor` place any image in a layout), `lib/crop.ts`
+  (free height: crop `custom` with `Slot.ar`, from the Height slider or the bottom-edge handle; snaps
+  to Full or a preset within 1%),
   `lib/snap.ts` (incl. safe-area targets), `lib/align.ts` (align/distribute), `lib/scroll.ts` (moving a
   crop's visible window), `lib/samples.ts`
 - Outputs: `lib/sets.ts` (derived compositions for Export all sizes and the Etsy listing set),

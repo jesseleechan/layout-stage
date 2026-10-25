@@ -24,6 +24,7 @@ import { alignLayouts, canAlign, distributeLayouts, type AlignEdge } from './ali
 import { nextSiteBackground, paletteOf } from './palette';
 import { dropSlot, reframe } from './capture/recapture';
 import { patchOverlay, type OverlayKey, type Overlays } from './overlays';
+import { setCropOf, setHeight as setSlotHeight } from './crop';
 import { addMedia, keepShownInMedia, MAX_MEDIA, mediaOf, putImage, removeMedia, replaceMedia, slotFor } from './media';
 import { PIN_LIMITS, type PinField } from './pin-text';
 
@@ -103,6 +104,9 @@ export interface EditorState {
   /** Arrow-key nudge of the selected layout; saves a step after 350 ms idle. */
   nudge(dx: number, dy: number): void;
   setCrop(i: number, crop: CropId): void;
+  /** Live: the layout's height at its width (a free-height crop, lib/crop.ts), keeping its top edge.
+   *  `snapRatio` (default on) turns a height near Full or a preset into that crop. Commit on release. */
+  setHeight(i: number, h: number, snapRatio?: boolean): void;
   /** Live: moves the Scroll (y) or Pan (x) position of a cropped image. Commit on release. */
   setScroll(i: number, v: number): void;
   /** Live: slot width. Commit on release. */
@@ -406,7 +410,7 @@ export const useEditor = create<EditorState>()((set, get) => {
       if (n === get().doc.count) return;
       change((d) => {
         // Layouts coming into view take the showcase crop.
-        if (arrangementOf(d) === 'showcase') d.slots.forEach((s, i) => { if (i >= d.count && i < n) s.crop = showcaseCrop; });
+        if (arrangementOf(d) === 'showcase') d.slots.forEach((s, i) => { if (i >= d.count && i < n) setCropOf(s, showcaseCrop); });
         d.count = n;
         arrange(d, n, pageMeasure());
         keepShownInMedia(d);
@@ -484,7 +488,7 @@ export const useEditor = create<EditorState>()((set, get) => {
       change((d) => {
         const s = d.slots[i];
         const top = topOf(s);
-        s.crop = crop;
+        setCropOf(s, crop);
         // Showcase pages may run off the canvas: the layout keeps its width and top edge.
         if (arrangementOf(d) === 'showcase') keepTop(s, top);
         else capHeight(s, d.H);
@@ -496,6 +500,9 @@ export const useEditor = create<EditorState>()((set, get) => {
         if (scrollAxis(s) === 'y') s.fy = v;
         else s.fx = v;
       });
+    },
+    setHeight(i, h, snapRatio = true) {
+      edit((d) => { setSlotHeight(d.slots[i], h, snapRatio); });
     },
     setWidth(i, w) {
       edit((d) => { d.slots[i].w = w; });

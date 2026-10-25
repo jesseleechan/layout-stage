@@ -2,7 +2,8 @@
 import { useShallow } from 'zustand/react/shallow';
 import { CROPS, type CropId } from '@/lib/model';
 import { useEditor } from '@/lib/store';
-import { scrollAxis } from '@/lib/render/units';
+import { rectOf, scrollAxis } from '@/lib/render/units';
+import { heightRange } from '@/lib/crop';
 import { Chips, RangeRow, type Option } from './controls';
 import MiniMap from './MiniMap';
 import AlignTools from './AlignTools';
@@ -15,9 +16,11 @@ export default function SelectedPanel() {
       const i = st.ui.selected;
       const has = i != null && i < st.doc.count;
       const s = st.doc.slots[has ? i : 0];
+      const hr = heightRange(s);
       return {
         has, i: has ? i : 0, W: st.doc.W, H: st.doc.H,
         name: s.name, sample: s.source.kind === 'sample', crop: s.crop, w: s.w,
+        h: rectOf(s).h, hMin: Math.ceil(hr.min), hMax: Math.floor(hr.max),
         axis: has ? scrollAxis(s) : null, fx: s.fx, fy: s.fy,
       };
     }),
@@ -35,7 +38,7 @@ export default function SelectedPanel() {
         <p className="fine" id="selEmpty">Click a layout on the canvas to crop, resize or align it.</p>
       ) : (
         <div className="stack" id="selBody">
-          <div className="sub">Crop</div>
+          <div className="sub">Crop{v.crop === 'custom' && <span className="sub-note" id="cropNote"> · free height</span>}</div>
           <Chips id="cropChips" label="Crop" options={CROP_OPTIONS} value={v.crop} onPick={(c) => useEditor.getState().setCrop(i, c)} />
           {axis && <MiniMap i={i} axis={axis} />}
           {axis && (
@@ -56,6 +59,14 @@ export default function SelectedPanel() {
             max={Math.round(Math.max(v.W, v.H) * 1.2)}
             value={Math.round(v.w)}
             onInput={(n) => useEditor.getState().setWidth(i, n)}
+          />
+          <RangeRow
+            id="shotH"
+            label="Height"
+            min={v.hMin}
+            max={v.hMax}
+            value={Math.round(v.h)}
+            onInput={(n) => useEditor.getState().setHeight(i, n)}
           />
           <div className="btn-grid">
             <button className="btn sm" type="button" onClick={() => useEditor.getState().centerSelected('h')}>Center H</button>

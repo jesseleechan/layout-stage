@@ -57,8 +57,9 @@
 .magic-text span { font-size: 11px; color: var(--ink-2); line-height: 1.35; }
 .magic-icon { flex: none; color: var(--ink-2); }
 
-/* Crop choices for the selected layout: six even chips on one line. */
-#cropChips { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 4px; }
+/* Crop choices for the selected layout: eight even chips, two rows of four. */
+#cropChips { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 4px; }
+#cropNote { font-weight: 500; letter-spacing: .04em; }
 #cropChips .chip { padding: 0; font-size: 11.5px; }
 
 /* Media gallery (MediaPanel), after Shots' media picker: square tiles, the selected layout's image
