@@ -22,6 +22,7 @@ import { alignLayouts, canAlign, distributeLayouts, type AlignEdge } from './ali
 import { nextSiteBackground, paletteOf } from './palette';
 import { dropSlot, reframe } from './capture/recapture';
 import { patchOverlay, type OverlayKey, type Overlays } from './overlays';
+import { PIN_LIMITS, type PinField } from './pin-text';
 
 export interface Toast {
   id: number;
@@ -162,6 +163,12 @@ export interface EditorState {
   setOverlay<K extends OverlayKey>(key: K, patch: Partial<Overlays[K]>): void;
   /** Stores a logo and makes it the watermark: one step once it has loaded. */
   setWatermarkLogo(file: File): Promise<void>;
+
+  /* --- pin text (lib/pin-text.ts) --- */
+  /** Live: typing in a pin text field keeps the text with the canvas. Commit on pause / blur. */
+  editPinText(field: PinField, value: string): void;
+  /** Discrete: the field follows its suggestion again. One undo step. */
+  resetPinText(field: PinField): void;
 }
 
 const NOT_IMAGE = 'That file isn’t an image. Use PNG, JPG or WebP.';
@@ -643,6 +650,19 @@ export const useEditor = create<EditorState>()((set, get) => {
       const old = get().doc.overlays?.watermark.imageId ?? null;
       step((d) => patchOverlay(d, 'watermark', { enabled: true, kind: 'logo', imageId: got.id, imageName: file.name, nw: got.nw, nh: got.nh }));
       releaseUnused([old]);
+    },
+
+    /* --- pin text (lib/pin-text.ts) --- */
+    editPinText(field, value) {
+      edit((d) => { d.pin = { ...d.pin, [field]: String(value).slice(0, PIN_LIMITS[field]) }; });
+    },
+    resetPinText(field) {
+      if (get().doc.pin?.[field] == null) return;
+      change((d) => {
+        if (!d.pin) return;
+        delete d.pin[field];
+        if (!Object.keys(d.pin).length) delete d.pin;
+      });
     },
   };
 });

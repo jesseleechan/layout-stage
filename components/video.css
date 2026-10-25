@@ -1,0 +1,22 @@
+/* Scrolling video sheet. Builds on the prototype's .sheet / .row / .seg / .btn styles in
+   app/globals.css; the finished video uses the split layout in pin-text.css. */
+.vid-form { display: grid; gap: 12px; padding: 12px; border: 1px solid var(--line); border-radius: 12px; }
+.vid-form .row { grid-template-columns: 96px minmax(0, 1fr) 40px; }
+.vid-field { display: grid; grid-template-columns: 96px minmax(0, 1fr); align-items: center; gap: 6px 8px; }
+.vid-field > .lbl { font-size: 12px; color: var(--ink-2); font-weight: 500; }
+.vid-field .seg button { height: 28px; font-size: 12px; }
+.vid-field .seg button:disabled { opacity: .4; cursor: default; }
+.vid-hint { grid-column: 2; min-height: 1.45em; overflow-wrap: anywhere; }
+.vid-note { margin: 0; padding: 8px 10px; border-radius: 8px; background: var(--field); font-size: 12px; line-height: 1.45; }
+
+.vid-progress { display: grid; gap: 8px; padding: 14px 12px; border: 1px solid var(--line); border-radius: 12px; }
+.vid-progress progress { width: 100%; height: 8px; accent-color: var(--accent); }
+.vid-progress-text { display: flex; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
+.vid-count { font-family: var(--font-num); font-variant-numeric: tabular-nums; }
+
+.sheet-preview video { max-width: 100%; max-height: 52vh; display: block; border-radius: 3px; box-shadow: 0 4px 18px rgba(0, 0, 0, .18); background: #000; }
+
+@media (max-width: 460px) {
+  .vid-field { grid-template-columns: minmax(0, 1fr); }
+  .vid-hint { grid-column: 1; }
+}

@@ -11,12 +11,14 @@ import { loadImage } from '@/lib/images';
 import { paletteOf } from '@/lib/palette';
 import { allSizes, ALL_SIZES_ZIP, etsySet, ETSY_SET_ZIP, setFileName, type SetItem } from '@/lib/sets';
 import { zipBlobs } from '@/lib/zip';
+import PinTextSection from './PinText';
+import VideoBody from './VideoSheet';
 import './export.css';
 
 export const fmtBytes = (b: number) => (b > 1048576 ? (b / 1048576).toFixed(1) + ' MB' : Math.max(1, Math.round(b / 1024)) + ' KB');
 
 type Format = UiState['exportFormat'];
-type Mode = 'single' | 'sizes' | 'etsy';
+type Mode = 'single' | 'sizes' | 'etsy' | 'video';
 
 /** One file of a multi-image export. */
 export interface SheetItem {
@@ -54,6 +56,10 @@ interface ExportState {
   runAllSizes(returnTo?: string): Promise<void>;
   /** The Etsy listing set from the current canvas. */
   runEtsySet(returnTo?: string): Promise<void>;
+  /** Opens the scrolling video sheet (components/VideoSheet.tsx). */
+  openVideo(returnTo?: string): Promise<void>;
+  /** Shows a short message inside the sheet. */
+  notify(msg: string): void;
   copy(): void;
   close(): void;
 }
@@ -103,7 +109,7 @@ export const useExport = create<ExportState>()((set, get) => {
 
   /** Renders `plan` one file at a time into the open sheet, then zips the files. */
   const runMulti = async (
-    mode: Exclude<Mode, 'single'>,
+    mode: 'sizes' | 'etsy',
     plan: { key: string; label: string; render(): Promise<HTMLCanvasElement>; name(w: number, h: number): string }[],
     zipName: string,
     format: Format,
@@ -207,6 +213,12 @@ export const useExport = create<ExportState>()((set, get) => {
       }));
       return runMulti('etsy', plan, ETSY_SET_ZIP, format, returnTo);
     },
+    async openVideo(returnTo = 'exportBtn') {
+      if (get().rendering) return;
+      clearMulti();
+      set({ mode: 'video', open: true, returnTo, note: null });
+    },
+    notify: note,
     copy() {
       const r = get().result;
       if (!r) return;
@@ -241,7 +253,7 @@ function Sheet({ className, children }: { className?: string; children: ReactNod
   const cardRef = useRef<HTMLDivElement>(null);
   const trapTab = (e: KeyboardEvent<HTMLDivElement>) => {
     if (e.key !== 'Tab' || !cardRef.current) return;
-    const f = Array.from(cardRef.current.querySelectorAll<HTMLElement>('button:not([disabled]), a[href]'));
+    const f = Array.from(cardRef.current.querySelectorAll<HTMLElement>('button:not([disabled]), a[href], input:not([disabled]), textarea:not([disabled]), select:not([disabled]), video[controls]'));
     if (!f.length) return;
     const first = f[0], last = f[f.length - 1];
     const inside = cardRef.current.contains(document.activeElement);
@@ -290,40 +302,59 @@ function SingleSheet() {
   const result = useExport((s) => s.result)!;
   const close = useExport((s) => s.close);
   const copy = useExport((s) => s.copy);
+  const notify = useExport((s) => s.notify);
   const saveRef = useRef<HTMLAnchorElement>(null);
   const [canCopy] = useState(canCopyImages);
   useEffect(() => saveRef.current?.focus(), []);
   const ext = result.format === 'jpg' ? 'JPG' : 'PNG';
   return (
-    <Sheet>
+    <Sheet className="split">
       <Head title="Export ready" />
-      <div className="sheet-preview">
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img id="sheetImg" src={result.url} alt="Preview of the exported image" />
-      </div>
-      <div className="sheet-meta">
-        <strong id="sheetName">{result.name}</strong>
-        <span className="fine" id="sheetMeta">{`${result.w} × ${result.h} px · ${ext} · ${fmtBytes(result.blob.size)}`}</span>
-      </div>
-      <div className="sheet-actions">
-        <button className="btn" id="sheetBack" type="button" onClick={close}>Back to editing</button>
-        {canCopy && (
-          <button className="btn" id="sheetCopy" type="button" onClick={copy} title={result.format === 'jpg' ? 'Copies a PNG of this image' : undefined}>
-            Copy
-          </button>
-        )}
-        <a className="btn primary" id="sheetSave" href={result.url} download={result.name} ref={saveRef}>Save file</a>
+      <div className="sheet-split">
+        <div className="sheet-main">
+          <div className="sheet-preview">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img id="sheetImg" src={result.url} alt="Preview of the exported image" />
+          </div>
+          <div className="sheet-meta">
+            <strong id="sheetName">{result.name}</strong>
+            <span className="fine" id="sheetMeta">{`${result.w} × ${result.h} px · ${ext} · ${fmtBytes(result.blob.size)}`}</span>
+          </div>
+          <div className="sheet-actions">
+            <button className="btn" id="sheetBack" type="button" onClick={close}>Back to editing</button>
+            {canCopy && (
+              <button className="btn" id="sheetCopy" type="button" onClick={copy} title={result.format === 'jpg' ? 'Copies a PNG of this image' : undefined}>
+                Copy
+              </button>
+            )}
+            <a className="btn primary" id="sheetSave" href={result.url} download={result.name} ref={saveRef}>Save file</a>
+          </div>
+        </div>
+        <PinTextSection notify={notify} />
       </div>
     </Sheet>
   );
 }
 
-const MULTI_COPY: Record<Exclude<Mode, 'single'>, { title: string; lede: string }> = {
+/** The scrolling video sheet; wide once the video is ready, to show the pin text beside it. */
+function VideoSheet() {
+  const close = useExport((s) => s.close);
+  const notify = useExport((s) => s.notify);
+  const [wide, setWide] = useState(false);
+  return (
+    <Sheet className={wide ? 'video split' : 'video'}>
+      <Head title="Scrolling video" />
+      <VideoBody onClose={close} notify={notify} onWide={setWide} />
+    </Sheet>
+  );
+}
+
+const MULTI_COPY: Record<'sizes' | 'etsy', { title: string; lede: string }> = {
   sizes: { title: 'All sizes', lede: 'The same layouts and style, arranged for each size.' },
   etsy: { title: 'Etsy listing set', lede: 'Listing photos at 3000 × 2250. Etsy shows up to 10 per listing.' },
 };
 
-function MultiSheet({ mode }: { mode: Exclude<Mode, 'single'> }) {
+function MultiSheet({ mode }: { mode: 'sizes' | 'etsy' }) {
   const items = useExport((s) => s.items);
   const zip = useExport((s) => s.zip);
   const rendering = useExport((s) => s.rendering);
@@ -384,5 +415,6 @@ export default function ExportSheet() {
   const hasResult = useExport((s) => !!s.result);
   if (!open) return null;
   if (mode === 'single') return hasResult ? <SingleSheet /> : null;
+  if (mode === 'video') return <VideoSheet />;
   return <MultiSheet key={mode} mode={mode} />;
 }

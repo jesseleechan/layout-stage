@@ -4,6 +4,7 @@ import { clone, PRESETS, type Composition, type Style } from './model';
 import { defaultComposition } from './arrange';
 import { cleanSelectors } from './capture/selectors';
 import { sanitizeOverlays } from './overlays';
+import { sanitizePinText } from './pin-text';
 
 const LEGACY_STYLES_KEY = 'layoutStage.styles.v1'; // the prototype kept saved styles in localStorage
 const K_DOC = 'composition';
@@ -58,7 +59,9 @@ export function sanitizeComposition(raw: unknown): Composition | null {
     frame: { ...d.frame, ...clone(r.frame), shadow: { ...d.frame.shadow, ...clone(r.frame?.shadow) } },
     background: { ...d.background, ...clone(r.background) },
     overlays: sanitizeOverlays(r.overlays),
+    pin: sanitizePinText(r.pin),
   } as Composition;
+  if (!out.pin) delete out.pin;
   // Capture options added later (dark mode, hide elements): defaults for captures saved before them.
   for (const s of out.slots) {
     const o = s.source?.kind === 'url' ? s.source.options : null;
