@@ -8,11 +8,13 @@ import os from 'node:os';
 import path from 'node:path';
 import { chromium, type Browser, type BrowserContext, type LaunchOptions, type Page, type Request as PwRequest } from 'playwright';
 import type { CaptureOptions } from '../model';
-import { navError, pageError } from './detect';
+import { redactAuth, type CaptureAuth } from './auth';
+import { authError, navError, pageError } from './detect';
 import { CaptureError, NOT_FOUND_MESSAGE, SCHEME_MESSAGE } from './errors';
 import { startGuardProxy, type GuardProxy } from './guard-proxy';
 import { stitchPngs } from './png';
 import { createSerialQueue, type Serial } from './queue';
+import { selectorCss } from './selectors';
 import { checkUrl, createRequestGuard, publicOnly, type HostPolicy, type RequestGuard, type RequestVerdict } from './url-guard';
 
 export const MAX_CAPTURE_HEIGHT = 12_000; // CSS px; taller full pages are trimmed
@@ -20,6 +22,10 @@ const NAV_TIMEOUT = 30_000;
 const VIEWPORT_HEIGHT = 900;
 const SHOT_TIMEOUT = 60_000;
 const SLICE_DEVICE_PX = 6000;
+/** Serverless: full pages taller than this (device px) are captured in viewport-tall bands (bandShots). */
+const BAND_FROM_DEVICE_PX = SLICE_DEVICE_PX;
+const BAND_SETTLE_MS = 100;
+const BAND_IMAGE_WAIT_MS = 800; // most a band waits for images that start loading only then
 const IDLE_CLOSE_MS = 10 * 60_000; // free the browser after 10 idle minutes
 const BANNERS_CSS = path.join(process.cwd(), 'lib/capture/banners.css');
 const BANNERS_ID = '__layout-stage-banners';
@@ -84,6 +90,8 @@ export const TOO_LARGE_MESSAGE = 'That page is too big to send back in one piece
 
 export interface CaptureInput extends CaptureOptions {
   url: string;
+  /** HTTP basic auth for this capture only, sent to the page's own origin only. Never logged. */
+  auth?: CaptureAuth | null;
 }
 export interface CaptureImage {
   type: 'image/png' | 'image/webp';
@@ -102,6 +110,9 @@ export interface CaptureRunOptions {
   policy?: HostPolicy;
   /** Most bytes the images may take together (default: no limit). See responseBudget(). */
   maxBytes?: number;
+  /** Capture tall full pages in viewport-tall bands (see bandShots). Default: with the serverless
+   *  Chromium only; locally full pages are captured as before. */
+  bands?: boolean;
 }
 
 /* One browser (behind one guard proxy) and one queue per server process, kept on globalThis so
@@ -128,7 +139,7 @@ export function captureScreenshot(input: CaptureInput, opts: CaptureRunOptions =
     if (opts.signal?.aborted) throw new CaptureError('aborted');
     clearTimeout(shared.idle);
     try {
-      return await capture(input, opts.policy ?? publicOnly(), opts.maxBytes ?? Infinity, opts.signal);
+      return await capture(input, opts.policy ?? publicOnly(), opts.maxBytes ?? Infinity, opts.signal, opts.bands);
     } finally {
       if ((await shared.session?.catch(() => null))?.singleUse) {
         await shutdownCapture();
@@ -240,7 +251,7 @@ function refusal(v: RequestVerdict): CaptureError {
   return new CaptureError('private');
 }
 
-async function capture(input: CaptureInput, policy: HostPolicy, maxBytes: number, signal?: AbortSignal): Promise<CaptureResult> {
+async function capture(input: CaptureInput, policy: HostPolicy, maxBytes: number, signal?: AbortSignal, bands?: boolean): Promise<CaptureResult> {
   const target = await checkUrl(input.url, policy);
   const guard = createRequestGuard(policy);
   const { browser, proxy, singleUse } = await getSession();
@@ -255,13 +266,15 @@ async function capture(input: CaptureInput, policy: HostPolicy, maxBytes: number
       hasTouch: phone,
       userAgent: userAgent(browser, phone),
       locale: 'en-US',
-      colorScheme: 'light',
+      colorScheme: input.darkMode ? 'dark' : 'light',
+      // Answered only when the page's own origin asks (a 401), never to other hosts it loads from.
+      httpCredentials: input.auth ? { username: input.auth.username, password: input.auth.password, origin: target.origin, send: 'unauthorized' } : undefined,
       serviceWorkers: 'block',
       acceptDownloads: false,
-      bypassCSP: true, // so the banner stylesheet also applies on strict-CSP sites
+      bypassCSP: true, // so the banner and hide-elements stylesheet also applies on strict-CSP sites
     });
   } catch (e) {
-    console.error('[capture] new context failed:', e);
+    console.error('[capture] new context failed:', loggable(e, input.auth));
     throw new CaptureError('failed');
   }
   // A busy single-process browser may not get round to closing a context; closing the browser
@@ -269,16 +282,22 @@ async function capture(input: CaptureInput, policy: HostPolicy, maxBytes: number
   const onAbort = () => void (singleUse ? browser : context).close().catch(() => undefined);
   signal?.addEventListener('abort', onAbort, { once: true });
   try {
-    return await untilBrowserExits(browser, run(context, target, input, guard, maxBytes));
+    return await untilBrowserExits(browser, run(context, target, input, guard, maxBytes, bands ?? singleUse));
   } catch (e) {
     if (signal?.aborted) throw new CaptureError('aborted');
     const err = navError(e);
-    if (err.code === 'failed') console.error('[capture] failed:', e);
+    if (err.code === 'failed') console.error('[capture] failed:', loggable(e, input.auth));
     throw err;
   } finally {
     signal?.removeEventListener('abort', onAbort);
     if (browser.isConnected()) await context.close().catch(() => undefined);
   }
+}
+
+/** An error as it may be logged: with credentials in play, its text with them blanked out. */
+function loggable(e: unknown, auth: CaptureAuth | null | undefined): unknown {
+  if (!auth) return e;
+  return redactAuth(e instanceof Error ? `${e.name}: ${e.message}\n${e.stack ?? ''}` : String(e), auth);
 }
 
 /** Settles like `work`, or fails as soon as the browser exits (a crash): Playwright can leave calls
@@ -292,7 +311,7 @@ function untilBrowserExits<T>(browser: Browser, work: Promise<T>): Promise<T> {
   return Promise.race([work, exited]).finally(() => browser.off('disconnected', onExit));
 }
 
-async function run(context: BrowserContext, target: URL, input: CaptureInput, guard: RequestGuard, maxBytes: number): Promise<CaptureResult> {
+async function run(context: BrowserContext, target: URL, input: CaptureInput, guard: RequestGuard, maxBytes: number, bands: boolean): Promise<CaptureResult> {
   let page: Page | null = null;
   const isMainDocument = (req: PwRequest) => {
     try {
@@ -319,7 +338,7 @@ async function run(context: BrowserContext, target: URL, input: CaptureInput, gu
     if (page && p !== page) void p.close().catch(() => undefined); // no popups
   });
 
-  const css = input.hideBanners ? await bannerCss() : '';
+  const css = [input.hideBanners ? await bannerCss() : '', selectorCss(input.hideSelectors ?? [])].filter(Boolean).join('\n');
   if (css) await context.addInitScript({ content: bannerInitScript(css) });
 
   page = await context.newPage();
@@ -360,14 +379,14 @@ async function run(context: BrowserContext, target: URL, input: CaptureInput, gu
   const left = NAV_TIMEOUT - (Date.now() - started);
   if (left > 0) await main.waitForLoadState('networkidle', { timeout: left }).then(() => log('network idle'), () => log('no network idle; carrying on'));
 
-  // Bot walls and error pages. A challenge that clears itself navigates on; give it a moment.
-  let err = (await docRefused()) ?? (await checkPage(main, status));
+  // Password walls, bot walls and error pages. A challenge that clears itself navigates on; give it a moment.
+  let err = (await docRefused()) ?? authError(status, !!input.auth) ?? (await checkPage(main, status));
   if (err?.code === 'blocked') {
     await main
       .waitForEvent('framenavigated', { predicate: (f) => f === main.mainFrame(), timeout: 6000 })
       .then(() => main.waitForLoadState('load', { timeout: 10_000 }))
       .catch(() => undefined);
-    err = (await docRefused()) ?? (await checkPage(main, status));
+    err = (await docRefused()) ?? authError(status, !!input.auth) ?? (await checkPage(main, status));
   }
   if (err) throw err;
 
@@ -388,8 +407,10 @@ async function run(context: BrowserContext, target: URL, input: CaptureInput, gu
   // the lower part of tall 2× captures of busy pages blank.
   const shot = (y: number, h: number) =>
     main.screenshot({ fullPage: true, clip: { x: 0, y, width: input.width, height: h }, animations: 'disabled', type: 'png', timeout: SHOT_TIMEOUT });
-  const slices: Buffer[] = [];
-  if (input.fullPage) {
+  let slices: Buffer[] = [];
+  if (input.fullPage && bands && shotHeight * input.scale > BAND_FROM_DEVICE_PX) {
+    slices = await bandShots(main, input.width, shotHeight);
+  } else if (input.fullPage) {
     const step = Math.floor(SLICE_DEVICE_PX / input.scale);
     for (let y = 0; y < shotHeight; y += step) slices.push(await shot(y, Math.min(step, shotHeight - y)));
   } else {
@@ -411,6 +432,55 @@ async function run(context: BrowserContext, target: URL, input: CaptureInput, gu
 }
 
 const byteLength = (bufs: Buffer[]) => bufs.reduce((n, b) => n + b.length, 0);
+
+/** Serverless: the top `shotHeight` CSS px of a tall page as viewport-tall bands, top to bottom.
+ *  A full-page screenshot has Chromium rasterize far beyond the viewport, and in one process with
+ *  2 GB that is what runs out: for stripe.com at 1440, 2× the single-process browser peaked at
+ *  1.44–1.51 GB with full-page slices and 1.07 GB with bands (the page itself takes ~0.87 GB).
+ *  The window stays scrolled to the top, as for a full-page shot; the page moves up under the
+ *  viewport instead (a transform on <html>), one viewport at a time. Nothing scrolls, so nothing
+ *  repeats at the seams: <html> becomes the containing block of fixed elements (a fixed header shows
+ *  once at the top; a fixed chat button lands at the bottom of the page rather than of the first
+ *  screen), sticky elements stay where they sit at the top of the page, and "scrolled" states
+ *  (headers, backgrounds) stay off. Content that reveals itself when it comes into view still does:
+ *  IntersectionObserver sees the transform. */
+async function bandShots(page: Page, width: number, shotHeight: number): Promise<Buffer[]> {
+  const vh = await page.evaluate(() => {
+    window.scrollTo({ top: 0, behavior: 'instant' });
+    return window.innerHeight;
+  }).then((h) => (h > 0 ? h : VIEWPORT_HEIGHT));
+  const bands: Buffer[] = [];
+  try {
+    for (let y = 0; y < shotHeight; y += vh) {
+      const h = Math.min(vh, shotHeight - y);
+      await page.evaluate(
+        async ({ y, settle, wait }) => {
+          document.documentElement.style.setProperty('transform', `translateY(${-y}px)`, 'important');
+          for (let i = 0; i < 2; i++) await new Promise((r) => requestAnimationFrame(() => r(null)));
+          // Images that start loading only now (lazy loaders the first pass missed) get a moment.
+          const pending = Array.from(document.images).filter((img) => {
+            const r = img.getBoundingClientRect();
+            return !img.complete && r.bottom > 0 && r.top < window.innerHeight;
+          });
+          const loaded = pending.map(
+            (img) =>
+              new Promise((r) => {
+                img.addEventListener('load', r, { once: true });
+                img.addEventListener('error', r, { once: true });
+              }),
+          );
+          await Promise.race([Promise.all(loaded), new Promise((r) => setTimeout(r, wait))]);
+          await new Promise((r) => setTimeout(r, settle));
+        },
+        { y, settle: BAND_SETTLE_MS, wait: BAND_IMAGE_WAIT_MS },
+      );
+      bands.push(await page.screenshot({ clip: { x: 0, y: 0, width, height: h }, animations: 'disabled', type: 'png', timeout: SHOT_TIMEOUT }));
+    }
+  } finally {
+    await page.evaluate(() => document.documentElement.style.removeProperty('transform')).catch(() => undefined);
+  }
+  return bands;
+}
 
 /** Re-encodes PNG slices as WebP in the capture browser (no image library on the server), trying
  *  lower qualities until they fit in maxBytes. Leaves the page on about:blank. Slices stay at most

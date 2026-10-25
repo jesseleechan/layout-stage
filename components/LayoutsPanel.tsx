@@ -2,7 +2,10 @@
 import { useRef, useState, type DragEvent } from 'react';
 import { captureJobSlot, useEditor, type CaptureJob } from '@/lib/store';
 import { useImageUrl } from '@/lib/images';
+import { recapture, recaptureAll } from '@/lib/capture/jobs';
+import { hostOf, recapturable } from '@/lib/capture/recapture';
 import { Seg, type Option } from './controls';
+import ReplaceMenu, { type MenuItem } from './ReplaceMenu';
 import './panels.css';
 
 const COUNT_OPTIONS: Option<1 | 2 | 3>[] = [
@@ -59,15 +62,14 @@ const GlobeIcon = () => (
   </svg>
 );
 
-const hasFiles = (e: DragEvent) => !!e.dataTransfer && Array.from(e.dataTransfer.types || []).includes('Files');
+const RecaptureIcon = () => (
+  <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <path d="M13.25 8A5.25 5.25 0 1 1 11.6 4.2" />
+    <path d="M13.5 2.5v3.25h-3.25" />
+  </svg>
+);
 
-function hostOf(url: string): string {
-  try {
-    return new URL(url).hostname || url;
-  } catch {
-    return url;
-  }
-}
+const hasFiles = (e: DragEvent) => !!e.dataTransfer && Array.from(e.dataTransfer.types || []).includes('Files');
 
 function SlotRow({ i, count, on, busy, onReplace }: { i: number; count: number; on: boolean; busy: boolean; onReplace: (i: number) => void }) {
   const imageId = useEditor((s) => s.doc.slots[i].imageId);
@@ -75,6 +77,7 @@ function SlotRow({ i, count, on, busy, onReplace }: { i: number; count: number; 
   const nw = useEditor((s) => s.doc.slots[i].nw);
   const nh = useEditor((s) => s.doc.slots[i].nh);
   const kind = useEditor((s) => s.doc.slots[i].source.kind);
+  const pageUrl = useEditor((s) => { const src = s.doc.slots[i].source; return src.kind === 'url' ? src.url : null; });
   const url = useImageUrl(imageId);
   const [over, setOver] = useState(false);
   const n = i + 1;
@@ -125,19 +128,7 @@ function SlotRow({ i, count, on, busy, onReplace }: { i: number; count: number; 
         </span>
       </button>
       <div className="slot-actions">
-        <button type="button" className="icon-btn xs" data-act="replace" aria-label={`Replace layout ${n}`} title="Replace image" onClick={() => onReplace(i)}>
-          <ReplaceIcon />
-        </button>
-        <button
-          type="button"
-          className="icon-btn xs"
-          data-act="replace-url"
-          aria-label={`Replace layout ${n} from URL`}
-          title="Replace from URL"
-          onClick={() => useEditor.getState().openCapture(i)}
-        >
-          <GlobeIcon />
-        </button>
+        <ReplaceMenu label={`Replace layout ${n}`} title="Replace image" icon={<ReplaceIcon />} items={replaceItems(i, pageUrl, busy, onReplace)} />
         <button
           type="button"
           className="icon-btn xs"
@@ -152,6 +143,16 @@ function SlotRow({ i, count, on, busy, onReplace }: { i: number; count: number; 
       </div>
     </li>
   );
+}
+
+/** Replace menu: a file, a URL, or (for a layout captured from a URL) the same page again. */
+function replaceItems(i: number, pageUrl: string | null, busy: boolean, onReplace: (i: number) => void): MenuItem[] {
+  const items: MenuItem[] = [
+    { key: 'replace-file', label: 'Upload a file…', icon: <ReplaceIcon />, onSelect: () => onReplace(i) },
+    { key: 'replace-url', label: 'Capture from URL…', icon: <GlobeIcon />, onSelect: () => useEditor.getState().openCapture(i) },
+  ];
+  if (pageUrl) items.push({ key: 'recapture', label: `Re-capture ${hostOf(pageUrl)}`, icon: <RecaptureIcon />, disabled: busy, onSelect: () => void recapture(i) });
+  return items;
 }
 
 /** A capture with no target slot yet: it will land by the drop-elsewhere rule. */
@@ -179,6 +180,9 @@ export default function LayoutsPanel() {
   const slotOf = (k: number) => jobSlots.split(',')[k];
   const setCount = useEditor((s) => s.setCount);
   const openCapture = useEditor((s) => s.openCapture);
+  // Layouts captured from a URL, and how many of them aren't capturing now (for Re-capture all).
+  const fromUrl = useEditor((s) => recapturable(s.doc).length);
+  const idle = useEditor((s) => recapturable(s.doc).filter((r) => !s.captureJobs.some((j) => captureJobSlot(s.doc, j) === r.i)).length);
   const manyRef = useRef<HTMLInputElement>(null);
   const oneRef = useRef<HTMLInputElement>(null);
   const replaceTarget = useRef(0);
@@ -205,6 +209,12 @@ export default function LayoutsPanel() {
             <PendingRow key={j.id} job={j} />
           ))}
       </ol>
+      {fromUrl >= 2 && (
+        <button className="btn sm wide" id="recaptureAllBtn" type="button" disabled={!idle} onClick={() => void recaptureAll()}>
+          <RecaptureIcon />
+          Re-capture all
+        </button>
+      )}
       <div className="btn-grid">
         <button className="btn" id="uploadBtn" type="button" onClick={() => manyRef.current?.click()}>
           Upload screenshots…

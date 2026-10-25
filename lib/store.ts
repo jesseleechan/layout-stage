@@ -19,6 +19,7 @@ import { loadImage, pruneImages, putImage, releaseImage } from './images';
 import { loadComposition, loadStyles, saveComposition, saveStyles } from './persist';
 import { exportComposition, renderComposition } from './render/export';
 import { alignLayouts, canAlign, distributeLayouts, type AlignEdge } from './align';
+import { dropSlot, reframe } from './capture/recapture';
 
 export interface Toast {
   id: number;
@@ -61,7 +62,7 @@ export interface EditorState {
   savedStyles: Style[];
   /** True once the autosaved canvas (if any) has been restored. */
   hydrated: boolean;
-  captureDialog: { open: boolean; target: number | null };
+  captureDialog: { open: boolean; target: number | null; recapture?: boolean };
   captureJobs: CaptureJob[];
 
   /* --- core --- */
@@ -135,6 +136,17 @@ export interface EditorState {
   align(edge: AlignEdge): void;
   /** Equal gaps between the visible layouts along an axis (needs 3). */
   distribute(axis: 'h' | 'v'): void;
+
+  /* --- re-capture and desktop + phone captures (lib/capture/jobs.ts, lib/capture/recapture.ts) --- */
+  /** Opens the capture dialog to re-capture layout i from its URL and options, keeping its framing
+   *  (for pages behind a password, which is never stored, so the dialog asks for it again). */
+  openRecapture(i: number): void;
+  /** Lands a captured image as its own undo step (async: through step()). With keepFraming it
+   *  replaces the image of the layout showing `targetId` and keeps that layout's framing (crop,
+   *  scroll, position, width; see reframe()); otherwise it fills that layout as an upload would.
+   *  When that layout is gone (or there is none) it uses the drop-elsewhere rule, never on the layout
+   *  showing `avoidId`. Resolves to the new image id, or null when the image couldn't be read. */
+  landCapture(img: NewImage, at: { targetId: string | null; keepFraming?: boolean; avoidId?: string | null }): Promise<string | null>;
 }
 
 const NOT_IMAGE = 'That file isn’t an image. Use PNG, JPG or WebP.';
@@ -543,6 +555,33 @@ export const useEditor = create<EditorState>()((set, get) => {
         return;
       }
       change((d) => { distributeLayouts(d, axis); });
+    },
+
+    /* --- re-capture and desktop + phone captures (lib/capture/jobs.ts, lib/capture/recapture.ts) --- */
+    openRecapture(i) {
+      set({ captureDialog: { open: true, target: i, recapture: true } });
+    },
+    async landCapture(img, { targetId, keepFraming = false, avoidId = null }) {
+      const put = await loadSlotImage(img);
+      if (!put) return null;
+      const doc = get().doc;
+      const visible = (id: string | null) => (id == null ? -1 : doc.slots.findIndex((s, k) => k < doc.count && s.imageId === id));
+      const target = visible(targetId);
+      const keep = keepFraming && target >= 0;
+      const { i, added } = target >= 0 ? { i: target, added: false } : dropSlot(doc, visible(avoidId));
+      const old = doc.slots[i].imageId;
+      step((d) => {
+        const prev = clone(d.slots[i]);
+        put(d, i);
+        if (keep) Object.assign(d.slots[i], reframe(prev, d.slots[i], d.H));
+        if (added) {
+          d.count = (i + 1) as 1 | 2 | 3;
+          arrange(d);
+        }
+      });
+      if (!keep) setUi({ selected: i });
+      releaseUnused([old]);
+      return get().doc.slots[i].imageId;
     },
   };
 });

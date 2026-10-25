@@ -11,12 +11,14 @@ export interface CaptureOptions {
   scale: 1 | 2;
   delayMs: number; // 0–5000
   hideBanners: boolean;
+  darkMode: boolean; // capture with prefers-color-scheme: dark
+  hideSelectors: string[]; // CSS selectors hidden with display:none (lib/capture/selectors.ts)
 }
 
 export type SlotSource =
   | { kind: 'sample' }
   | { kind: 'file' }
-  | { kind: 'url'; url: string; capturedAt: string; options: CaptureOptions };
+  | { kind: 'url'; url: string; capturedAt: string; options: CaptureOptions; needsPassword?: boolean }; // the password itself is never stored
 
 export interface Slot {
   imageId: string; // key into the image store (lib/images.ts)
@@ -195,7 +197,7 @@ export const CAPTURE_WIDTHS: { width: CaptureOptions['width']; label: string }[]
   { width: 834, label: 'Tablet 834' },
   { width: 390, label: 'Phone 390' },
 ];
-export const DEFAULT_CAPTURE: CaptureOptions = { width: 1440, fullPage: true, scale: 2, delayMs: 1500, hideBanners: true };
+export const DEFAULT_CAPTURE: CaptureOptions = { width: 1440, fullPage: true, scale: 2, delayMs: 1500, hideBanners: true, darkMode: false, hideSelectors: [] };
 
 /* ---------------- samples ---------------- */
 

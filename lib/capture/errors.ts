@@ -11,6 +11,10 @@ export type CaptureErrorCode =
   | 'blocked' // bot wall / challenge page
   | 'timeout' // no load event within 30 s
   | 'no_browser' // Playwright's Chromium isn't installed
+  | 'auth_required' // the page answered 401 and no username / password was given
+  | 'auth_failed' // the page answered 401 to the username and password
+  | 'bad_auth' // a username / password that can't be sent
+  | 'bad_selectors' // "Hide elements" isn't a list of CSS selectors
   | 'failed' // anything else on the server
   | 'network' // browser side: the capture route couldn't be reached
   | 'aborted'; // browser side: the caller cancelled
@@ -25,6 +29,10 @@ export const CAPTURE_MESSAGES: Record<CaptureErrorCode, string> = {
   blocked: 'This site blocks automated browsers. Take a screenshot and drop it in instead.',
   timeout: 'That page didn’t finish loading in 30 seconds. Try First screen or a longer delay.',
   no_browser: 'The capture browser isn’t installed. Run npx playwright install chromium.',
+  auth_required: 'This page needs a username and password. Add them under Password-protected site.',
+  auth_failed: 'That username or password didn’t work.',
+  bad_auth: 'That username or password can’t be used. Check it and try again.',
+  bad_selectors: 'Hide elements takes CSS selectors separated by commas or new lines, like #chat-widget, .promo-bar.',
   failed: 'That page couldn’t be captured. Try again, or take a screenshot and drop it in instead.',
   network: 'Couldn’t reach the capture server. Check that Layout Stage is still running, then try again.',
   aborted: 'Capture cancelled.',
@@ -45,6 +53,10 @@ const HTTP_STATUS: Record<CaptureErrorCode, number> = {
   blocked: 502,
   timeout: 504,
   no_browser: 503,
+  auth_required: 502, // not 401: that would tangle with the editor's own password gate (proxy.ts)
+  auth_failed: 502,
+  bad_auth: 400,
+  bad_selectors: 400,
   failed: 500,
   network: 502,
   aborted: 499,
