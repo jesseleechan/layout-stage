@@ -44,9 +44,12 @@ export default function OverlayCanvas() {
       if (!c || !x) return;
       const d = useEditor.getState().doc;
       const dpr = Math.min(2, window.devicePixelRatio || 1);
-      let k = scale * dpr;
-      if (W * k * H * k > MAX_PX) k = Math.sqrt(MAX_PX / (W * H));
-      const cw = Math.max(1, Math.round(W * k)), ch = Math.max(1, Math.round(H * k));
+      let k0 = scale * dpr;
+      if (W * k0 * H * k0 > MAX_PX) k0 = Math.sqrt(MAX_PX / (W * H));
+      // Drawn at the scale of the rounded bitmap, so the layer is exactly the export at that scale.
+      const cw = Math.max(1, Math.round(W * k0));
+      const k = cw / W;
+      const ch = Math.max(1, Math.round(H * k));
       if (c.width !== cw) c.width = cw;
       if (c.height !== ch) c.height = ch;
       // Screen size from the rounded bitmap: one bitmap px per device px, not stretched by the rounding.

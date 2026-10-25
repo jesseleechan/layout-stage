@@ -22,12 +22,13 @@ vi.stubGlobal('document', {
   createElement: () => ({ getContext: () => ({ font: '', measureText: (t: string) => ({ width: t.length * 55 }) }) }),
 });
 
-import { arrange, defaultComposition, layoutRoom, pageMeasure } from '@/lib/arrange';
+import { arrange, layoutRoom, pageMeasure } from '@/lib/arrange';
 import { clone, defaultUi, type Composition } from '@/lib/model';
 import type { Headline } from '@/lib/overlays';
 import type { Measure } from '@/lib/render/overlay-layout';
 import { rectOf } from '@/lib/render/units';
 import { useEditor } from '@/lib/store';
+import { classicComposition } from './helpers';
 
 const measure: Measure = (t) => t.length * 55;
 const S = () => useEditor.getState();
@@ -35,7 +36,7 @@ const doc = () => S().doc;
 const spots = (d: Composition) => d.slots.map((s) => [s.cx, s.cy, s.w]);
 const file = (name: string) => new File([new Uint8Array([1, 2, 3])], name, { type: 'image/png' });
 
-function load(d: Composition = defaultComposition()) {
+function load(d: Composition = classicComposition()) {
   S().loadComposition(d);
   useEditor.setState({ ui: { ...defaultUi(), selected: null }, toast: null });
 }
@@ -84,7 +85,7 @@ describe('arranging around the headline', () => {
     expectRoomLeft('bottom');
     S().setOverlay('headline', { place: 'middle' });
     S().rearrange();
-    expect(spots(doc())).toEqual(spots(defaultComposition()));
+    expect(spots(doc())).toEqual(spots(classicComposition()));
   });
 
   it('switching the headline off, moving it or editing its text moves nothing by itself', () => {
@@ -97,7 +98,7 @@ describe('arranging around the headline', () => {
     S().setOverlay('headline', { enabled: false });
     expect(spots(doc())).toEqual(placed);
     S().rearrange();
-    expect(spots(doc())).toEqual(spots(defaultComposition()));
+    expect(spots(doc())).toEqual(spots(classicComposition()));
   });
 
   it('the 1/2/3 toggle, presets and custom sizes leave the room too', () => {
@@ -109,6 +110,9 @@ describe('arranging around the headline', () => {
     S().setPreset('etsy43');
     expectRoomLeft('top');
     S().setOverlay('headline', { place: 'bottom' });
+    // Moving the headline moves nothing, so the layouts are no longer where arrange() would start
+    // them: a new size would keep them as they are (lib/canvas-size.ts). Re-arranged, they're fresh.
+    S().rearrange();
     S().setPreset('etsy11');
     expectRoomLeft('bottom');
     S().setCustomSize(1600, 1200);

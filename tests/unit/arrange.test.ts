@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { arrange, canvasKind, defaultComposition, HEADLINE_GAP, layoutRoom, MIN_ROOM, pageMeasure } from '@/lib/arrange';
+import { arrange, canContinuePage, canvasKind, defaultComposition, HEADLINE_GAP, layoutRoom, MIN_ROOM, pageMeasure } from '@/lib/arrange';
 import { clone, STYLES, type Composition, type CropId, type PresetId } from '@/lib/model';
 import type { Headline } from '@/lib/overlays';
 import { layoutOverlays, REF_PX, type Measure } from '@/lib/render/overlay-layout';
@@ -16,6 +16,7 @@ const CANVASES = { port: [1000, 1500], sq: [2000, 2000], land: [3000, 2250] } as
 
 function docOf(W: number, H: number, crops: CropId[] = ['16:10', '16:10', '16:10']): Composition {
   const d = defaultComposition();
+  d.arrangement = 'classic';
   d.W = W;
   d.H = H;
   d.slots.forEach((s, i) => { s.crop = crops[i]; s.cx = -1; s.cy = -1; s.w = 1; });
@@ -114,21 +115,155 @@ describe('arrange', () => {
 });
 
 describe('defaultComposition', () => {
-  it('is a pin with two arranged samples in the Blush mesh style', () => {
+  it('is a pin with two sample pages as showcase columns in the Blush mesh style', () => {
     const d = defaultComposition();
-    expect(d).toMatchObject({ preset: 'pin', W: 1000, H: 1500, count: 2, order: [0, 1, 2] });
+    expect(d).toMatchObject({ preset: 'pin', W: 1000, H: 1500, count: 2, arrangement: 'showcase', order: [0, 1, 2] });
     expect(d.frame).toEqual(STYLES[0].frame);
     expect(d.background).toMatchObject({ type: 'mesh', meshSeed: 3, grain: 10 });
     expect(d.slots.map((s) => s.imageId)).toEqual(['sample:juniper', 'sample:northbeam', 'sample:fieldnote']);
-    expect(d.slots.slice(0, 2).map((s) => [s.cx, s.cy, s.w])).toEqual([[400, 555, 780], [600, 945, 780]]);
+    expect(d.slots.map((s) => s.crop)).toEqual(['full', 'full', 'full']);
+    // Two 375 px columns; the 9:16 samples don't reach the bottom, so the staggered pair is centered.
+    expect(d.slots.slice(0, 2).map((s) => [s.cx, s.cy, s.w])).toEqual([[288, 690, 375], [713, 810, 375]]);
   });
   it('returns a fresh copy each time', () => {
     const a = defaultComposition();
     a.slots[0].cx = 1;
     a.frame.shadow.blur = 1;
-    expect(defaultComposition().slots[0].cx).toBe(400);
+    expect(defaultComposition().slots[0].cx).toBe(288);
     expect(defaultComposition().frame.shadow.blur).toBe(80);
     expect(STYLES[0].frame.shadow.blur).toBe(80);
+  });
+});
+
+/* ---------------- showcase ---------------- */
+
+/** A long page, as a full-page capture is: 1440 wide, `nh` tall, shown whole. */
+function pages(W: number, H: number, nhs: number[], ids = ['a', 'b', 'c']): Composition {
+  const d = defaultComposition();
+  d.W = W;
+  d.H = H;
+  d.arrangement = 'showcase';
+  d.slots.forEach((s, i) => Object.assign(s, { imageId: ids[i], nw: 1440, nh: nhs[i] ?? 2560, crop: 'full', cx: -1, cy: -1, w: 1 }));
+  return d;
+}
+const top = (d: Composition, i: number) => rectOf(d.slots[i]).t;
+/** Within a pixel: arrange() rounds centers and widths. */
+const near = (v: number, x: number) => expect(Math.abs(v - x)).toBeLessThanOrEqual(1);
+const bottom = (d: Composition, i: number) => { const r = rectOf(d.slots[i]); return r.t + r.h; };
+
+describe('showcase arrangement', () => {
+  it('Scroll: one page, 80% wide, from 11.5% down, running off the bottom', () => {
+    const d = pages(1000, 1500, [7680]);
+    arrange(d, 1);
+    expect(d.slots[0]).toMatchObject({ cx: 500, w: 800 });
+    near(top(d, 0), 172.5);
+    expect(bottom(d, 0)).toBeGreaterThan(1500);
+    expect(d.order).toEqual([0, 1, 2]);
+  });
+
+  it('Scroll: a page too short to run off is centered', () => {
+    const d = pages(1000, 1500, [900]);
+    arrange(d, 1);
+    expect(d.slots[0].cy).toBe(750);
+    expect(d.slots[0].w).toBe(800);
+  });
+
+  it('Scroll: a phone capture is shown narrower', () => {
+    const d = pages(1000, 1500, [8000]);
+    d.slots[0].nw = 780;
+    d.slots[0].source = { kind: 'url', url: 'https://x.test', capturedAt: '', options: { width: 390, fullPage: true, scale: 2, delayMs: 0, hideBanners: true, darkMode: false, hideSelectors: [] } };
+    arrange(d, 1);
+    expect(d.slots[0].w).toBe(460);
+  });
+
+  it('Columns: two pages from the top, the second lower, both running off the bottom', () => {
+    const d = pages(1000, 1500, [7680, 7680]);
+    arrange(d, 2);
+    expect(d.slots.slice(0, 2).map((s) => [s.cx, s.w])).toEqual([[288, 375], [713, 375]]);
+    near(top(d, 0), 100.5);
+    near(top(d, 1), 220.5);
+    expect(bottom(d, 0)).toBeGreaterThan(1500);
+    expect(bottom(d, 1)).toBeGreaterThan(1500);
+  });
+
+  it('Columns: one page in both continues from the first column into the second', () => {
+    // 1440 × 16000 at 375 wide is 4167 tall: longer than both columns.
+    const d = pages(1000, 1500, [16000, 16000], ['a', 'a', 'c']);
+    arrange(d, 2);
+    // The first column shows the page from 100.5 px down to the bottom edge (1399.5 px of it)…
+    near(top(d, 0), 100.5);
+    // …the second the next 1399.5 px from the canvas top.
+    near(top(d, 1), -1399.5);
+  });
+
+  it('Columns: a page shorter than two columns is split in half', () => {
+    // 1440 × 7680 at 375 wide is 2000 tall: 1000 px in each column.
+    const d = pages(1000, 1500, [7680, 7680], ['a', 'a', 'c']);
+    arrange(d, 2);
+    near(top(d, 0), 500);
+    near(top(d, 1), -1000);
+    near(bottom(d, 1), 1000);
+  });
+
+  it('Editorial: a hero in front of two lower windows that reach out to the sides', () => {
+    const d = pages(1000, 1500, [7680, 7680, 7680]);
+    arrange(d, 3);
+    expect(d.slots.map((s) => [s.cx, s.w])).toEqual([[500, 460], [220, 340], [780, 340]]);
+    near(top(d, 0), 240);
+    near(top(d, 1), 337.5);
+    near(top(d, 2), 337.5);
+    expect(d.order).toEqual([1, 2, 0]);
+  });
+
+  for (const kind of ['port', 'sq', 'land'] as const) {
+    it(`keeps every layout on a ${kind} canvas across its width`, () => {
+      const [W, H] = CANVASES[kind];
+      for (const n of [1, 2, 3] as const) {
+        const d = pages(W, H, [7680, 5120, 7680]);
+        arrange(d, n);
+        for (let i = 0; i < n; i++) {
+          const r = rectOf(d.slots[i]);
+          expect(r.l).toBeGreaterThanOrEqual(0);
+          expect(r.l + r.w).toBeLessThanOrEqual(W);
+          expect(r.t).toBeGreaterThan(0);
+        }
+      }
+    });
+  }
+
+  it('starts below a top headline, keeping the widths', () => {
+    const d = pages(1000, 1500, [7680, 7680, 7680]);
+    Object.assign(d.overlays!.headline, { enabled: true, place: 'top', text: 'A rather long headline that wraps onto two lines' });
+    const room = layoutRoom(d, measure);
+    expect(room.t).toBeGreaterThan(240);
+    arrange(d, 3, measure);
+    expect(top(d, 0)).toBeCloseTo(room.t, 0);
+    expect(d.slots[0].w).toBe(460);
+    near(top(d, 1) - top(d, 0), 97.5);
+  });
+
+  it('canContinuePage: two showcase columns and a page longer than the first column’s room', () => {
+    expect(canContinuePage(pages(1000, 1500, [7680, 2560]))).toBe(true); // 2000 tall at 375 wide
+    expect(canContinuePage(pages(1000, 1500, [2560, 2560]))).toBe(false); // 667: fits in one column
+    const three = pages(1000, 1500, [7680, 2560]);
+    three.count = 3;
+    expect(canContinuePage(three)).toBe(false);
+    const cropped = pages(1000, 1500, [7680, 2560]);
+    cropped.slots[0].crop = '9:16';
+    expect(canContinuePage(cropped)).toBe(false);
+    const classic = pages(1000, 1500, [7680, 2560]);
+    classic.arrangement = 'classic';
+    expect(canContinuePage(classic)).toBe(false);
+    const headed = pages(1000, 1500, [7680, 2560]);
+    Object.assign(headed.overlays!.headline, { enabled: true, place: 'top', text: 'Headline' });
+    expect(canContinuePage(headed, measure)).toBe(false);
+  });
+
+  it('never continues a page under a top headline', () => {
+    const d = pages(1000, 1500, [16000, 16000], ['a', 'a', 'c']);
+    Object.assign(d.overlays!.headline, { enabled: true, place: 'top', text: 'Headline' });
+    arrange(d, 2, measure);
+    expect(top(d, 1)).toBeGreaterThan(top(d, 0));
   });
 });
 

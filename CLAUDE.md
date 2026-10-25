@@ -2,7 +2,9 @@
 
 Next.js (App Router) + TypeScript editor that turns 1–3 website screenshots into a Pinterest pin or
 Etsy listing image. Spec: `docs/HANDOFF.md`. Behavioral reference: `reference/layout-stage.html`
-(match its behavior, layout and rendering math).
+(match its behavior and rendering math). The editor's look and layout follow Shots (shots.so): floating
+clusters on top, a Mockup / Canvas tabbed panel on the left, the layout count and live layout presets on
+the right, a floating toolbar under the canvas.
 
 ## The rule
 
@@ -27,13 +29,17 @@ npx playwright install chromium          # once per machine, for URL capture and
 
 - `lib/model.ts` types, defaults, presets, built-in styles, swatches
 - `lib/store.ts` Zustand store (single source of truth) + actions; `lib/history.ts` 80-step undo
-- `lib/render/` units/geometry, background, shot, export — shared by preview and export
+- `lib/render/` units/geometry, background (incl. texture), shot, export — shared by preview and export
 - `lib/images.ts` image blobs in IndexedDB + object URLs + stored thumbnails (`useThumbUrl`); images
   are downscaled at ingest by the budget in `lib/image-sizing.ts`; `lib/persist.ts` autosave + saved styles
 - `lib/overlays.ts` headline / badge / watermark model, fonts and sanitizer; `lib/render/overlay-layout.ts`
   (pure, scale-free text layout), `lib/render/overlays.ts` (`drawOverlays`, the one drawing function for
   the preview's overlay canvas and the export), `lib/render/overlay-fonts.ts` (FontFace loading, measure)
-- `lib/arrange.ts` (starting positions; leaves room for a top/bottom headline via `layoutRoom`),
+- `lib/arrange.ts` (starting positions: `showcase` Scroll / Columns / Editorial, whole pages running off the
+  canvas, the default; `classic` cascades; leaves room for a top/bottom headline via `layoutRoom`),
+  `lib/canvas-size.ts` (switching canvas sizes keeps the work: per-size placements, re-arrange when fresh,
+  else scale as one piece), `lib/media.ts` (the media gallery, `doc.media`: every image added, up to 12,
+  oldest unused ones make room; `putImage` / `slotFor` place any image in a layout),
   `lib/snap.ts` (incl. safe-area targets), `lib/align.ts` (align/distribute), `lib/scroll.ts` (moving a
   crop's visible window), `lib/samples.ts`
 - Outputs: `lib/sets.ts` (derived compositions for Export all sizes and the Etsy listing set),
@@ -56,7 +62,11 @@ npx playwright install chromium          # once per machine, for URL capture and
   `server/fs-store.ts` the local store (`.data/sync`, `PROJECTS_STORE_DIR`, `off` disables);
   `server/api.ts` route logic for `app/api/projects/`. UI: `components/ProjectsControl.tsx`,
   `components/ProjectsSheet.tsx`
-- `components/` one file per panel / surface
+- `components/` one file per panel / surface: `Editor.tsx` (the shell), `TopBar.tsx` (the three top
+  clusters), `LeftPanel.tsx` (Mockup: screenshots, `MediaPanel.tsx` the gallery, styles, frame; Canvas:
+  background, text & logo),
+  `RightPanel.tsx` (`LayoutPresets.tsx` live thumbnails drawn with `renderComposition`, then the selected
+  layout), `Stage.tsx` (canvas + floating toolbar); `controls.tsx` holds the pill slider and `Tiles`
 - `proxy.ts` (Next 16's request interceptor, formerly `middleware.ts`): every request needs HTTP Basic
   auth when `ACCESS_PASSWORD` is set (any user name)
 
@@ -77,7 +87,10 @@ stay under 4.5 MB: a capture over 4 MB as PNG is sent as WebP slices (`multipart
   one real-capture test.
 - **Sample fonts**: the samples draw text with bundled OFL fonts in `public/fonts/` (Gelasio for Georgia,
   Inter for Helvetica), loaded with the FontFace API in `lib/samples.ts` before a sample is drawn, so
-  goldens don't depend on installed fonts. Keep sample text inside the subset (Latin plus arrows).
+  goldens don't depend on installed fonts. Keep sample text inside the subset (Latin plus arrows). CI's
+  runner places glyphs a fraction of a pixel differently from this repo's cloud containers, so the
+  committed goldens come from CI (the Update goldens workflow); in a container, text-heavy goldens can
+  fail with diffs only on text edges: look at the diff PNGs and let CI judge.
 - **Refresh goldens** after an intended rendering change with `npm run test:e2e:update`, then look at
   every PNG. If CI renders differently, run the **Update goldens** workflow on the branch (Actions → Run
   workflow); it regenerates them on the runner, commits changed PNGs and starts CI.

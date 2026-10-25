@@ -5,6 +5,7 @@ import { PRESETS, type Composition } from '@/lib/model';
 import { clampRadius, rectOf, safeArea, scrollAxis, shadowCSS, unit } from '@/lib/render/units';
 import { drawBackground } from '@/lib/render/background';
 import { useImageUrl, useLoadedImage } from '@/lib/images';
+import { MEDIA_DRAG } from '@/lib/media';
 import { snap, snapThreshold } from '@/lib/snap';
 import { scrollAfterMove, scrollValue } from '@/lib/scroll';
 import { useExport } from './ExportSheet';
@@ -34,6 +35,14 @@ function isTextEntry(t: EventTarget | null): boolean {
 
 const hasFiles = (e: { dataTransfer: DataTransfer | null }) =>
   !!e.dataTransfer && Array.from(e.dataTransfer.types || []).includes('Files');
+/** A gallery image dragged from Media (components/MediaPanel.tsx). */
+const hasMedia = (e: { dataTransfer: DataTransfer | null }) =>
+  !!e.dataTransfer && Array.from(e.dataTransfer.types || []).includes(MEDIA_DRAG);
+/** The visible layout under a point, if any. */
+const shotAt = (x: number, y: number): number | null => {
+  const shot = document.elementFromPoint(x, y)?.closest<HTMLElement>('.shot');
+  return shot ? Number(shot.dataset.i) : null;
+};
 
 /** Drops keyboard focus from a layout (clicking empty canvas deselects it). */
 function blurShot() {
@@ -107,6 +116,7 @@ export default function Stage() {
   const [dropping, setDropping] = useState(false);
   const [toastOn, setToastOn] = useState(false);
   const [focusRing, setFocusRing] = useState<number | null>(null);
+  const [mediaOver, setMediaOver] = useState<number | null>(null); // the layout a gallery image would go into
   const [painted, setPainted] = useState(false); // first background paint after hydration
   // Scroll on the canvas: Space held (grab cursor), a Space-drag in progress (grabbing).
   const spaceRef = useRef(false);
@@ -312,32 +322,45 @@ export default function Stage() {
     e.stopPropagation();
   };
 
-  /* ---------- drop files on the board ---------- */
+  /* ---------- drop files on the board, or a gallery image on a layout ---------- */
   const onDragEnter = (e: DragEvent) => {
+    if (hasMedia(e)) e.preventDefault();
     if (!hasFiles(e)) return;
     e.preventDefault();
     dragDepth.current++;
     setDropping(true);
   };
   const onDragOver = (e: DragEvent) => {
-    if (!hasFiles(e)) return;
+    const media = hasMedia(e);
+    if (!media && !hasFiles(e)) return;
     e.preventDefault();
     e.dataTransfer.dropEffect = 'copy';
+    if (media) {
+      const i = shotAt(e.clientX, e.clientY);
+      setMediaOver(i != null && i < useEditor.getState().doc.count ? i : null);
+    }
   };
   const onDragLeave = (e: DragEvent) => {
+    if (hasMedia(e) && !e.currentTarget.contains(e.relatedTarget as Node | null)) setMediaOver(null);
     if (!hasFiles(e)) return;
     dragDepth.current = Math.max(0, dragDepth.current - 1);
     if (!dragDepth.current) setDropping(false);
   };
   const onDrop = (e: DragEvent) => {
+    if (hasMedia(e)) {
+      e.preventDefault();
+      setMediaOver(null);
+      const id = e.dataTransfer.getData(MEDIA_DRAG);
+      if (id) useEditor.getState().placeMedia(id, shotAt(e.clientX, e.clientY));
+      return;
+    }
     if (!hasFiles(e)) return;
     e.preventDefault();
     dragDepth.current = 0;
     setDropping(false);
     const files = Array.from(e.dataTransfer.files);
-    const hit = document.elementFromPoint(e.clientX, e.clientY);
-    const shot = hit?.closest<HTMLElement>('.shot');
-    void useEditor.getState().placeFiles(files, files.length === 1 && shot ? Number(shot.dataset.i) : null);
+    const at = shotAt(e.clientX, e.clientY);
+    void useEditor.getState().placeFiles(files, files.length === 1 ? at : null);
   };
 
   /* ---------- toast ---------- */
@@ -357,11 +380,12 @@ export default function Stage() {
   const shadow = shadowCSS(doc.frame.shadow, u);
   const selRect = hydrated && sel != null && sel < doc.count ? rectOf(doc.slots[sel]) : null;
   const ringRect = hydrated && focusRing != null && focusRing < doc.count ? rectOf(doc.slots[focusRing]) : null;
+  const dropRect = hydrated && mediaOver != null && mediaOver < doc.count ? rectOf(doc.slots[mediaOver]) : null;
   const safe = showSafe ? safeArea(PRESETS[doc.preset].safe, W, H) : null;
   const capturing = hydrated ? jobs.flatMap((j) => { const i = captureJobSlot(doc, j); return i == null ? [] : [{ id: j.id, i }]; }) : [];
 
   return (
-    <section className="board" id="board" aria-label="Canvas" onDragEnter={onDragEnter} onDragOver={onDragOver} onDragLeave={onDragLeave} onDrop={onDrop}>
+    <main className="board" id="board" aria-label="Canvas" onDragEnter={onDragEnter} onDragOver={onDragOver} onDragLeave={onDragLeave} onDrop={onDrop}>
       <div
         className="viewport" id="viewport" ref={viewportRef}
         onPointerDown={(e) => { if (e.target === e.currentTarget) { useEditor.getState().select(null); blurShot(); } }}
@@ -384,6 +408,7 @@ export default function Stage() {
             <div className="guide gv" id="gv" hidden={guides.gx == null} style={{ left: (guides.gx ?? 0) * scale }} />
             <div className="guide gh" id="gh" hidden={guides.gy == null} style={{ top: (guides.gy ?? 0) * scale }} />
             {ringRect && <div className="focus-ring" style={px(ringRect)} />}
+            {dropRect && <div className="focus-ring drop-ring" style={px(dropRect)} />}
             <div className="sel" id="sel" hidden={!selRect} style={selRect ? px(selRect) : undefined}>
               <span className="sel-tag" id="selTag">
                 {selRect && sel != null ? `Layout ${sel + 1} · ${Math.round(selRect.w)} × ${Math.round(selRect.h)}` : ''}
@@ -400,18 +425,20 @@ export default function Stage() {
             })}
           </div>
         </div>
-        <div className="droptint" id="dropTint" hidden={!dropping}><span>Drop 1–3 screenshots</span></div>
+        <div className="droptint" id="dropTint" hidden={!dropping}><span>Drop screenshots</span></div>
         <div className={toastOn ? 'toast show' : 'toast'} id="toast" role="status" aria-live="polite">{toast?.msg}</div>
       </div>
-      <div className="boardbar">
-        <p className="hint">Drag to move · corner handle resizes · arrow keys nudge (Shift for 10) · hold Alt to skip snapping · Space-drag or Alt-scroll scrolls a crop</p>
-        <div className="bar-actions">
-          <button className="btn sm" id="safeBtn" type="button" aria-pressed={showSafe} onClick={() => setUi({ showSafeArea: !showSafe })}>Safe area</button>
-          <button className="btn sm" id="centerAllBtn" type="button" onClick={centerGroup}>Center group</button>
-          <button className="btn sm" id="arrangeBtn" type="button" onClick={rearrange}>Re-arrange</button>
-          <span className="zoom" id="zoomOut">{Math.round(scale * 100)}%</span>
-        </div>
+      <div className="canvas-bar" role="toolbar" aria-label="Canvas tools">
+        <button className="btn sm" id="videoBtn" type="button" title="A video of a page scrolling" onClick={() => void useExport.getState().openVideo('videoBtn')}>
+          <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round" aria-hidden="true"><rect x="2" y="3.5" width="12" height="9" rx="2" /><path d="M7 6.2v3.6L10 8z" fill="currentColor" /></svg>
+          Video
+        </button>
+        <span className="sep" aria-hidden="true" />
+        <button className="btn sm" id="safeBtn" type="button" aria-pressed={showSafe} onClick={() => setUi({ showSafeArea: !showSafe })}>Safe area</button>
+        <button className="btn sm" id="centerAllBtn" type="button" onClick={centerGroup}>Center group</button>
+        <button className="btn sm" id="arrangeBtn" type="button" onClick={rearrange}>Re-arrange</button>
+        <span className="zoom" id="zoomOut">{Math.round(scale * 100)}%</span>
       </div>
-    </section>
+    </main>
   );
 }

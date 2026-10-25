@@ -24,11 +24,13 @@ const spare = (): Slot => sample('fieldnote', '16:10', { cx: 500, cy: 750, w: 70
 function background(patch: Partial<Background>): Background {
   return {
     type: 'solid', solid: '#F5F5F2', grad: { a: '#FFE6C7', b: '#FF9A8B', angle: 160 }, mesh: ['#FBEDEA', '#F4B6C2', '#F7D9A8', '#C7D7F5'],
-    meshSeed: 3, imageId: null, imageName: '', blur: 0, dim: 0, grain: 0, ...patch,
+    meshSeed: 3, imageId: null, imageName: '', blur: 0, dim: 0, grain: 0, texture: 0, ...patch,
   };
 }
 
 export interface GoldenCase {
+  /** Golden file name without .png; the preset id when absent. */
+  name?: string;
   preset: PresetId;
   doc: Composition;
   /** null: the real export path, exportComposition(doc, 'png', 1). A number: renderComposition(doc, m),
@@ -124,6 +126,25 @@ export const GOLDEN_CASES: GoldenCase[] = [
       order: [0, 1, 2],
       frame: { radius: 40, borderW: 6, borderC: '#F5C27A', shadow: { preset: 'none', blur: 0, x: 0, y: 0, opacity: 0, color: '#000000' } },
       background: background({ type: 'mesh', mesh: ['#2A1838', '#F08A6C', '#7C4DA6', '#F5C27A'], meshSeed: 41, grain: 0 }),
+    },
+  },
+  {
+    // Pinterest pin in the Editorial look: rounded windows, dark warm mesh with texture and grain, a
+    // scrolled crop. (After the plain pin: golden-overlays uses the first.)
+    name: 'pin-editorial',
+    preset: 'pin',
+    m: null,
+    size: [1000, 1500],
+    doc: {
+      preset: 'pin', W: 1000, H: 1500, count: 3,
+      slots: [
+        sample('juniper', '16:10', { cx: 500, cy: 400, w: 800 }),
+        sample('northbeam', '4:5', { cx: 300, cy: 1020, w: 460 }),
+        sample('fieldnote', '4:5', { cx: 700, cy: 1090, w: 460 }, { fy: 12 }),
+      ],
+      order: [0, 1, 2],
+      frame: { radius: 10, borderW: 0, borderC: '#FFFFFF', shadow: { preset: 'lifted', blur: 80, x: 0, y: 40, opacity: 0.45, color: '#120D09' } },
+      background: background({ type: 'mesh', mesh: ['#3A342E', '#5C5046', '#2B2521', '#4B4038'], meshSeed: 5, grain: 14, texture: 20 }),
     },
   },
 ];
