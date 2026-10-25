@@ -28,17 +28,27 @@ npx playwright install chromium          # once per machine, for URL capture and
 - `lib/model.ts` types, defaults, presets, built-in styles, swatches
 - `lib/store.ts` Zustand store (single source of truth) + actions; `lib/history.ts` 80-step undo
 - `lib/render/` units/geometry, background, shot, export — shared by preview and export
-- `lib/images.ts` image blobs in IndexedDB + object URLs; `lib/persist.ts` autosave + saved styles
+- `lib/images.ts` image blobs in IndexedDB + object URLs + stored thumbnails (`useThumbUrl`); images
+  are downscaled at ingest by the budget in `lib/image-sizing.ts`; `lib/persist.ts` autosave + saved styles
 - `lib/overlays.ts` headline / badge / watermark model, fonts and sanitizer; `lib/render/overlay-layout.ts`
   (pure, scale-free text layout), `lib/render/overlays.ts` (`drawOverlays`, the one drawing function for
   the preview's overlay canvas and the export), `lib/render/overlay-fonts.ts` (FontFace loading, measure)
-- `lib/arrange.ts`, `lib/snap.ts` (incl. safe-area targets), `lib/align.ts` (align/distribute),
-  `lib/scroll.ts` (moving a crop's visible window), `lib/samples.ts`
+- `lib/arrange.ts` (starting positions; leaves room for a top/bottom headline via `layoutRoom`),
+  `lib/snap.ts` (incl. safe-area targets), `lib/align.ts` (align/distribute), `lib/scroll.ts` (moving a
+  crop's visible window), `lib/samples.ts`
+- Outputs: `lib/sets.ts` (derived compositions for Export all sizes and the Etsy listing set),
+  `lib/render/palette-card.ts`, `lib/palette.ts` (site colors; Match site colors), `lib/zip.ts`
+  (stored ZIP writer), `lib/video/` (scrolling video: `timing.ts`, `render.ts` drawing each frame with the
+  shared renderers, `mp4.ts` a small MP4 muxer for WebCodecs H.264), `lib/pin-text.ts` (Pin text
+  suggestions)
 - `lib/capture/` URL capture: `server.ts` (Playwright, the only file to touch when swapping the
   browser for hosting), `url-guard.ts` + `address.ts` (public addresses only), `guard-proxy.ts`
   (every capture-browser connection is checked here; Playwright routing misses redirect hops),
   `png.ts` (tall pages are captured in slices and joined), `banners.css` (consent-banner selectors,
-  read at run time), `client.ts`; route in `app/api/capture/route.ts`. `CAPTURE_DEBUG=1` logs timings.
+  read at run time), `options.ts` + `selectors.ts` (option and hide-selector validation), `auth.ts`
+  (basic-auth credentials: per request, origin-bound, never stored), `recapture.ts` + `jobs.ts`
+  (re-capture keeping framing, desktop + phone), `client.ts`; route in `app/api/capture/route.ts`.
+  `CAPTURE_DEBUG=1` logs timings.
 - `components/` one file per panel / surface
 - `proxy.ts` (Next 16's request interceptor, formerly `middleware.ts`): every request needs HTTP Basic
   auth when `ACCESS_PASSWORD` is set (any user name)
