@@ -1,0 +1,14 @@
+/* Panel additions beyond the prototype's CSS (app/globals.css): URL-capture states, swatch focus. */
+
+/* A pressed swatch already has the accent outline, so keyboard focus uses ink to stay distinct. */
+.sw:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
+
+.slot-pending { grid-template-columns: minmax(0, 1fr); border-style: dashed; }
+.slot-pending .slot-pick { cursor: default; }
+.slot-pending .slot-num { color: var(--accent); }
+.slot[aria-busy="true"] .slot-thumb { animation: slot-busy 1.1s ease-in-out infinite alternate; }
+.slot[aria-busy="true"]:not(.slot-pending) .slot-meta { color: var(--accent); }
+@keyframes slot-busy { from { opacity: 1; } to { opacity: .45; } }
+@media (prefers-reduced-motion: reduce) {
+  .slot[aria-busy="true"] .slot-thumb { animation: none; }
+}
