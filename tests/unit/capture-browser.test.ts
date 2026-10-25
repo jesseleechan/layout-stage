@@ -5,7 +5,8 @@ import net from 'node:net';
 import { existsSync } from 'node:fs';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { chromium, type Browser } from 'playwright';
-import { captureScreenshot, shutdownCapture, type CaptureInput } from '@/lib/capture/server';
+import { captureScreenshot, shutdownCapture, TOO_LARGE_MESSAGE, type CaptureImage, type CaptureInput } from '@/lib/capture/server';
+import { joinImages } from '@/lib/capture/client';
 import { startGuardProxy } from '@/lib/capture/guard-proxy';
 import { CaptureError } from '@/lib/capture/errors';
 import { createRequestGuard, type HostPolicy } from '@/lib/capture/url-guard';
@@ -56,6 +57,17 @@ function serve(req: http.IncomingMessage, res: http.ServerResponse) {
       );
     case '/tall':
       return send(200, html('<div style="height:15000px;background:linear-gradient(#fff,#3a48f0)"></div>'));
+    case '/noisy': // 7000 px tall; the first screen is noise, which PNG can't compress and WebP can
+      return send(
+        200,
+        html(`<canvas id="c" width="390" height="900" style="display:block"></canvas><div style="height:6100px;background:#3a48f0"></div>
+          <script>
+            const c = document.getElementById('c').getContext('2d'), d = c.createImageData(390, 900);
+            let s = 7;
+            for (let i = 0; i < d.data.length; i++) d.data[i] = i % 4 === 3 ? 255 : 100 + ((((s = (s * 1103515245 + 12345) >>> 0) >>> 16) & 255) >> 3);
+            c.putImageData(d, 0, 0);
+          </script>`),
+      );
     case '/js-redirect':
       return send(200, html(`<p>moving</p><script>setTimeout(() => { location.href = ${JSON.stringify(internal('/secret'))}; }, 50);</script>`));
     case '/missing':
@@ -73,6 +85,10 @@ function serve(req: http.IncomingMessage, res: http.ServerResponse) {
 
 const opts = (url: string, o: Partial<CaptureInput> = {}): CaptureInput => ({ url, width: 1440, fullPage: true, scale: 1, delayMs: 0, hideBanners: true, ...o });
 const size = (png: Buffer) => [png.readUInt32BE(16), png.readUInt32BE(20)];
+const onePng = (images: CaptureImage[]) => {
+  expect(images.map((i) => i.type)).toEqual(['image/png']);
+  return images[0].data;
+};
 const secretHits = () => hits.filter((h) => h.includes('/secret'));
 
 async function rejection(p: Promise<unknown>): Promise<CaptureError> {
@@ -130,7 +146,8 @@ describe.skipIf(!hasBrowser)('capture in a real browser (offline)', () => {
 
   it('captures a full page, hides the cookie banner and never touches internal hosts', async () => {
     hits.length = 0;
-    const { png, trimmed, finalUrl } = await captureScreenshot(opts(pub('/redirect-public')), { policy });
+    const { images, trimmed, finalUrl } = await captureScreenshot(opts(pub('/redirect-public')), { policy });
+    const png = onePng(images);
     expect(finalUrl).toBe(pub('/page'));
     expect(trimmed).toBe(false);
     const [w, h] = size(png);
@@ -156,16 +173,53 @@ describe.skipIf(!hasBrowser)('capture in a real browser (offline)', () => {
   }, 60_000);
 
   it('trims very long pages at 12,000 CSS px', async () => {
-    const { png, trimmed } = await captureScreenshot(opts(pub('/tall'), { width: 834 }), { policy });
+    const { images, trimmed } = await captureScreenshot(opts(pub('/tall'), { width: 834 }), { policy });
+    const png = onePng(images);
     expect(trimmed).toBe(true);
     expect(size(png)).toEqual([834, 12000]);
   }, 60_000);
 
   it('takes a 2× phone first screen', async () => {
-    const { png, trimmed } = await captureScreenshot(opts(pub('/tall'), { width: 390, fullPage: false, scale: 2 }), { policy });
+    const { images, trimmed } = await captureScreenshot(opts(pub('/tall'), { width: 390, fullPage: false, scale: 2 }), { policy });
+    const png = onePng(images);
     expect(trimmed).toBe(false);
     expect(size(png)).toEqual([780, 1800]);
   }, 60_000);
+
+  it('sends WebP slices when the PNG is over the byte budget, which the client joins', async () => {
+    const page = opts(pub('/noisy'), { width: 390 });
+    const png = onePng((await captureScreenshot(page, { policy })).images);
+    expect(size(png)).toEqual([390, 7000]);
+    const maxBytes = Math.floor(png.length * 0.6);
+    const { images } = await captureScreenshot(page, { policy, maxBytes });
+    expect(images.map((i) => i.type)).toEqual(['image/webp', 'image/webp']); // 6000 + 1000 px
+    expect(images.reduce((n, i) => n + i.data.length, 0)).toBeLessThanOrEqual(maxBytes);
+
+    const tab = await decoder.newPage();
+    try {
+      const joined = await tab.evaluate(
+        async ({ join, parts }) => {
+          const joinImages = new Function(`return (${join})`)() as (parts: Blob[]) => Promise<Blob>;
+          const blob = await joinImages(parts.map((b64) => new Blob([Uint8Array.from(atob(b64), (c) => c.charCodeAt(0))], { type: 'image/webp' })));
+          const bitmap = await createImageBitmap(blob);
+          const canvas = new OffscreenCanvas(bitmap.width, bitmap.height);
+          const ctx = canvas.getContext('2d')!;
+          ctx.drawImage(bitmap, 0, 0);
+          return { type: blob.type, width: bitmap.width, height: bitmap.height, blue: Array.from(ctx.getImageData(200, 6500, 1, 1).data.slice(0, 3)) };
+        },
+        { join: joinImages.toString(), parts: images.map((i) => i.data.toString('base64')) },
+      );
+      expect(joined).toMatchObject({ type: 'image/png', width: 390, height: 7000 });
+      joined.blue.forEach((v, i) => expect(Math.abs(v - [0x3a, 0x48, 0xf0][i])).toBeLessThanOrEqual(3)); // the second slice, in place
+    } finally {
+      await tab.close();
+    }
+  }, 90_000);
+
+  it('gives up with a clear message when even WebP is over the budget', async () => {
+    const err = await rejection(captureScreenshot(opts(pub('/noisy'), { width: 390, fullPage: false }), { policy, maxBytes: 1000 }));
+    expect(err.message).toBe(TOO_LARGE_MESSAGE);
+  }, 90_000);
 
   it('reports error pages and bot walls', async () => {
     const missing = await rejection(captureScreenshot(opts(pub('/missing')), { policy }));
