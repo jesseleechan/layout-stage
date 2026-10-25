@@ -214,6 +214,7 @@ export function setFileName(index: number, key: string, w: number, h: number, fo
 export const ALL_SIZES_ZIP = 'layout-stage-all-sizes.zip';
 export const ETSY_SET_ZIP = 'layout-stage-etsy-set.zip';
 export const PAGES_ZIP = 'layout-stage-all-pages.zip';
+export const VARIATIONS_ZIP = 'layout-stage-variations.zip';
 
 /** The All pages image at each size the shop needs: Etsy 4:3, Pinterest pin, Etsy square. */
 export function pagesImages(src: Composition): { key: string; label: string; preset: Exclude<PresetId, 'custom'>; doc: Composition; pages: MediaItem[] }[] {

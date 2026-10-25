@@ -178,6 +178,8 @@ export interface EditorState {
    *  When that layout is gone (or there is none) it uses the drop-elsewhere rule, never on the layout
    *  showing `avoidId`. Resolves to the new image id, or null when the image couldn't be read. */
   landCapture(img: NewImage, at: { targetId: string | null; keepFraming?: boolean; avoidId?: string | null }): Promise<string | null>;
+  /** Puts a whole composition on the canvas (a pin variation, lib/variations.ts), as one undo step. */
+  putComposition(d: Composition): void;
   /** Lands a page of a whole-site capture as its own undo step: in the first visible layout still
    *  showing a sample, else in Media only. Resolves to the new image id, or null when it couldn't be read. */
   landMedia(img: NewImage): Promise<string | null>;
@@ -739,6 +741,13 @@ export const useEditor = create<EditorState>()((set, get) => {
       return get().doc.slots[i].imageId;
     },
 
+    putComposition(next) {
+      change((d) => {
+        for (const k of Object.keys(d) as (keyof Composition)[]) delete d[k];
+        Object.assign(d, clone(next));
+      });
+      setUi({ selected: null });
+    },
     async landMedia(img) {
       const item = await ingest(img);
       if (!item) return null;

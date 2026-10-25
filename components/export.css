@@ -44,7 +44,9 @@
   grid-column: 1 / -1; height: 190px; border-radius: 8px; background: var(--field);
   display: grid; place-items: center; padding: 10px; overflow: hidden;
 }
-.multi-thumb img { max-width: 100%; max-height: 100%; display: block; border-radius: 2px; box-shadow: 0 3px 12px rgba(0, 0, 0, .16); }
+/* The whole image, never cropped: a percentage max-height doesn't hold inside the grid cell, so the
+   cap is the box's height less its padding. */
+.multi-thumb img { max-width: 100%; max-height: 170px; display: block; border-radius: 2px; box-shadow: 0 3px 12px rgba(0, 0, 0, .16); }
 .multi-wait { font: 500 11.5px var(--font-num); color: var(--ink-2); }
 .multi-item[aria-busy="true"] .multi-wait { animation: multi-wait 1.1s ease-in-out infinite alternate; }
 @keyframes multi-wait { from { opacity: 1; } to { opacity: .4; } }
@@ -59,4 +61,6 @@
 }
 @media (max-width: 460px) {
   .multi-thumb { height: 150px; }
+  .multi-thumb img { max-height: 130px; }
 }
+.multi-buttons { display: flex; gap: 6px; }
