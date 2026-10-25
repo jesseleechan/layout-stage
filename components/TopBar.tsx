@@ -1,9 +1,10 @@
 'use client';
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState, type KeyboardEvent } from 'react';
 import { useEditor } from '@/lib/store';
 import { CUSTOM_MAX, CUSTOM_MIN, PRESET_IDS, PRESETS, type PresetId, type UiState } from '@/lib/model';
 import { exportSize } from '@/lib/render/units';
 import { useExport } from './ExportSheet';
+import './export.css';
 import ThemeToggle from './ThemeToggle';
 
 export default function TopBar() {
@@ -93,10 +94,88 @@ export default function TopBar() {
           <option value="2">2×</option>
         </select>
         <span className="dims" id="exportDims">{`${dims.w} × ${dims.h}`}</span>
-        <button className="btn primary" id="exportBtn" type="button" disabled={rendering} onClick={() => void runExport()}>
-          {rendering ? 'Rendering…' : 'Export'}
-        </button>
+        <div className="export-split">
+          <button className="btn primary" id="exportBtn" type="button" disabled={rendering} onClick={() => void runExport()}>
+            {rendering ? 'Rendering…' : 'Export'}
+          </button>
+          <ExportMenu disabled={rendering} dims={`${dims.w} × ${dims.h}`} />
+        </div>
       </div>
     </header>
+  );
+}
+
+/** The ▾ beside Export: Export, Export all sizes, Etsy listing set. A menu button: Enter, Space or
+ *  the arrows open it; arrows, Home and End move; Esc closes it and returns focus; Tab leaves it. */
+function ExportMenu({ disabled, dims }: { disabled: boolean; dims: string }) {
+  const [open, setOpen] = useState(false);
+  const wrapRef = useRef<HTMLDivElement>(null);
+  const btnRef = useRef<HTMLButtonElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+  const focusAt = useRef<'first' | 'last'>('first');
+  const items = () => Array.from(menuRef.current?.querySelectorAll<HTMLElement>('[role="menuitem"]:not([disabled])') ?? []);
+
+  useEffect(() => {
+    if (!open) return;
+    const it = items();
+    (focusAt.current === 'last' ? it[it.length - 1] : it[0])?.focus();
+    const away = (e: PointerEvent) => { if (!wrapRef.current?.contains(e.target as Node)) setOpen(false); };
+    document.addEventListener('pointerdown', away);
+    return () => document.removeEventListener('pointerdown', away);
+  }, [open]);
+
+  const show = (at: 'first' | 'last') => { focusAt.current = at; setOpen(true); };
+  const choose = (run: (returnTo: string) => Promise<void>) => {
+    setOpen(false);
+    void run('exportMenuBtn');
+  };
+  // Keys stop here: the editor's shortcuts would otherwise nudge the selected layout or deselect it.
+  const onButtonKey = (e: KeyboardEvent<HTMLButtonElement>) => {
+    if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return;
+    e.preventDefault();
+    e.stopPropagation();
+    show(e.key === 'ArrowUp' ? 'last' : 'first');
+  };
+  const onMenuKey = (e: KeyboardEvent<HTMLDivElement>) => {
+    const it = items();
+    const i = it.indexOf(document.activeElement as HTMLElement);
+    if (e.key === 'Tab') { setOpen(false); return; }
+    if (e.key === 'ArrowDown') it[(i + 1) % it.length]?.focus();
+    else if (e.key === 'ArrowUp') it[(i - 1 + it.length) % it.length]?.focus();
+    else if (e.key === 'Home') it[0]?.focus();
+    else if (e.key === 'End') it[it.length - 1]?.focus();
+    else if (e.key === 'Escape') { setOpen(false); btnRef.current?.focus(); }
+    else return;
+    e.preventDefault();
+    e.stopPropagation();
+  };
+  const ex = useExport.getState();
+
+  return (
+    <div className="export-menu-wrap" ref={wrapRef}>
+      <button
+        className="btn primary export-caret" id="exportMenuBtn" type="button" ref={btnRef}
+        aria-label="More export options" aria-haspopup="menu" aria-expanded={open} aria-controls={open ? 'exportMenu' : undefined}
+        onClick={() => (open ? setOpen(false) : show('first'))} onKeyDown={onButtonKey}
+      >
+        <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M3 4.5 6 7.5l3-3" /></svg>
+      </button>
+      {open && (
+        <div className="export-menu" id="exportMenu" role="menu" aria-label="Export options" ref={menuRef} onKeyDown={onMenuKey}>
+          {([
+            ['Export', `This canvas · ${dims}`, ex.run],
+            ['Export all sizes', 'Pinterest pin, Etsy 4:3 and Etsy square', ex.runAllSizes],
+            ['Etsy listing set', 'Hero, close-ups and palette at 4:3', ex.runEtsySet],
+          ] as const).map(([label, hint, run], k) => (
+            <button
+              key={label} role="menuitem" type="button" tabIndex={-1} disabled={disabled}
+              aria-label={label} aria-describedby={`exportMenuHint${k}`} onClick={() => choose(run)}
+            >
+              {label}<small id={`exportMenuHint${k}`}>{hint}</small>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
   );
 }
