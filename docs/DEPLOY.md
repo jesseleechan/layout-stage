@@ -71,11 +71,14 @@ service on your account.
   First screen or 1× sharpness."
 - **Very heavy pages can be too much for the hosted browser.** Its shared memory (raster tiles,
   frames, decoded images) lives in `/tmp`, which holds 525 MB, and the unpacked browser takes about
-  210 MB of that. stripe.com at full page, 2× needs nearly all of the rest: it captures, about 30 MB
-  short of full. When a page needs more, the browser crashes and the dialog says "This page is too
-  heavy to capture on the hosted app. Try First screen or 1× sharpness, or run Layout Stage on your
-  computer." (the log shows `[capture] failed: Error: The capture browser exited during the
-  capture.`). First screen and 1× need far less; a local copy has no such limit.
+  210 MB of that. To make room, tall pages are captured band by band with Chromium's caches dropped
+  before the first band and whenever `/tmp` runs low. Full page at 2×, stripe.com then leaves about
+  55–60 MB of `/tmp` free at its peak and apple.com 15–30 MB. A page that needs more crashes the browser,
+  and the dialog says "This page is too heavy to capture on the hosted app. Try First screen or 1×
+  sharpness, or run Layout Stage on your computer." (the log shows `[capture] failed: Error: The
+  capture browser exited during the capture.`). First screen and 1× need far less; a local copy has
+  no such limit. Dropping caches pauses the page for a moment, which some carousels notice: on
+  apple.com an item occasionally stays empty. Capture again if that happens.
 - **3D and WebGL effects don't render**, so animated canvases show whatever the page falls back to.
 - **Fonts.** A page's own web fonts load normally. Text that relies on the computer's built-in fonts
   falls back to Open Sans, the only font in the serverless Chromium. Latin, Greek and Cyrillic

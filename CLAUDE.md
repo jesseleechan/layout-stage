@@ -66,8 +66,9 @@ Vercel (`docs/DEPLOY.md`). On Vercel (or with `CHROMIUM_PACK_URL`), `lib/capture
 `@sparticuz/chromium-min`'s Chromium through Playwright: downloaded to `/tmp` on a cold start,
 single-process (one browser per capture), WebGL off. Locally it uses Playwright's own Chromium.
 `/tmp` (525 MB, no `/dev/shm`) holds the unpacked browser and all its shared memory; running out crashes
-the browser, so the download is deleted after unpacking and the browser starts with part of `/tmp` held
-back to cap its decoded-image memory (`DISCARDABLE_LIMIT` in `server.ts`). Keep
+the browser ("too heavy" message). So the download is deleted after unpacking, the browser starts with part
+of `/tmp` held back to cap its decoded-image memory (`DISCARDABLE_LIMIT`), and bands drop Chromium's
+caches when `/tmp` runs low (`PURGE_BELOW`, both in `server.ts`). Keep
 chromium-min, `DEFAULT_CHROMIUM_PACK_URL` and Playwright's Chromium major in step. Hosted responses must
 stay under 4.5 MB: a capture over 4 MB as PNG is sent as WebP slices (`multipart/form-data`) that
 `captureUrl` joins into one PNG; local captures are always PNG.

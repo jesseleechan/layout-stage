@@ -3,7 +3,7 @@
    downloaded once per function instance and unpacked to /tmp. This is the only file to change when
    hosting needs a different browser: keep the captureScreenshot() signature, launch the browser
    behind the guard proxy, throw CaptureError. Server only. */
-import { open, readFile, rm, statfs } from 'node:fs/promises';
+import { open as openFile, readFile, rm, statfs } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { chromium, type Browser, type BrowserContext, type CDPSession, type LaunchOptions, type Page, type Request as PwRequest } from 'playwright';
@@ -263,7 +263,7 @@ async function whileHeld<T>(bytes: number, start: () => Promise<T>): Promise<T> 
   if (bytes <= 0) return start();
   const file = path.join(os.tmpdir(), 'layout-stage-reserve');
   try {
-    const handle = await open(file, 'w');
+    const handle = await openFile(file, 'w');
     try {
       const chunk = Buffer.alloc(4 * MB, 1);
       for (let n = 0; n < bytes; n += chunk.length) await handle.write(chunk, 0, Math.min(chunk.length, bytes - n));
