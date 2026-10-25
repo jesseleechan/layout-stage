@@ -43,6 +43,12 @@ export function pageError(status: number, title: string, html: string): CaptureE
   return null;
 }
 
+/** A 401 from the page: it wants a password (none was given), or turned down the one that was. */
+export function authError(status: number, sentCredentials: boolean): CaptureError | null {
+  if (status !== 401) return null;
+  return new CaptureError(sentCredentials ? 'auth_failed' : 'auth_required');
+}
+
 /** Maps a Playwright navigation error (net::ERR_* or a timeout) to a CaptureError. */
 export function navError(e: unknown): CaptureError {
   if (e instanceof CaptureError) return e;

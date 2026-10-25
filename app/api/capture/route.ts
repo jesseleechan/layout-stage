@@ -1,7 +1,10 @@
-/* POST /api/capture { url, width, fullPage, scale, delayMs, hideBanners } → the capture as one image
+/* POST /api/capture { url, width, fullPage, scale, delayMs, hideBanners, darkMode, hideSelectors,
+   auth? } → the capture as one image
    (image/png, or image/webp when hosted and the PNG would be over the host's response cap), or as
    multipart/form-data with one "part" per WebP slice, top to bottom, which the client joins; JSON
-   { code, message } on failure. Drives a real browser, so it runs on Node and is never cached. */
+   { code, message } on failure. Drives a real browser, so it runs on Node and is never cached.
+   `auth` ({ username, password }, for staging sites behind basic auth) is used for this request only:
+   never stored or logged. */
 import { CaptureError, toCaptureError } from '@/lib/capture/errors';
 import { parseCaptureRequest } from '@/lib/capture/options';
 import { captureScreenshot, responseBudget } from '@/lib/capture/server';

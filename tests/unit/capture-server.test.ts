@@ -11,19 +11,54 @@ import { readFileSync } from 'node:fs';
 describe('parseCaptureRequest', () => {
   it('passes valid input through', () => {
     expect(parseCaptureRequest({ url: ' https://example.com ', width: 390, fullPage: false, scale: 1, delayMs: 0, hideBanners: false })).toEqual({
-      url: 'https://example.com', width: 390, fullPage: false, scale: 1, delayMs: 0, hideBanners: false,
+      url: 'https://example.com', width: 390, fullPage: false, scale: 1, delayMs: 0, hideBanners: false, darkMode: false, hideSelectors: [], auth: null,
     });
+    expect(
+      parseCaptureRequest({ url: 'https://staging.example.com', darkMode: true, hideSelectors: ['#chat', '.promo, .bar'], auth: { username: 'jesse', password: 'p@ss:word' } }),
+    ).toMatchObject({ darkMode: true, hideSelectors: ['#chat', '.promo', '.bar'], auth: { username: 'jesse', password: 'p@ss:word' } });
+    expect(parseCaptureRequest({ url: 'https://example.com', hideSelectors: '#chat\n.promo' }).hideSelectors).toEqual(['#chat', '.promo']);
   });
   it('fills defaults and clamps', () => {
     expect(parseCaptureRequest({ url: 'https://example.com' })).toEqual({
-      url: 'https://example.com', width: 1440, fullPage: true, scale: 2, delayMs: 1500, hideBanners: true,
+      url: 'https://example.com', width: 1440, fullPage: true, scale: 2, delayMs: 1500, hideBanners: true, darkMode: false, hideSelectors: [], auth: null,
     });
-    expect(clampOptions({ width: 1300, scale: 3, delayMs: 99999, fullPage: 'no', hideBanners: 1 })).toEqual({
-      width: 1280, fullPage: true, scale: 2, delayMs: 5000, hideBanners: true,
+    expect(clampOptions({ width: 1300, scale: 3, delayMs: 99999, fullPage: 'no', hideBanners: 1, darkMode: 'yes', hideSelectors: 42 })).toEqual({
+      width: 1280, fullPage: true, scale: 2, delayMs: 5000, hideBanners: true, darkMode: false, hideSelectors: [],
     });
+    expect(clampOptions({ hideSelectors: ['#ok', 'div { x }', 7, '.fine'] }).hideSelectors).toEqual(['#ok', '.fine']);
     expect(clampOptions({ width: 100, scale: 0.5, delayMs: -4 })).toMatchObject({ width: 390, scale: 1, delayMs: 0 });
     expect(clampOptions({ width: 800, delayMs: 1234.6 })).toMatchObject({ width: 834, delayMs: 1235 });
     expect(clampOptions({ width: Number.NaN, delayMs: Infinity })).toMatchObject({ width: 1440, delayMs: 1500 });
+  });
+  it('refuses hide-elements input that isn’t a selector list', () => {
+    for (const hideSelectors of ['div { color: red }', '</style><script>', '@import url(x)', '#a; body', ['ok', 'a{'], [1], { a: 1 }, 'x'.repeat(2001)]) {
+      const err = (() => {
+        try {
+          parseCaptureRequest({ url: 'https://example.com', hideSelectors });
+        } catch (e) {
+          return e as CaptureError;
+        }
+      })();
+      expect(err?.code).toBe('bad_selectors');
+    }
+  });
+  it('checks credentials and keeps them out of the address', () => {
+    expect(parseCaptureRequest({ url: 'https://example.com', auth: { username: '', password: '' } }).auth).toBeNull();
+    expect(parseCaptureRequest({ url: 'https://example.com', auth: { username: '', password: 'only-a-password' } }).auth).toEqual({ username: '', password: 'only-a-password' });
+    const code = (body: unknown) => {
+      try {
+        parseCaptureRequest(body);
+      } catch (e) {
+        return (e as CaptureError).code;
+      }
+      return 'ok';
+    };
+    expect(code({ url: 'https://example.com', auth: 'jesse:pw' })).toBe('bad_request');
+    expect(code({ url: 'https://example.com', auth: { username: 'jesse' } })).toBe('bad_request');
+    expect(code({ url: 'https://example.com', auth: { username: 'a:b', password: 'x' } })).toBe('bad_auth');
+    expect(code({ url: 'https://example.com', auth: { username: 'a', password: 'x\r\nHost: evil' } })).toBe('bad_auth');
+    expect(code({ url: 'https://example.com', auth: { username: 'a', password: 'x'.repeat(257) } })).toBe('bad_auth');
+    expect(code({ url: 'https://jesse:pw@staging.example.com/' })).toBe('invalid_url');
   });
   it('refuses missing or oversized URLs and non-objects', () => {
     for (const body of [null, 'https://example.com', [], {}, { url: 42 }, { url: '   ' }, { url: 'https://e.com/' + 'a'.repeat(3000) }]) {

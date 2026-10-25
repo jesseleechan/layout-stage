@@ -2,6 +2,7 @@
 import type { CaptureOptions } from '../model';
 import { getValue, setValue } from '../persist';
 import { checkUrlShape } from './address';
+import type { CaptureAuth } from './auth';
 import { CaptureError, isCaptureErrorCode, SCHEME_MESSAGE } from './errors';
 import { createSerialQueue } from './queue';
 
@@ -52,17 +53,23 @@ export function captureName(url: string): string {
 
 const queue = createSerialQueue();
 
-/** Captures a URL through the server route; one at a time (the rest wait). Throws CaptureError. */
-export function captureUrl(url: string, options: CaptureOptions, signal?: AbortSignal): Promise<ClientCaptureResult> {
+/** The route's request body. `auth` goes with this one request only and is never stored. */
+export function captureBody(url: string, options: CaptureOptions, auth?: CaptureAuth | null): string {
+  const { width, fullPage, scale, delayMs, hideBanners, darkMode, hideSelectors } = options;
+  return JSON.stringify({ url, width, fullPage, scale, delayMs, hideBanners, darkMode, hideSelectors, ...(auth ? { auth } : {}) });
+}
+
+/** Captures a URL through the server route; one at a time (the rest wait). Throws CaptureError.
+ *  `auth`: HTTP basic auth for a staging site, sent with this request only. */
+export function captureUrl(url: string, options: CaptureOptions, signal?: AbortSignal, auth?: CaptureAuth | null): Promise<ClientCaptureResult> {
   return queue(async () => {
     if (signal?.aborted) throw new CaptureError('aborted');
-    const { width, fullPage, scale, delayMs, hideBanners } = options;
     let res: Response;
     try {
       res = await fetch(CAPTURE_ENDPOINT, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ url, width, fullPage, scale, delayMs, hideBanners }),
+        body: captureBody(url, options, auth),
         cache: 'no-store',
         signal,
       });
@@ -126,9 +133,13 @@ export function pushRecent(list: readonly string[], url: string, max = RECENT_MA
   return [url, ...list.filter((u) => u !== url)].slice(0, max);
 }
 
-const canonical = (url: string) => {
+/** The URL as remembered: normalized, and never with a user name or password in it. */
+export const canonical = (url: string) => {
   try {
-    return new URL(url).href;
+    const u = new URL(url);
+    u.username = '';
+    u.password = '';
+    return u.href;
   } catch {
     return url;
   }

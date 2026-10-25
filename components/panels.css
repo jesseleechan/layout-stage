@@ -12,3 +12,29 @@
 @media (prefers-reduced-motion: reduce) {
   .slot[aria-busy="true"] .slot-thumb { animation: none; }
 }
+
+/* A layout row's Replace menu (components/ReplaceMenu.tsx). */
+.menu-wrap { display: flex; } /* the menu hangs from the whole row (.slots .slot is positioned) */
+.icon-btn[aria-expanded="true"] { border-color: var(--accent); color: var(--accent); background: var(--accent-soft); }
+.menu {
+  position: absolute; left: 4px; right: 4px; top: calc(100% + 3px); z-index: 20; display: grid; gap: 1px;
+  padding: 4px; border-radius: 10px; border: 1px solid var(--line);
+  background: var(--paper); box-shadow: 0 12px 32px -6px rgba(15, 17, 25, .24), 0 2px 6px rgba(15, 17, 25, .08);
+}
+.menu [role="menuitem"] {
+  display: grid; grid-template-columns: 14px minmax(0, 1fr); align-items: center; gap: 8px; height: 30px;
+  padding: 0 9px; border: 0; border-radius: 6px; background: transparent; color: var(--ink);
+  font-size: 12.5px; font-weight: 500; text-align: left; cursor: pointer;
+}
+.menu [role="menuitem"] svg { color: var(--ink-2); }
+.menu [role="menuitem"] span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.menu [role="menuitem"]:hover:not([aria-disabled="true"]), .menu [role="menuitem"]:focus { background: var(--field); outline: none; }
+.menu [role="menuitem"]:focus-visible { box-shadow: inset 0 0 0 2px var(--accent); }
+.menu [role="menuitem"][aria-disabled="true"] { opacity: .5; cursor: default; }
+#recaptureAllBtn svg { flex: none; }
+/* Rows carry two buttons (Replace menu, Remove); a slightly tighter grid leaves the names room. */
+.slots .slot { position: relative; gap: 4px; padding-inline: 5px; }
+.slots .slot-meta { letter-spacing: -.02em; }
+.slots .slot-pick { grid-template-columns: 12px 48px minmax(0, 1fr); gap: 7px; }
+.slots .slot-thumb { width: 48px; height: 32px; }
+.slots .slot-actions { gap: 3px; }
