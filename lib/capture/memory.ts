@@ -1,6 +1,8 @@
-/* CAPTURE_DEBUG: memory as Linux sees it while a capture runs, for the phase log. Reads /proc only
-   (elsewhere every figure is just left out). Server only. */
-import { readdirSync, readFileSync } from 'node:fs';
+/* CAPTURE_DEBUG: memory as Linux sees it while a capture runs, for the phase log, and the free space
+   in the temp folder (where the serverless Chromium lives, and its shared memory with
+   --disable-dev-shm-usage). Reads /proc (elsewhere those figures are just left out). Server only. */
+import { readdirSync, readFileSync, statfsSync } from 'node:fs';
+import os from 'node:os';
 
 const MB = 1024 * 1024;
 const read = (file: string) => {
@@ -16,6 +18,15 @@ const kbField = (text: string, name: string) => {
   return m ? Number(m[1]) * 1024 : NaN;
 };
 const mb = (bytes: number) => (Number.isFinite(bytes) ? `${Math.round(bytes / MB)}MB` : '?');
+/** Free and total bytes in the temp folder's file system. */
+const tmpSpace = () => {
+  try {
+    const s = statfsSync(os.tmpdir());
+    return { free: s.bavail * s.bsize, total: s.blocks * s.bsize };
+  } catch {
+    return { free: NaN, total: NaN };
+  }
+};
 
 /** The kernel's OOM-kill count so far (system-wide), or NaN. */
 const oomKills = () => Number(/^oom_kill (\d+)/m.exec(read('/proc/vmstat'))?.[1] ?? NaN);
@@ -40,7 +51,8 @@ function browserPids(): number[] {
 }
 
 export interface MemoryProbe {
-  /** e.g. "avail 1203MB (least 1100MB of 2048MB), browser 850MB (peak 900MB), node 250MB, tmpfs 300MB, OOM kills 0" */
+  /** e.g. "avail 1203MB (least 1100MB of 2048MB), browser 850MB (peak 900MB), node 250MB, tmpfs 0MB,
+   *  /tmp free 230MB (least 120MB of 512MB), OOM kills 0" */
   note(): string;
   stop(): void;
 }
@@ -50,11 +62,14 @@ export interface MemoryProbe {
 export function memoryProbe(everyMs = 250): MemoryProbe {
   const oom0 = oomKills();
   let least = Infinity;
+  let leastTmp = Infinity;
   let pids: number[] = [];
   let browser = { rss: NaN, peak: NaN };
   const sample = () => {
     const avail = kbField(read('/proc/meminfo'), 'MemAvailable');
     if (avail < least) least = avail;
+    const tmp = tmpSpace().free;
+    if (tmp < leastTmp) leastTmp = tmp;
     if (!pids.length) pids = browserPids();
     const status = pids.map((p) => read(`/proc/${p}/status`)).filter(Boolean);
     if (status.length) {
@@ -77,6 +92,7 @@ export function memoryProbe(everyMs = 250): MemoryProbe {
         `browser ${mb(browser.rss)} (peak ${mb(browser.peak)})`,
         `node ${mb(process.memoryUsage().rss)}`,
         `tmpfs ${mb(kbField(info, 'Shmem'))}`,
+        `${os.tmpdir()} free ${mb(tmpSpace().free)} (least ${mb(leastTmp)} of ${mb(tmpSpace().total)})`,
         `OOM kills ${Number.isFinite(kills) ? kills : '?'}`,
       ].join(', ');
     },
