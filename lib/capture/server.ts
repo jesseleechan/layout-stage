@@ -3,7 +3,7 @@
    downloaded once per function instance and unpacked to /tmp. This is the only file to change when
    hosting needs a different browser: keep the captureScreenshot() signature, launch the browser
    behind the guard proxy, throw CaptureError. Server only. */
-import { readFile, rm } from 'node:fs/promises';
+import { open, readFile, rm, statfs } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { chromium, type Browser, type BrowserContext, type LaunchOptions, type Page, type Request as PwRequest } from 'playwright';
@@ -32,6 +32,7 @@ const BANNERS_CSS = path.join(process.cwd(), 'lib/capture/banners.css');
 const BANNERS_ID = '__layout-stage-banners';
 /** CAPTURE_DEBUG=1 logs each phase's timing and memory and, on a load timeout, the requests still open. */
 const DEBUG = !!process.env.CAPTURE_DEBUG;
+const MB = 1024 * 1024;
 
 /** The Chromium pack that matches @sparticuz/chromium-min's version (x64, which is what Vercel
  *  functions run on). Keep the two in step when upgrading. */
@@ -88,6 +89,7 @@ export function responseBudget(env: Record<string, string | undefined> = process
  *  17.7 MB as PNG, 3.6 MB as WebP at 0.92, 2.4 MB at 0.8). */
 const WEBP_QUALITIES = [0.92, 0.8, 0.65];
 export const TOO_LARGE_MESSAGE = 'That page is too big to send back in one piece. Try First screen or 1× sharpness.';
+export const TOO_HEAVY_MESSAGE = 'This page is too heavy to capture on the hosted app. Try First screen or 1× sharpness, or run Layout Stage on your computer.';
 
 export interface CaptureInput extends CaptureOptions {
   url: string;
@@ -184,9 +186,17 @@ async function launch(): Promise<Session> {
   const pack = chromiumPackUrl();
   const t0 = Date.now();
   try {
-    const options: LaunchOptions = pack ? await serverlessChromium(pack, proxy.url) : { headless: true, args: browserArgs(proxy.url) };
-    const browser = await chromium.launch(options);
-    if (DEBUG) console.log(`[capture] browser ${browser.version()} up in ${Date.now() - t0}ms${pack ? ' (serverless)' : ''}; ${tempReport()}`);
+    let browser: Browser;
+    let note = '';
+    if (pack) {
+      const options = await serverlessChromium(pack, proxy.url);
+      const reserve = tempReserve(await tempFree());
+      browser = await whileHeld(reserve, () => chromium.launch(options));
+      note = ` (serverless, started with ${Math.round(reserve / MB)}MB of ${os.tmpdir()} held back)`;
+    } else {
+      browser = await chromium.launch({ headless: true, args: browserArgs(proxy.url) });
+    }
+    if (DEBUG) console.log(`[capture] browser ${browser.version()} up in ${Date.now() - t0}ms${note}; ${tempReport()}`);
     browser.on('disconnected', () => void proxy.close().catch(() => undefined));
     return { browser, proxy, singleUse: !!pack };
   } catch (e) {
@@ -210,7 +220,55 @@ async function serverlessChromium(pack: string, proxyUrl: string): Promise<Launc
   const t0 = Date.now();
   const executablePath = await serverless.executablePath(pack);
   if (DEBUG) console.log(`[capture] serverless Chromium unpacked in ${Date.now() - t0}ms`);
+  // The download (67 MB) is only needed for unpacking: from now on chromium-min reuses /tmp/chromium.
+  if (/^https?:\/\//i.test(pack)) await rm(path.join(os.tmpdir(), 'chromium-pack'), { recursive: true, force: true }).catch(() => undefined);
   return { headless: true, executablePath, args: browserArgs(proxyUrl, serverless.args) };
+}
+
+/* Serverless, /tmp is the browser's working memory too. Vercel has no /dev/shm, so (with
+   --disable-dev-shm-usage) Chromium keeps its shared memory, which holds raster tiles, frames and
+   decoded images, as files in /tmp: 525 MB, of which the unpacked browser takes about 210 MB. When
+   /tmp runs out, the single-process browser crashes (SIGTRAP); stripe.com at 1440, 2× did, on its
+   first band. Two things keep a heavy page within it: deleting the download once unpacked (above), and
+   starting the browser with part of /tmp held back. Chromium caps its discardable memory (decoded
+   images, the largest part) at half the free space in /tmp at start-up, so with all ~315 MB free it
+   would let images take what the tiles need. Started with free space held to 2 × DISCARDABLE_LIMIT, it
+   caps them at DISCARDABLE_LIMIT, about what it got with the download still there. stripe.com then peaks
+   ~30 MB short of full. Don't go lower: at a 64–96 MB cap apple.com's carousel lost images (black tiles). */
+const DISCARDABLE_LIMIT = 128 * MB;
+
+/** How much of `free` bytes in /tmp to hold back while the browser starts (see DISCARDABLE_LIMIT). */
+export function tempReserve(free: number): number {
+  return Number.isFinite(free) ? Math.max(0, Math.floor(free - 2 * DISCARDABLE_LIMIT)) : 0;
+}
+
+async function tempFree(): Promise<number> {
+  try {
+    const s = await statfs(os.tmpdir());
+    return s.bavail * s.bsize;
+  } catch {
+    return NaN;
+  }
+}
+
+/** Runs `start` with `bytes` of the temp folder taken up by a file (as far as there is room), then frees them. */
+async function whileHeld<T>(bytes: number, start: () => Promise<T>): Promise<T> {
+  if (bytes <= 0) return start();
+  const file = path.join(os.tmpdir(), 'layout-stage-reserve');
+  try {
+    const handle = await open(file, 'w');
+    try {
+      const chunk = Buffer.alloc(4 * MB, 1);
+      for (let n = 0; n < bytes; n += chunk.length) await handle.write(chunk, 0, Math.min(chunk.length, bytes - n));
+    } catch {
+      // Less room than statfs said: start with what was written.
+    } finally {
+      await handle.close();
+    }
+    return await start();
+  } finally {
+    await rm(file, { force: true }).catch(() => undefined);
+  }
 }
 
 /** Desktop Chrome's own user agent (headless Chromium announces itself, which trips bot walls),
@@ -287,7 +345,8 @@ async function capture(input: CaptureInput, policy: HostPolicy, maxBytes: number
     return await untilBrowserExits(browser, run(context, target, input, guard, maxBytes, bands ?? singleUse, probe));
   } catch (e) {
     if (signal?.aborted) throw new CaptureError('aborted');
-    const err = navError(e);
+    // A call cut off by the crash may fail before the exit is reported.
+    const err = e instanceof BrowserExited || !browser.isConnected() ? exitError(singleUse) : navError(e);
     if (err.code === 'failed') console.error('[capture] failed:', loggable(e, input.auth), probe ? `(${probe.note()})` : '');
     throw err;
   } finally {
@@ -303,12 +362,25 @@ function loggable(e: unknown, auth: CaptureAuth | null | undefined): unknown {
   return redactAuth(e instanceof Error ? `${e.name}: ${e.message}\n${e.stack ?? ''}` : String(e), auth);
 }
 
+class BrowserExited extends Error {
+  constructor() {
+    super('The capture browser exited during the capture.');
+  }
+}
+
+/** What a capture says when the browser went away in the middle of it. The serverless one runs as a
+ *  single process, so any crash takes it down, and on a heavy page the usual cause is running out of
+ *  room in /tmp (see DISCARDABLE_LIMIT): say what to try. */
+export function exitError(serverless: boolean): CaptureError {
+  return serverless ? new CaptureError('failed', TOO_HEAVY_MESSAGE) : new CaptureError('failed');
+}
+
 /** Settles like `work`, or fails as soon as the browser exits (a crash): Playwright can leave calls
  *  that were waiting on it pending for good, which would hold up every later capture. */
 function untilBrowserExits<T>(browser: Browser, work: Promise<T>): Promise<T> {
   let onExit = () => undefined as void;
   const exited = new Promise<never>((_, reject) => {
-    onExit = () => reject(new Error('The capture browser exited during the capture.'));
+    onExit = () => reject(new BrowserExited());
     browser.once('disconnected', onExit);
   });
   return Promise.race([work, exited]).finally(() => browser.off('disconnected', onExit));
