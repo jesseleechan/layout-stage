@@ -24,11 +24,13 @@ const spare = (): Slot => sample('fieldnote', '16:10', { cx: 500, cy: 750, w: 70
 function background(patch: Partial<Background>): Background {
   return {
     type: 'solid', solid: '#F5F5F2', grad: { a: '#FFE6C7', b: '#FF9A8B', angle: 160 }, mesh: ['#FBEDEA', '#F4B6C2', '#F7D9A8', '#C7D7F5'],
-    meshSeed: 3, imageId: null, imageName: '', blur: 0, dim: 0, grain: 0, ...patch,
+    meshSeed: 3, imageId: null, imageName: '', blur: 0, dim: 0, grain: 0, texture: 0, ...patch,
   };
 }
 
 export interface GoldenCase {
+  /** Golden file name without .png; the preset id when absent. */
+  name?: string;
   preset: PresetId;
   doc: Composition;
   /** null: the real export path, exportComposition(doc, 'png', 1). A number: renderComposition(doc, m),
@@ -52,7 +54,7 @@ export const GOLDEN_CASES: GoldenCase[] = [
         sample('fieldnote', '4:5', { cx: 650, cy: 1120, w: 480 }, { fy: 30 }),
       ],
       order: [0, 2, 1],
-      frame: { radius: 14, borderW: 0, borderC: '#FFFFFF', shadow: { preset: 'lifted', blur: 80, x: 0, y: 40, opacity: 0.28, color: '#4A2533' } },
+      frame: { radius: 14, borderW: 0, borderC: '#FFFFFF', bar: 'none', shadow: { preset: 'lifted', blur: 80, x: 0, y: 40, opacity: 0.28, color: '#4A2533' } },
       background: background({ type: 'mesh', mesh: ['#FBEDEA', '#F4B6C2', '#F7D9A8', '#C7D7F5'], meshSeed: 3, grain: 10 }),
     },
   },
@@ -70,7 +72,7 @@ export const GOLDEN_CASES: GoldenCase[] = [
         sample('northbeam', '4:5', { cx: 2280, cy: 945, w: 760 }),
       ],
       order: [1, 2, 0],
-      frame: { radius: 16, borderW: 1, borderC: '#343B5C', shadow: { preset: 'float', blur: 140, x: 0, y: 80, opacity: 0.55, color: '#000000' } },
+      frame: { radius: 16, borderW: 1, borderC: '#343B5C', bar: 'none', shadow: { preset: 'float', blur: 140, x: 0, y: 80, opacity: 0.55, color: '#000000' } },
       background: background({ type: 'gradient', grad: { a: '#1B2244', b: '#3B2452', angle: 155 }, grain: 12 }),
     },
   },
@@ -87,7 +89,7 @@ export const GOLDEN_CASES: GoldenCase[] = [
         spare(),
       ],
       order: [0, 1, 2],
-      frame: { radius: 6, borderW: 4, borderC: '#16161A', shadow: { preset: 'hard', blur: 0, x: 14, y: 14, opacity: 1, color: '#16161A' } },
+      frame: { radius: 6, borderW: 4, borderC: '#16161A', bar: 'none', shadow: { preset: 'hard', blur: 0, x: 14, y: 14, opacity: 1, color: '#16161A' } },
       background: background({ type: 'solid', solid: '#FFD54A', grain: 0 }),
     },
   },
@@ -105,7 +107,7 @@ export const GOLDEN_CASES: GoldenCase[] = [
         spare(),
       ],
       order: [0, 1, 2],
-      frame: { radius: 18, borderW: 3, borderC: '#FFFFFF', shadow: { preset: 'soft', blur: 50, x: 0, y: 18, opacity: 0.18, color: '#1D1D1B' } },
+      frame: { radius: 18, borderW: 3, borderC: '#FFFFFF', bar: 'none', shadow: { preset: 'soft', blur: 50, x: 0, y: 18, opacity: 0.18, color: '#1D1D1B' } },
       background: background({ type: 'image', solid: '#3B2A2F', imageId: 'sample:juniper', imageName: 'Layout 1, blurred', blur: 40, dim: 0.2, grain: 6 }),
     },
   },
@@ -122,8 +124,27 @@ export const GOLDEN_CASES: GoldenCase[] = [
         spare(),
       ],
       order: [0, 1, 2],
-      frame: { radius: 40, borderW: 6, borderC: '#F5C27A', shadow: { preset: 'none', blur: 0, x: 0, y: 0, opacity: 0, color: '#000000' } },
+      frame: { radius: 40, borderW: 6, borderC: '#F5C27A', bar: 'none', shadow: { preset: 'none', blur: 0, x: 0, y: 0, opacity: 0, color: '#000000' } },
       background: background({ type: 'mesh', mesh: ['#2A1838', '#F08A6C', '#7C4DA6', '#F5C27A'], meshSeed: 41, grain: 0 }),
+    },
+  },
+  {
+    // Pinterest pin in the Editorial look: light window bars with rounded top corners, dark warm mesh
+    // with texture and grain, a scrolled crop. (After the plain pin: golden-overlays uses the first.)
+    name: 'pin-editorial',
+    preset: 'pin',
+    m: null,
+    size: [1000, 1500],
+    doc: {
+      preset: 'pin', W: 1000, H: 1500, count: 3,
+      slots: [
+        sample('juniper', '16:10', { cx: 500, cy: 400, w: 800 }),
+        sample('northbeam', '4:5', { cx: 300, cy: 1020, w: 460 }),
+        sample('fieldnote', '4:5', { cx: 700, cy: 1090, w: 460 }, { fy: 12 }),
+      ],
+      order: [0, 1, 2],
+      frame: { radius: 10, borderW: 0, borderC: '#FFFFFF', bar: 'light', shadow: { preset: 'lifted', blur: 80, x: 0, y: 40, opacity: 0.45, color: '#120D09' } },
+      background: background({ type: 'mesh', mesh: ['#3A342E', '#5C5046', '#2B2521', '#4B4038'], meshSeed: 5, grain: 14, texture: 20 }),
     },
   },
 ];
@@ -138,7 +159,7 @@ export function wideSourceDoc(): Composition {
       spare(),
     ],
     order: [0, 1, 2],
-    frame: { radius: 0, borderW: 0, borderC: '#FFFFFF', shadow: { preset: 'none', blur: 0, x: 0, y: 0, opacity: 0, color: '#000000' } },
+    frame: { radius: 0, borderW: 0, borderC: '#FFFFFF', bar: 'none', shadow: { preset: 'none', blur: 0, x: 0, y: 0, opacity: 0, color: '#000000' } },
     background: background({ type: 'solid', solid: '#FFFFFF', grain: 0 }),
   };
 }

@@ -91,7 +91,8 @@ const pngSize = (buf: Buffer) => [buf.readUInt32BE(16), buf.readUInt32BE(20)];
 
 test.describe('golden exports', () => {
   for (const c of GOLDEN_CASES) {
-    test(`${c.preset} matches its golden`, async ({ page }) => {
+    const name = c.name ?? c.preset;
+    test(`${name} matches its golden`, async ({ page }) => {
       await openEditor(page);
       const doc = usesWide(c.doc) ? withWideId(c.doc, await addWideImage(page)) : c.doc;
       const r = await render(page, doc, c.m);
@@ -100,7 +101,7 @@ test.describe('golden exports', () => {
       expect(r.type).toBe('image/png');
       expect([r.w, r.h]).toEqual(c.size);
       expect(pngSize(png)).toEqual(c.size);
-      expect(png).toMatchSnapshot(`${c.preset}.png`);
+      expect(png).toMatchSnapshot(`${name}.png`);
     });
   }
 });
