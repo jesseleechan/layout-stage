@@ -42,7 +42,7 @@ export function forPreset(doc: Composition, preset: Exclude<PresetId, 'custom'>,
 
 /* ---------------- export all sizes ---------------- */
 
-export const ALL_SIZES: Exclude<PresetId, 'custom'>[] = ['pin', 'etsy43', 'etsy11'];
+export const ALL_SIZES: Exclude<PresetId, 'custom'>[] = ['pin', 'story', 'etsy43', 'etsy11'];
 
 export interface SizeItem {
   key: PresetId;

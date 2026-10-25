@@ -242,7 +242,7 @@ function ExportMenu({ disabled, dims }: { disabled: boolean; dims: string }) {
         <div className="export-menu" id="exportMenu" role="menu" aria-label="Export options" ref={menuRef} onKeyDown={onMenuKey}>
           {([
             ['Export', `This canvas · ${dims}`, ex.run],
-            ['Export all sizes', 'Pinterest pin, Etsy 4:3 and Etsy square', ex.runAllSizes],
+            ['Export all sizes', 'Pin 2:3 and 9:16, Etsy 4:3 and square', ex.runAllSizes],
             ['Variations', 'Six takes on this canvas, for fresh pins', ex.runVariations],
             ['Etsy listing set', 'Hero, all pages, close-ups and palette at 4:3', ex.runEtsySet],
             ['All pages image', 'Every page in Media in one grid', ex.runPagesGrid],

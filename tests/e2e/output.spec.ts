@@ -58,16 +58,17 @@ test.describe('export menu', () => {
 });
 
 test.describe('multi-image export', () => {
-  test('Export all sizes: pin, Etsy 4:3 and Etsy square in one zip', async ({ page }) => {
+  test('Export all sizes: pin at 2:3 and 9:16, Etsy 4:3 and Etsy square in one zip', async ({ page }) => {
     await openEditor(page);
     const zip = await runFromMenu(page, 'Export all sizes');
     expect(readZip(zip)).toEqual([
       { name: 'layout-stage-pinterest-2000x3000.png', method: 0, w: 2000, h: 3000 },
+      { name: 'layout-stage-pinterest-9x16-1080x1920.png', method: 0, w: 1080, h: 1920 },
       { name: 'layout-stage-etsy-4x3-3000x2250.png', method: 0, w: 3000, h: 2250 },
       { name: 'layout-stage-etsy-square-2000x2000.png', method: 0, w: 2000, h: 2000 },
     ]);
     await expect(page.locator('#sheetTitle')).toHaveText('All sizes');
-    await expect(page.locator('.multi-item a.btn')).toHaveCount(3);
+    await expect(page.locator('.multi-item a.btn')).toHaveCount(4);
     await page.keyboard.press('Escape');
     await expect(page.locator('#sheet')).toHaveCount(0);
     await expect(page.locator('#exportMenuBtn')).toBeFocused();
