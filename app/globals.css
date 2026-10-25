@@ -211,8 +211,6 @@ input[type=color]::-moz-color-swatch { border: 0; border-radius: 5px; }
   width: 100%; height: 100%; object-fit: cover; display: block; pointer-events: none;
   max-width: none; -webkit-user-drag: none;
 }
-/* Window bar (lib/render/bar.ts): an SVG in the shot's px, above the image, under the border. */
-.shot-bar { position: absolute; left: 0; top: 0; display: block; overflow: visible; pointer-events: none; }
 .shot.has-border::after { content: ""; position: absolute; inset: 0; border: var(--bw) solid var(--bc); border-radius: inherit; pointer-events: none; }
 .overlay { position: absolute; inset: 0; pointer-events: none; }
 .safe-clip { position: absolute; inset: 0; overflow: hidden; }

@@ -27,8 +27,7 @@ npx playwright install chromium          # once per machine, for URL capture and
 
 - `lib/model.ts` types, defaults, presets, built-in styles, swatches
 - `lib/store.ts` Zustand store (single source of truth) + actions; `lib/history.ts` 80-step undo
-- `lib/render/` units/geometry, background (incl. texture), shot, `bar.ts` (window bar geometry), export —
-  shared by preview and export
+- `lib/render/` units/geometry, background (incl. texture), shot, export — shared by preview and export
 - `lib/images.ts` image blobs in IndexedDB + object URLs + stored thumbnails (`useThumbUrl`); images
   are downscaled at ingest by the budget in `lib/image-sizing.ts`; `lib/persist.ts` autosave + saved styles
 - `lib/overlays.ts` headline / badge / watermark model, fonts and sanitizer; `lib/render/overlay-layout.ts`

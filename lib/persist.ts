@@ -1,6 +1,6 @@
 /* Autosave and saved styles, in IndexedDB. Browser only. */
 import { createStore, del, get, set, type UseStore } from 'idb-keyval';
-import { barOf, clone, PRESETS, type Composition, type Style } from './model';
+import { clone, PRESETS, type Composition, type Style } from './model';
 import { defaultComposition } from './arrange';
 import { cleanSelectors } from './capture/selectors';
 import { sanitizePlacements } from './canvas-size';
@@ -78,8 +78,9 @@ export function sanitizeComposition(raw: unknown): Composition | null {
   } as Composition;
   if (!out.pin) delete out.pin;
   if (!out.placements) delete out.placements;
-  // Window bar and texture came later: none for anything saved before them, or anything unusable.
-  out.frame.bar = barOf(out.frame.bar);
+  // Texture came later: none for anything saved before it, or anything unusable. (A window bar
+  // option existed briefly and was dropped; its field is removed.)
+  delete (out.frame as { bar?: unknown }).bar;
   const tex = Number(out.background.texture);
   out.background.texture = Number.isFinite(tex) ? Math.max(0, Math.min(100, tex)) : 0;
   // Capture options added later (dark mode, hide elements): defaults for captures saved before them.

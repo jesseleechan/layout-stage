@@ -3,7 +3,6 @@
 import { clone, defaultBackground, MESHES, type Background, type Style } from '@/lib/model';
 import { drawBackground, makeCanvas } from '@/lib/render/background';
 import { hexA, roundRectPath, shadowLayers } from '@/lib/render/units';
-import { drawWindowBar, windowBar } from '@/lib/render/bar';
 
 /** A background drawn at 96 × 72 (the prototype's bgThumb). */
 function bgThumb(bg: Background): string {
@@ -56,19 +55,13 @@ export function styleThumb(st: Style, current: Background): string {
     x.fill();
     x.restore();
   });
-  // A style with a window bar draws it in place of the mock page's 9 px header band: the layout's
-  // bar drawing, taller than to scale (3.7 px here) so it reads at tile size.
-  const bar = windowBar({ l: X, t: Y, w, h }, f.bar, 9);
   x.save();
   roundRectPath(x, X, Y, w, h, r);
   x.clip();
   x.fillStyle = '#FFFFFF';
   x.fillRect(X, Y, w, h);
-  if (bar) drawWindowBar(x, bar);
-  else {
-    x.fillStyle = '#E9EAEE';
-    x.fillRect(X, Y, w, 9);
-  }
+  x.fillStyle = '#E9EAEE';
+  x.fillRect(X, Y, w, 9);
   x.fillStyle = '#D3D6DE';
   x.fillRect(X + 9, Y + 19, 44, 6);
   x.fillRect(X + 9, Y + 30, 30, 4);
