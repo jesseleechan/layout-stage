@@ -113,6 +113,27 @@ describe('a headline on the new canvas', () => {
     expect(unmeasured.slots).toEqual(forPreset(src, 'etsy43').slots);
     expect(forPreset(src, 'etsy43', measure).slots).toEqual(unmeasured.slots);
   });
+
+  it('close-ups and desktop + phone sit in the room the headline leaves (and are unchanged without one)', () => {
+    for (const place of ['top', 'bottom'] as const) {
+      const d = headed(place);
+      d.slots[2] = phoneShot();
+      const near = closeUp(d, 0, 50, measure);
+      const pair = desktopAndPhone(d, 0, 2, measure);
+      for (const out of [near, pair]) {
+        const room = layoutRoom(out, measure);
+        expect(room.b - room.t).toBeLessThan(out.H); // the headline takes some height
+        const g = groupBounds(out);
+        expect(g.t).toBeGreaterThanOrEqual(room.t - 0.5);
+        expect(g.t + g.h).toBeLessThanOrEqual(room.b + 0.5);
+      }
+      // No measure (or no headline): the same as before.
+      const plain = threeUp();
+      plain.slots[2] = phoneShot();
+      expect(closeUp(d, 0, 50).slots[0]).toEqual(closeUp(plain, 0, 50).slots[0]);
+      expect(desktopAndPhone(d, 0, 2).slots.slice(0, 2)).toEqual(desktopAndPhone(plain, 0, 2).slots.slice(0, 2));
+    }
+  });
 });
 
 describe('allSizes', () => {

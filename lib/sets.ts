@@ -2,7 +2,7 @@
    ordinary Composition (or, for the palette card, the canvas it's drawn on), rendered later through
    lib/render like any export. Nothing here touches the store or the DOM, apart from the text
    measure the arrangement sizes the headline with (the page's by default; see arrange()). */
-import { arrange, pageMeasure } from './arrange';
+import { arrange, layoutRoom, pageMeasure } from './arrange';
 import { clone, PRESETS, type Composition, type PresetId, type Slot, type UiState } from './model';
 import { cropRatio, scrollAxis } from './render/units';
 import type { Measure } from './render/overlay-layout';
@@ -112,21 +112,23 @@ function only(doc: Composition, ids: number[]): Composition {
   return d;
 }
 
-/** One layout, large and centered, scrolled to `stop`. */
-export function closeUp(doc: Composition, i: number, stop: number): Composition {
+/** One layout, large and centered, scrolled to `stop` (in the room a top/bottom headline leaves). */
+export function closeUp(doc: Composition, i: number, stop: number, measure?: Measure | null): Composition {
   const d = only(doc, [i]);
   const s = d.slots[0];
   if (scrollAxis(s) === 'x') s.fx = stop;
   else s.fy = stop;
   const r = cropRatio(s);
-  s.w = Math.round(Math.min(d.W * 0.84, d.H * 0.8 * r));
+  const { t, b } = layoutRoom(d, measure);
+  s.w = Math.round(Math.min(d.W * 0.84, (b - t) * 0.8 * r));
   s.cx = d.W / 2;
-  s.cy = d.H / 2;
+  s.cy = (t + b) / 2;
   return d;
 }
 
-/** A desktop layout with a phone layout in front of its right edge, the pair centered. */
-export function desktopAndPhone(doc: Composition, desk: number, phone: number): Composition {
+/** A desktop layout with a phone layout in front of its right edge, the pair centered (in the room a
+ *  top/bottom headline leaves). */
+export function desktopAndPhone(doc: Composition, desk: number, phone: number, measure?: Measure | null): Composition {
   const d = only(doc, [desk, phone]);
   const [D, P] = d.slots;
   // In desktop widths: the desktop is 1 wide; the phone is 1.2× its height, starts 20% of the
@@ -135,8 +137,9 @@ export function desktopAndPhone(doc: Composition, desk: number, phone: number): 
   const ph = dh * 1.2, pw = ph * cropRatio(P);
   const pl = 1 - pw * 0.55, pt = dh * 0.2;
   const gw = Math.max(1, pl + pw), gh = Math.max(dh, pt + ph);
-  const k = Math.min((d.W * 0.84) / gw, (d.H * 0.78) / gh);
-  const ox = (d.W - gw * k) / 2, oy = (d.H - gh * k) / 2;
+  const { t, b } = layoutRoom(d, measure);
+  const k = Math.min((d.W * 0.84) / gw, ((b - t) * 0.78) / gh);
+  const ox = (d.W - gw * k) / 2, oy = t + (b - t - gh * k) / 2;
   D.w = Math.round(k);
   D.cx = Math.round(ox + k / 2);
   D.cy = Math.round(oy + (dh * k) / 2);
@@ -169,12 +172,12 @@ export function etsySet(doc: Composition, measure: Measure | null = pageMeasure(
   stops.forEach((stop, k) => {
     const name = names[k];
     const label = stops.length === 1 ? 'Close-up' : `${name[0].toUpperCase()}${name.slice(1)} section`;
-    items.push({ kind: 'composition', key: name, label, doc: closeUp(doc, m, stop) });
+    items.push({ kind: 'composition', key: name, label, doc: closeUp(doc, m, stop, measure) });
   });
   const visible = doc.slots.slice(0, doc.count);
   const desk = visible.findIndex(isWide);
   const phone = visible.findIndex(isPhone);
-  if (desk >= 0 && phone >= 0) items.push({ kind: 'composition', key: 'desktop-phone', label: 'Desktop + phone', doc: desktopAndPhone(doc, desk, phone) });
+  if (desk >= 0 && phone >= 0) items.push({ kind: 'composition', key: 'desktop-phone', label: 'Desktop + phone', doc: desktopAndPhone(doc, desk, phone, measure) });
   items.push({ kind: 'palette', key: 'palette', label: 'Palette', doc: only(doc, [m]), slot: 0 });
   return items.slice(0, ETSY_MAX_PHOTOS);
 }
