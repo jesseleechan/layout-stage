@@ -45,8 +45,16 @@ export default function TopBar() {
 
   const dims = exportSize({ W, H }, mult);
 
+  /** Keyboard shortcut past the left panel: focuses the selected layout (or layout 1) on the canvas. */
+  const skipToCanvas = () => {
+    const sel = useEditor.getState().ui.selected;
+    const shots = Array.from(document.querySelectorAll<HTMLElement>('.shot:not([hidden])'));
+    (shots.find((el) => Number(el.dataset.i) === sel) ?? shots[0])?.focus();
+  };
+
   return (
     <header className="top">
+      <button className="skip" type="button" onClick={skipToCanvas}>Skip to canvas</button>
       <div className="mark">
         <svg width="26" height="26" viewBox="0 0 26 26" aria-hidden="true">
           <rect x="2.8" y="5" width="14" height="10" rx="2.4" fill="none" stroke="currentColor" strokeWidth="1.6" />
