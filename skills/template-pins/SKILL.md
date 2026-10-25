@@ -1,6 +1,6 @@
 ---
 name: template-pins
-description: Turn 1–3 website screenshots (or URLs to capture) into a Pinterest pin, Etsy listing image or 4:5 portrait on a Claude Design canvas, in the Layout Stage app's three looks (Scroll on Concrete, Columns on Slate, Editorial browser windows), with whole pages running off the canvas. Use when someone wants a pin, Etsy listing image or social image showing a website template, Squarespace or otherwise, from screenshots or URLs.
+description: Turn 1–3 website screenshots (or URLs to capture) into a Pinterest pin, Etsy listing image or 4:5 portrait on a Claude Design canvas, in the Layout Stage app's three looks (Scroll on Concrete, Columns on Slate, Editorial: a hero page in front of two), with whole pages running off the canvas. Use when someone wants a pin, Etsy listing image or social image showing a website template, Squarespace or otherwise, from screenshots or URLs.
 ---
 
 # Template pins on a Claude Design canvas
@@ -81,7 +81,7 @@ A page that isn't longer than that room is shown in both columns in the normal s
 
 Page 1 is the hero, centered. Page 2 sits at the left (left edge `side × W`), page 3 at the right
 (right edge `W − side × W`), both with top `(hero top + drop) × H`. **Paint order**: the two side
-windows first, the hero last (in front).
+pages first, the hero last (in front).
 
 ### Pages too short to run off
 
@@ -98,11 +98,13 @@ headline is added, keep the same proportions but start the layouts below the hea
 
 ## 4. The three looks
 
-| look | background | grain | texture | radius | window bar | shadow (blur, x, y, opacity, color) |
-|---|---|---|---|---|---|---|
-| **Concrete** | solid `#8E8E8C` | 34 | 70 | 0 | none | 60, 0, 24, 0.30, `#1A1A1A` |
-| **Slate** | solid `#B7BCBF` | 6 | 0 | 0 | none | 40, 0, 16, 0.16, `#26313A` |
-| **Editorial** | mesh `#3A342E` + `#5C5046`, `#2B2521`, `#4B4038` (seed 5) | 14 | 20 | 10 | light | 80, 0, 40, 0.45, `#120D09` |
+| look | background | grain | texture | radius | shadow (blur, x, y, opacity, color) |
+|---|---|---|---|---|---|
+| **Concrete** | solid `#8E8E8C` | 34 | 70 | 0 | 60, 0, 24, 0.30, `#1A1A1A` |
+| **Slate** | solid `#B7BCBF` | 6 | 0 | 0 | 40, 0, 16, 0.16, `#26313A` |
+| **Editorial** | mesh `#3A342E` + `#5C5046`, `#2B2521`, `#4B4038` (seed 5) | 14 | 20 | 10 | 80, 0, 40, 0.45, `#120D09` |
+
+No look draws a browser bar (traffic-light dots, address field) over the pages: show the page itself.
 
 ### Frame (every page)
 
@@ -120,20 +122,6 @@ Editorial `0 40px 80px rgba(18,13,9,.45), 0 8.2px 19.6px rgba(18,13,9,.2475)`.
 
 The image fills the box's width (`width: 100%; height: auto`), top-aligned; anything below the box
 is clipped.
-
-### Window bar (Editorial; light)
-
-Inside the top of the frame, for a frame of width `w`:
-
-- bar: height `h = 0.036 w`, full width, `#F3F2EF`
-- separator: height `0.045 h` along the bar's bottom edge, `#E2E0DB`
-- three dots `#FF5F57`, `#FEBC2E`, `#28C840`: radius `0.135 h`, centers at `x = 0.62 h + j × 0.44 h`
-  (j = 0, 1, 2), `y = h / 2`
-- address field: `0.42 w × 0.5 h`, centered in the bar, fully rounded, `#E4E2DD`
-- the page image starts below the bar (`top: h`), full width; the frame keeps its height, so the
-  page's bottom `h` px are clipped.
-
-(A dark bar, should one be wanted: `#2B2A2D`, separator `#1D1C1F`, field `#3D3C40`.)
 
 ### Background
 
@@ -221,6 +209,7 @@ running.
 - Every frame's left, top and width match the tables (within 1 px).
 - Long pages run off the bottom; the one-page Columns' second column runs off the top and picks
   up where the first leaves off.
-- The editorial hero is in front of the side windows.
+- The editorial hero is in front of the side pages.
+- No browser bars on any page.
 - The background shows texture and grain, not flat grey: if it is flat grey, a layer's parent is
   isolated (section 4).

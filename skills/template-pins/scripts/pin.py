@@ -39,15 +39,14 @@ EDITORIAL = {'port': dict(w=0.46, top=0.16, sideW=0.34, side=0.05, drop=0.065),
              'land': dict(w=0.38, top=0.14, sideW=0.3, side=0.08, drop=0.08)}
 
 LOOKS = {
-    'slate': dict(radius=0, bar=None, shadow=dict(blur=40, x=0, y=16, opacity=0.16, color='#26313A'),
+    'slate': dict(radius=0, shadow=dict(blur=40, x=0, y=16, opacity=0.16, color='#26313A'),
                   solid='#B7BCBF', texture=0, grain=6),
-    'concrete': dict(radius=0, bar=None, shadow=dict(blur=60, x=0, y=24, opacity=0.3, color='#1A1A1A'),
+    'concrete': dict(radius=0, shadow=dict(blur=60, x=0, y=24, opacity=0.3, color='#1A1A1A'),
                      solid='#8E8E8C', texture=70, grain=34),
-    'editorial': dict(radius=10, bar='light', shadow=dict(blur=80, x=0, y=40, opacity=0.45, color='#120D09'),
+    'editorial': dict(radius=10, shadow=dict(blur=80, x=0, y=40, opacity=0.45, color='#120D09'),
                       mesh=['#3A342E', '#5C5046', '#2B2521', '#4B4038'],
                       points=[(0.4395, 0.3558), (0.1110, 0.7084), (0.7420, 0.4013)], texture=20, grain=14),
 }
-BAR = dict(bar='#F3F2EF', line='#E2E0DB', field='#E4E2DD', dots=['#FF5F57', '#FEBC2E', '#28C840'])
 
 
 def kind(W, H):
@@ -110,30 +109,13 @@ def shadow_css(sh, u):
     return f'{main}, {amb}'
 
 
-def frame_html(q, look, u):
-    L = look
+def frame_html(q, L, u):
     box = (f"position: absolute; left: {r2(q['l'])}px; top: {r2(q['t'])}px; width: {r2(q['w'])}px; "
            f"height: {r2(q['h'])}px; border-radius: {r2(L['radius'] * u)}px; overflow: hidden; background: #FFFFFF; "
            f"box-shadow: {shadow_css(L['shadow'], u)}")
     p = q['page']
-    if not L['bar']:
-        return (f'<div style="{box}"><img src="{p["src"]}" alt="{p["alt"]}" '
-                f'style="display: block; width: 100%; height: auto"></div>')
-    w = q['w']
-    h = w * 0.036
-    line_h, dot_r, fw, fh = h * 0.045, h * 0.135, w * 0.42, h * 0.5
-    dots = ''.join(
-        f'<div style="position: absolute; left: {r2(h * 0.62 + j * h * 0.44 - dot_r)}px; top: {r2(h / 2 - dot_r)}px; '
-        f'width: {r2(dot_r * 2)}px; height: {r2(dot_r * 2)}px; border-radius: 50%; background: {c}"></div>'
-        for j, c in enumerate(BAR['dots']))
-    bar = (f'<div style="position: absolute; left: 0px; top: 0px; width: 100%; height: {r2(h)}px; background: {BAR["bar"]}">'
-           f'{dots}'
-           f'<div style="position: absolute; left: 0px; top: {r2(h - line_h)}px; width: 100%; height: {r2(line_h)}px; '
-           f'background: {BAR["line"]}"></div>'
-           f'<div style="position: absolute; left: {r2((w - fw) / 2)}px; top: {r2(h / 2 - fh / 2)}px; width: {r2(fw)}px; '
-           f'height: {r2(fh)}px; border-radius: {r2(fh / 2)}px; background: {BAR["field"]}"></div></div>')
-    return (f'<div style="{box}"><img src="{p["src"]}" alt="{p["alt"]}" style="position: absolute; left: 0px; '
-            f'top: {r2(h)}px; display: block; width: 100%; height: auto">{bar}</div>')
+    return (f'<div style="{box}"><img src="{p["src"]}" alt="{p["alt"]}" '
+            f'style="display: block; width: 100%; height: auto"></div>')
 
 
 def artboard(pin, tiles):
