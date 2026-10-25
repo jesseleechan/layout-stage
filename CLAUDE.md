@@ -81,8 +81,10 @@ stay under 4.5 MB: a capture over 4 MB as PNG is sent as WebP slices (`multipart
   one real-capture test.
 - **Sample fonts**: the samples draw text with bundled OFL fonts in `public/fonts/` (Gelasio for Georgia,
   Inter for Helvetica), loaded with the FontFace API in `lib/samples.ts` before a sample is drawn, so
-  goldens don't depend on installed fonts. Keep sample text inside the subset (Latin plus arrows). The
-  e2e browser renders text unhinted on every machine (`tests/e2e/fonts.conf` via `FONTCONFIG_FILE`).
+  goldens don't depend on installed fonts. Keep sample text inside the subset (Latin plus arrows). CI's
+  runner places glyphs a fraction of a pixel differently from this repo's cloud containers, so the
+  committed goldens come from CI (the Update goldens workflow); in a container, text-heavy goldens can
+  fail with diffs only on text edges: look at the diff PNGs and let CI judge.
 - **Refresh goldens** after an intended rendering change with `npm run test:e2e:update`, then look at
   every PNG. If CI renders differently, run the **Update goldens** workflow on the branch (Actions → Run
   workflow); it regenerates them on the runner, commits changed PNGs and starts CI.
