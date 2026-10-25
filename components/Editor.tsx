@@ -10,6 +10,7 @@ import BackgroundPanel from './BackgroundPanel';
 import StylesPanel from './StylesPanel';
 import ExportSheet from './ExportSheet';
 import CaptureDialog from './CaptureDialog';
+import { useShortcuts } from './useShortcuts';
 
 /* Three-column editor: layouts + frame left, the live canvas center, background + styles right. */
 export default function Editor() {
@@ -17,6 +18,7 @@ export default function Editor() {
   useEffect(() => {
     void init();
   }, [init]);
+  useShortcuts();
 
   return (
     <>
