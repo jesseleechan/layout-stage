@@ -95,3 +95,18 @@ test('Variations: six takes on the canvas from the pages in Media; one can go on
   await page.keyboard.press('Control+z');
   expect(await page.evaluate(() => window.__layoutStage!.store.getState().doc.count)).toBe(2);
 });
+
+test('Preview: the pin at Pinterest feed size, and the Etsy 4:3 photo as a search thumbnail', async ({ page }) => {
+  await openEditor(page);
+  await page.click('#feedBtn');
+  await expect(page.locator('#sheetTitle')).toHaveText('In the feed');
+  const pin = page.locator('#feedPin');
+  await expect(pin).toBeVisible();
+  expect(await pin.evaluate((i: HTMLImageElement) => [Math.round(i.getBoundingClientRect().width), i.naturalWidth])).toEqual([236, 472]);
+  await page.getByRole('button', { name: 'Etsy search' }).click();
+  await expect(page.locator('#feedEtsy')).toBeVisible();
+  await expect(page.locator('#feedNote')).toContainText('Etsy listing · 4:3');
+  await page.keyboard.press('Escape');
+  await expect(page.locator('#sheet')).toHaveCount(0);
+  await expect(page.locator('#feedBtn')).toBeFocused();
+});

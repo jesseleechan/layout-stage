@@ -455,6 +455,10 @@ export default function Stage() {
           <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round" aria-hidden="true"><rect x="2" y="3.5" width="12" height="9" rx="2" /><path d="M7 6.2v3.6L10 8z" fill="currentColor" /></svg>
           Video
         </button>
+        <button className="btn sm" id="feedBtn" type="button" title="See it at feed size, among other pins and listings" onClick={() => useExport.getState().openFeed('feedBtn')}>
+          <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round" aria-hidden="true"><rect x="2" y="2.5" width="5" height="7" rx="1.2" /><rect x="9" y="2.5" width="5" height="4.5" rx="1.2" /><rect x="2" y="11.5" width="5" height="2.5" rx="1" /><rect x="9" y="9" width="5" height="5" rx="1.2" /></svg>
+          Preview
+        </button>
         <span className="sep" aria-hidden="true" />
         <button className="btn sm" id="safeBtn" type="button" aria-pressed={showSafe} onClick={() => setUi({ showSafeArea: !showSafe })}>Safe area</button>
         <button className="btn sm" id="centerAllBtn" type="button" onClick={centerGroup}>Center group</button>

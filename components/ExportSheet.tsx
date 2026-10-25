@@ -17,13 +17,14 @@ import { renderPagesGrid } from '@/lib/render/pages-grid';
 import { zipBlobs } from '@/lib/zip';
 import PinTextSection from './PinText';
 import VideoBody from './VideoSheet';
+import FeedBody from './FeedPreview';
 import './export.css';
 
 export const fmtBytes = (b: number) => (b > 1048576 ? (b / 1048576).toFixed(1) + ' MB' : Math.max(1, Math.round(b / 1024)) + ' KB');
 
 type Format = UiState['exportFormat'];
-type Mode = 'single' | 'sizes' | 'etsy' | 'pages' | 'variations' | 'video';
-type MultiMode = Exclude<Mode, 'single' | 'video'>;
+type Mode = 'single' | 'sizes' | 'etsy' | 'pages' | 'variations' | 'video' | 'feed';
+type MultiMode = Exclude<Mode, 'single' | 'video' | 'feed'>;
 
 /** One file of a multi-image export. */
 export interface SheetItem {
@@ -69,6 +70,8 @@ interface ExportState {
   runVariations(returnTo?: string): Promise<void>;
   /** Opens the scrolling video sheet (components/VideoSheet.tsx). */
   openVideo(returnTo?: string): Promise<void>;
+  /** Opens the feed preview (components/FeedPreview.tsx). */
+  openFeed(returnTo?: string): void;
   /** Shows a short message inside the sheet. */
   notify(msg: string): void;
   copy(): void;
@@ -261,6 +264,11 @@ export const useExport = create<ExportState>()((set, get) => {
       clearMulti();
       set({ mode: 'video', open: true, returnTo, note: null });
     },
+    openFeed(returnTo = 'feedBtn') {
+      if (get().rendering) return;
+      clearMulti();
+      set({ mode: 'feed', open: true, returnTo, note: null });
+    },
     notify: note,
     copy() {
       const r = get().result;
@@ -392,6 +400,18 @@ function VideoSheet() {
   );
 }
 
+/** The feed preview sheet. */
+function FeedSheet() {
+  const close = useExport((s) => s.close);
+  useEffect(() => document.getElementById('sheetBack')?.focus(), []);
+  return (
+    <Sheet className="feed-sheet">
+      <Head title="In the feed" />
+      <FeedBody onClose={close} />
+    </Sheet>
+  );
+}
+
 const MULTI_COPY: Record<MultiMode, { title: string; lede: string }> = {
   sizes: { title: 'All sizes', lede: 'The same layouts and style, arranged for each size.' },
   variations: { title: 'Variations', lede: 'Takes on this canvas from the same pages: other layouts, another page in front, backgrounds from the site’s colors. Post several as fresh pins, or put one on the canvas.' },
@@ -472,5 +492,6 @@ export default function ExportSheet() {
   if (!open) return null;
   if (mode === 'single') return hasResult ? <SingleSheet /> : null;
   if (mode === 'video') return <VideoSheet />;
+  if (mode === 'feed') return <FeedSheet />;
   return <MultiSheet key={mode} mode={mode} />;
 }
