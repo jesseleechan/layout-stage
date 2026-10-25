@@ -229,17 +229,19 @@ async function serverlessChromium(pack: string, proxyUrl: string): Promise<Launc
    --disable-dev-shm-usage) Chromium keeps its shared memory, which holds raster tiles, frames and
    decoded images, as files in /tmp: 525 MB, of which the unpacked browser takes about 210 MB. When
    /tmp runs out, the single-process browser crashes (SIGTRAP); stripe.com at 1440, 2× did, on its
-   first band. Two things keep a heavy page within it: deleting the download once unpacked (above), and
-   starting the browser with part of /tmp held back. Chromium caps its discardable memory (decoded
-   images, the largest part) at half the free space in /tmp at start-up, so with all ~315 MB free it
-   would let images take what the tiles need. Started with free space held to 2 × DISCARDABLE_LIMIT, it
-   caps them at DISCARDABLE_LIMIT, about what it got with the download still there. stripe.com then peaks
-   ~30 MB short of full. Don't go lower: at a 64–96 MB cap apple.com's carousel lost images (black tiles). */
+   first band. Three things keep a heavy page within it: deleting the download once unpacked (above),
+   dropping caches between bands (PURGE_BELOW), and starting the browser with part of /tmp held back.
+   Chromium caps its discardable memory (decoded images, the largest part) at half the free space in
+   /tmp at start-up, so with all ~300 MB free it would let images take what the tiles need. Started
+   with free space held to 2 × DISCARDABLE_LIMIT, it caps them at DISCARDABLE_LIMIT, about what it got
+   with the download still there. Don't go lower: at a 64–96 MB cap apple.com's carousels lost images. */
 const DISCARDABLE_LIMIT = 128 * MB;
-/** Bands: with less than this free in /tmp, a band starts with Chromium told that memory is critical,
- *  which drops its caches (decoded images above all) so the band has room for its own; one band can take
- *  ~60 MB more than the last. Only when needed: the timing change it brings can show a lazily filled
- *  carousel item still empty (apple.com, 1 run in 3 with a purge before every band). */
+/** Bands: the first band, and any band that starts with less than this free in /tmp, start with
+ *  Chromium told that memory is critical, which drops its caches (decoded images above all) so the band
+ *  has room for its own. Waking lazy content leaves decoded images from all over the page behind (the
+ *  first band then took 160 MB more on apple.com, which crashed); later bands take up to ~60 MB more
+ *  than the last. It has a cost: the page's scripts see the pause, and apple.com's carousels then
+ *  sometimes kept an item empty (2 runs in 7), which beats a crash. */
 const PURGE_BELOW = 128 * MB;
 
 /** How much of `free` bytes in /tmp to hold back while the browser starts (see DISCARDABLE_LIMIT). */
@@ -515,9 +517,10 @@ async function run(context: BrowserContext, target: URL, input: CaptureInput, gu
 const byteLength = (bufs: Buffer[]) => bufs.reduce((n, b) => n + b.length, 0);
 
 /** Serverless: the top `shotHeight` CSS px of a tall page as viewport-tall bands, top to bottom.
- *  A full-page screenshot has Chromium rasterize far beyond the viewport, and in one process with
- *  2 GB that is what runs out: for stripe.com at 1440, 2× the single-process browser peaked at
- *  1.44–1.51 GB with full-page slices and 1.07 GB with bands (the page itself takes ~0.87 GB).
+ *  A full-page screenshot has Chromium rasterize far beyond the viewport, which needs more memory than
+ *  the serverless browser has (its shared memory lives in /tmp: see DISCARDABLE_LIMIT and PURGE_BELOW):
+ *  for stripe.com at 1440, 2× the single-process browser peaked at 1.44–1.51 GB with full-page slices
+ *  and 1.07 GB with bands (the page itself takes ~0.87 GB).
  *  The window stays scrolled to the top, as for a full-page shot; the page moves up under the
  *  viewport instead (a transform on <html>), one viewport at a time. Nothing scrolls, so nothing
  *  repeats at the seams: <html> becomes the containing block of fixed elements (a fixed header shows
@@ -535,10 +538,10 @@ async function bandShots(page: Page, width: number, shotHeight: number, log: (ms
   try {
     for (let y = 0; y < shotHeight; y += vh) {
       const h = Math.min(vh, shotHeight - y);
-      if ((await tempFree()) < PURGE_BELOW) {
+      if (bands.length === 0 || (await tempFree()) < PURGE_BELOW) {
         cdp ??= await page.context().newCDPSession(page);
         await cdp.send('Memory.simulatePressureNotification', { level: 'critical' }).catch(() => undefined);
-        log(`low on ${os.tmpdir()}: caches dropped before band ${bands.length + 1}`);
+        log(`caches dropped before band ${bands.length + 1}`);
       }
       await page.evaluate(
         async ({ y, settle, wait }) => {
