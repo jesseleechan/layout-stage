@@ -17,6 +17,7 @@ import { History } from './history';
 import { capHeight, autoCrop, groupBounds, scrollAxis } from './render/units';
 import { loadImage, pruneImages, putImage, releaseImage } from './images';
 import { loadComposition, loadStyles, saveComposition, saveStyles } from './persist';
+import { exportComposition, renderComposition } from './render/export';
 
 export interface Toast {
   id: number;
@@ -493,10 +494,10 @@ export const useEditor = create<EditorState>()((set, get) => {
   };
 });
 
-/* Test hook: lets Playwright load a fixed composition and read the store. */
+/* Test hook: lets Playwright load a fixed composition, read the store and run the export renderer. */
 declare global {
   interface Window {
-    __layoutStage?: { store: typeof useEditor };
+    __layoutStage?: { store: typeof useEditor; renderComposition: typeof renderComposition; exportComposition: typeof exportComposition };
   }
 }
-if (typeof window !== 'undefined') window.__layoutStage = { store: useEditor };
+if (typeof window !== 'undefined') window.__layoutStage = { store: useEditor, renderComposition, exportComposition };
