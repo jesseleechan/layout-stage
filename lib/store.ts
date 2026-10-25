@@ -21,6 +21,7 @@ import { exportComposition, renderComposition } from './render/export';
 import { alignLayouts, canAlign, distributeLayouts, type AlignEdge } from './align';
 import { nextSiteBackground, paletteOf } from './palette';
 import { dropSlot, reframe } from './capture/recapture';
+import { patchOverlay, type OverlayKey, type Overlays } from './overlays';
 
 export interface Toast {
   id: number;
@@ -153,6 +154,14 @@ export interface EditorState {
    *  When that layout is gone (or there is none) it uses the drop-elsewhere rule, never on the layout
    *  showing `avoidId`. Resolves to the new image id, or null when the image couldn't be read. */
   landCapture(img: NewImage, at: { targetId: string | null; keepFraming?: boolean; avoidId?: string | null }): Promise<string | null>;
+
+  /* --- overlays: headline, badge, watermark (lib/overlays.ts) --- */
+  /** Live: changes an overlay (typing, sliders) without saving a step. Commit on release / pause. */
+  editOverlay<K extends OverlayKey>(key: K, patch: Partial<Overlays[K]>): void;
+  /** Discrete: changes an overlay and saves one step (toggles, presets, fonts). */
+  setOverlay<K extends OverlayKey>(key: K, patch: Partial<Overlays[K]>): void;
+  /** Stores a logo and makes it the watermark: one step once it has loaded. */
+  setWatermarkLogo(file: File): Promise<void>;
 }
 
 const NOT_IMAGE = 'That file isn’t an image. Use PNG, JPG or WebP.';
@@ -169,12 +178,15 @@ let initStarted = false;
 export function shownIds(d: Composition): Set<string> {
   const ids = new Set(d.slots.slice(0, d.count).map((s) => s.imageId));
   if (d.background.type === 'image' && d.background.imageId) ids.add(d.background.imageId);
+  const wm = d.overlays?.watermark;
+  if (wm?.enabled && wm.kind === 'logo' && wm.imageId) ids.add(wm.imageId);
   return ids;
 }
 
 function referencedIds(d: Composition): Set<string> {
   const ids = new Set(d.slots.map((s) => s.imageId));
   if (d.background.imageId) ids.add(d.background.imageId);
+  if (d.overlays?.watermark.imageId) ids.add(d.overlays.watermark.imageId);
   return ids;
 }
 
@@ -613,6 +625,24 @@ export const useEditor = create<EditorState>()((set, get) => {
       if (!keep) setUi({ selected: i });
       releaseUnused([old]);
       return get().doc.slots[i].imageId;
+    },
+
+    /* --- overlays: headline, badge, watermark (lib/overlays.ts) --- */
+    editOverlay(key, patch) {
+      edit((d) => patchOverlay(d, key, patch));
+    },
+    setOverlay(key, patch) {
+      change((d) => patchOverlay(d, key, patch));
+      const w = get().doc.overlays?.watermark;
+      if (key === 'watermark' && ('enabled' in patch || 'kind' in patch) && w?.enabled && w.kind === 'logo' && !w.imageId) toast('Upload a logo, or switch to text.');
+    },
+    async setWatermarkLogo(file) {
+      if (!isImageFile(file)) { toast(NOT_IMAGE); return; }
+      const got = await ingestImage(file);
+      if (!got) { toast(`Couldn’t read ${file.name}.`); return; }
+      const old = get().doc.overlays?.watermark.imageId ?? null;
+      step((d) => patchOverlay(d, 'watermark', { enabled: true, kind: 'logo', imageId: got.id, imageName: file.name, nw: got.nw, nh: got.nh }));
+      releaseUnused([old]);
     },
   };
 });

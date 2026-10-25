@@ -29,6 +29,9 @@ npx playwright install chromium          # once per machine, for URL capture and
 - `lib/store.ts` Zustand store (single source of truth) + actions; `lib/history.ts` 80-step undo
 - `lib/render/` units/geometry, background, shot, export — shared by preview and export
 - `lib/images.ts` image blobs in IndexedDB + object URLs; `lib/persist.ts` autosave + saved styles
+- `lib/overlays.ts` headline / badge / watermark model, fonts and sanitizer; `lib/render/overlay-layout.ts`
+  (pure, scale-free text layout), `lib/render/overlays.ts` (`drawOverlays`, the one drawing function for
+  the preview's overlay canvas and the export), `lib/render/overlay-fonts.ts` (FontFace loading, measure)
 - `lib/arrange.ts`, `lib/snap.ts` (incl. safe-area targets), `lib/align.ts` (align/distribute),
   `lib/scroll.ts` (moving a crop's visible window), `lib/samples.ts`
 - `lib/capture/` URL capture: `server.ts` (Playwright, the only file to touch when swapping the

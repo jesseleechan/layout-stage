@@ -8,6 +8,7 @@ import FramePanel from './FramePanel';
 import Stage from './Stage';
 import BackgroundPanel from './BackgroundPanel';
 import StylesPanel from './StylesPanel';
+import OverlaysPanel from './OverlaysPanel';
 import ExportSheet from './ExportSheet';
 import CaptureDialog from './CaptureDialog';
 import { useShortcuts } from './useShortcuts';
@@ -33,6 +34,7 @@ export default function Editor() {
           <Stage />
           <aside className="panel" id="rightPanel" aria-label="Background and styles">
             <BackgroundPanel />
+            <OverlaysPanel />
             <StylesPanel />
           </aside>
         </main>

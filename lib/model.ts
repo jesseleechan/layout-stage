@@ -1,4 +1,5 @@
 /* Types, defaults, canvas presets and built-in styles. Every number here comes from reference/layout-stage.html. */
+import type { Overlays } from './overlays';
 
 export type PresetId = 'pin' | 'etsy43' | 'etsy11' | 'p45' | 'custom';
 export type CropId = 'full' | '16:10' | '4:3' | '1:1' | '4:5' | '9:16';
@@ -72,6 +73,8 @@ export interface Composition {
   order: number[]; // z-order bottom → top, all 3 indices
   frame: Frame;
   background: Background;
+  /** Headline, badge and watermark above the layouts (lib/overlays.ts). Absent: none. */
+  overlays?: Overlays;
 }
 
 /** A style is a frame plus a background, never the images. Built-ins only name the background
