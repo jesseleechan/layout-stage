@@ -33,6 +33,18 @@ beforeEach(() => {
 });
 
 describe('overlay actions', () => {
+  it('hideOverlays turns everything off in one step, and does nothing when nothing is on', () => {
+    S().hideOverlays();
+    expect(S().canUndo).toBe(false);
+    S().setOverlay('headline', { enabled: true });
+    S().setOverlay('badge', { enabled: true });
+    S().hideOverlays();
+    expect([o().headline.enabled, o().badge.enabled, o().watermark.enabled]).toEqual([false, false, false]);
+    expect(o().headline.text).toBe('A calm Shopify theme for small brands'); // the settings stay
+    S().undo();
+    expect(o().badge.enabled).toBe(true);
+  });
+
   it('a switch is one undo step', () => {
     S().setOverlay('headline', { enabled: true });
     expect(o().headline.enabled).toBe(true);

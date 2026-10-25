@@ -6,7 +6,7 @@ import type { Slot } from './model';
 import { coverSource, cropRatio, scrollAxis } from './render/units';
 
 /** What the scroll math reads from a slot. */
-export type ScrollSlot = Pick<Slot, 'crop' | 'nw' | 'nh' | 'w' | 'fx' | 'fy'>;
+export type ScrollSlot = Pick<Slot, 'crop' | 'ar' | 'nw' | 'nh' | 'w' | 'fx' | 'fy'>;
 
 const clampPct = (v: number) => Math.max(0, Math.min(100, v));
 const round2 = (v: number) => Math.round(v * 100) / 100;

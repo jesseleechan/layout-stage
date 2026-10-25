@@ -87,6 +87,12 @@ export function sanitizeComposition(raw: unknown): Composition | null {
   delete (out.frame as { bar?: unknown }).bar;
   const tex = Number(out.background.texture);
   out.background.texture = Number.isFinite(tex) ? Math.max(0, Math.min(100, tex)) : 0;
+  // A free height keeps a usable ratio (else it shows the whole page); other crops carry none.
+  for (const s of out.slots) {
+    const ar = Number(s.ar);
+    if (s.crop === 'custom' && !(Number.isFinite(ar) && ar >= 0.02 && ar <= 50)) s.crop = 'full';
+    if (s.crop !== 'custom') delete s.ar;
+  }
   // Capture options added later (dark mode, hide elements): defaults for captures saved before them.
   for (const s of [...out.slots, ...(out.media ?? [])]) {
     const o = s.source?.kind === 'url' ? s.source.options : null;

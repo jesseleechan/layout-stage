@@ -255,22 +255,6 @@ input[type=color]::-moz-color-swatch { border: 0; border-radius: 5px; }
 .bgimg-text { display: grid; gap: 2px; min-width: 0; }
 .bgimg-text strong { font-size: 12.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
-/* styles */
-.styles { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px 6px; }
-.style-tile { position: relative; min-width: 0; }
-.style-pick {
-  width: 100%; border: 0; background: none; padding: 0; cursor: pointer; display: grid; gap: 5px;
-  justify-items: center; color: var(--ink-2);
-}
-.style-pick img { width: 100%; aspect-ratio: 1.25; border-radius: 11px; display: block; object-fit: cover; box-shadow: var(--lift-sm); }
-.style-pick:hover img { box-shadow: 0 0 0 1px var(--line-strong); }
-.style-pick[aria-pressed="true"] img { box-shadow: 0 0 0 2px var(--pick); }
-.style-pick span { font-size: 11px; font-weight: 500; max-width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.style-del {
-  position: absolute; top: 4px; right: 4px; width: 20px; height: 20px; border-radius: 6px; border: 0;
-  background: rgba(15, 17, 25, .62); color: #FFFFFF; cursor: pointer; font-size: 13px; line-height: 1; padding: 0;
-}
-
 /* ---------- board ---------- */
 .board { position: relative; display: flex; flex-direction: column; min-height: 0; min-width: 0; }
 /* The canvas sits on the workspace itself; the toolbar floats under it. */
@@ -308,6 +292,12 @@ input[type=color]::-moz-color-swatch { border: 0; border-radius: 5px; }
   background: var(--paper); border: 2px solid var(--accent); pointer-events: auto; cursor: nwse-resize; touch-action: none;
 }
 .handle::before { content: ""; position: absolute; inset: -10px; }
+/* The bottom edge's handle: drags the layout's height (a free-height crop). */
+.handle-h {
+  position: absolute; left: 50%; bottom: -5px; width: 28px; height: 9px; margin-left: -14px; border-radius: 5px;
+  background: var(--paper); border: 2px solid var(--accent); pointer-events: auto; cursor: ns-resize; touch-action: none;
+}
+.handle-h::before { content: ""; position: absolute; inset: -9px -6px; }
 .droptint {
   position: absolute; inset: 12px; border: 2px dashed var(--accent); border-radius: 14px;
   background: var(--accent-soft); display: grid; place-items: center; pointer-events: none; z-index: 5;
@@ -386,6 +376,8 @@ input[type=color]::-moz-color-swatch { border: 0; border-radius: 5px; }
 a.btn { text-decoration: none; }
 /* Keyboard focus on a layout: the stage is scaled down, so the ring is drawn on the unscaled overlay. */
 .shot:focus-visible { outline: none; }
+/* The preview's overlay layer (components/OverlayCanvas.tsx): over the stage, never takes clicks. */
+.ov-canvas { position: absolute; left: 0; top: 0; width: 100%; height: 100%; display: block; pointer-events: none; }
 .focus-ring { position: absolute; outline: 2px solid var(--accent); outline-offset: 4px; border-radius: 3px; }
 .drop-ring { background: var(--accent-soft); outline-offset: 0; }
 /* URL capture in progress for a layout. */

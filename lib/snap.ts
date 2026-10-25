@@ -46,3 +46,20 @@ export function snap(doc: Composition, i: number, cx: number, cy: number, thresh
   }
   return { cx, cy, gx, gy };
 }
+
+/** Snapping the bottom edge of layout i while its height is dragged: to the canvas's bottom edge and
+ *  center line, the other visible layouts' edges and centers and, while it's shown, the safe area's
+ *  bottom and center line. Returns the edge and the guide, if it snapped. */
+export function snapBottom(doc: Composition, i: number, y: number, threshold: number, enabled = true, safe: Rect | null = null): { y: number; gy: number | null } {
+  if (!enabled) return { y, gy: null };
+  const ty = [doc.H, doc.H / 2];
+  if (safe) ty.push(safe.t + safe.h / 2, safe.t + safe.h);
+  for (let j = 0; j < doc.count; j++) {
+    if (j === i) continue;
+    const r = rectOf(doc.slots[j]);
+    ty.push(r.t, r.t + r.h / 2, r.t + r.h);
+  }
+  let best = threshold, gy: number | null = null;
+  for (const t of ty) if (Math.abs(t - y) < best) { best = Math.abs(t - y); gy = t; }
+  return { y: gy ?? y, gy };
+}

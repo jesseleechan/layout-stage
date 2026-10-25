@@ -230,6 +230,7 @@ export function applyArrangement(doc: Composition, a: Arrangement, measure?: Mea
   for (let i = 0; i < doc.count; i++) {
     const s = doc.slots[i];
     s.crop = a === 'showcase' ? showcaseCrop : autoCrop(s.nw, s.nh);
+    delete s.ar;
   }
   arrange(doc, doc.count, measure);
 }
@@ -239,6 +240,7 @@ export function applyArrangement(doc: Composition, a: Arrangement, measure?: Mea
 export function showFirstPage(doc: Composition, i: number): void {
   const { imageId, name, source, nw, nh } = doc.slots[0];
   Object.assign(doc.slots[i], { imageId, name, source: clone(source), nw, nh, fx: 50, fy: 0, crop: showcaseCrop });
+  delete doc.slots[i].ar;
 }
 
 /** The first-run canvas: a Pinterest pin with two sample sites as showcase columns, in the Blush

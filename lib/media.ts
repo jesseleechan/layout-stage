@@ -3,6 +3,7 @@
    media picker). The gallery is part of the canvas: it autosaves, syncs with the project and undoes
    with everything else. Pure: the store calls these inside its recipes. */
 import { arrangementOf, showcaseCrop } from './arrange';
+import { setCropOf } from './crop';
 import { clone, isSampleId, type Composition, type MediaItem, type Slot } from './model';
 import { autoCrop, capHeight, cropRatio } from './render/units';
 
@@ -97,10 +98,10 @@ export function putImage(d: Composition, i: number, item: MediaItem): void {
   const top = s.cy - s.w / cropRatio(s) / 2;
   Object.assign(s, { imageId: item.imageId, name: item.name, source: clone(item.source), nw: item.nw, nh: item.nh, fx: 50, fy: 0 });
   if (arrangementOf(d) === 'showcase') {
-    s.crop = showcaseCrop;
+    setCropOf(s, showcaseCrop);
     s.cy = top + s.w / cropRatio(s) / 2;
   } else {
-    s.crop = autoCrop(item.nw, item.nh);
+    setCropOf(s, autoCrop(item.nw, item.nh));
     capHeight(s, d.H);
   }
 }

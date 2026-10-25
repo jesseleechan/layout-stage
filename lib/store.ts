@@ -23,7 +23,8 @@ import { exportComposition, renderComposition } from './render/export';
 import { alignLayouts, canAlign, distributeLayouts, type AlignEdge } from './align';
 import { nextSiteBackground, paletteOf } from './palette';
 import { dropSlot, reframe } from './capture/recapture';
-import { patchOverlay, type OverlayKey, type Overlays } from './overlays';
+import { anyOverlay, patchOverlay, type OverlayKey, type Overlays } from './overlays';
+import { setCropOf, setHeight as setSlotHeight } from './crop';
 import { addMedia, keepShownInMedia, MAX_MEDIA, mediaOf, putImage, removeMedia, replaceMedia, slotFor } from './media';
 import { PIN_LIMITS, type PinField } from './pin-text';
 
@@ -103,6 +104,9 @@ export interface EditorState {
   /** Arrow-key nudge of the selected layout; saves a step after 350 ms idle. */
   nudge(dx: number, dy: number): void;
   setCrop(i: number, crop: CropId): void;
+  /** Live: the layout's height at its width (a free-height crop, lib/crop.ts), keeping its top edge.
+   *  `snapRatio` (default on) turns a height near Full or a preset into that crop. Commit on release. */
+  setHeight(i: number, h: number, snapRatio?: boolean): void;
   /** Live: moves the Scroll (y) or Pan (x) position of a cropped image. Commit on release. */
   setScroll(i: number, v: number): void;
   /** Live: slot width. Commit on release. */
@@ -176,6 +180,8 @@ export interface EditorState {
   /* --- overlays: headline, badge, watermark (lib/overlays.ts) --- */
   /** Live: changes an overlay (typing, sliders) without saving a step. Commit on release / pause. */
   editOverlay<K extends OverlayKey>(key: K, patch: Partial<Overlays[K]>): void;
+  /** Turns every overlay off in one step (canvases from when the editor had a Text & logo panel). */
+  hideOverlays(): void;
   /** Discrete: changes an overlay and saves one step (toggles, presets, fonts). */
   setOverlay<K extends OverlayKey>(key: K, patch: Partial<Overlays[K]>): void;
   /** Stores a logo and makes it the watermark: one step once it has loaded. */
@@ -406,7 +412,7 @@ export const useEditor = create<EditorState>()((set, get) => {
       if (n === get().doc.count) return;
       change((d) => {
         // Layouts coming into view take the showcase crop.
-        if (arrangementOf(d) === 'showcase') d.slots.forEach((s, i) => { if (i >= d.count && i < n) s.crop = showcaseCrop; });
+        if (arrangementOf(d) === 'showcase') d.slots.forEach((s, i) => { if (i >= d.count && i < n) setCropOf(s, showcaseCrop); });
         d.count = n;
         arrange(d, n, pageMeasure());
         keepShownInMedia(d);
@@ -484,7 +490,7 @@ export const useEditor = create<EditorState>()((set, get) => {
       change((d) => {
         const s = d.slots[i];
         const top = topOf(s);
-        s.crop = crop;
+        setCropOf(s, crop);
         // Showcase pages may run off the canvas: the layout keeps its width and top edge.
         if (arrangementOf(d) === 'showcase') keepTop(s, top);
         else capHeight(s, d.H);
@@ -496,6 +502,9 @@ export const useEditor = create<EditorState>()((set, get) => {
         if (scrollAxis(s) === 'y') s.fy = v;
         else s.fx = v;
       });
+    },
+    setHeight(i, h, snapRatio = true) {
+      edit((d) => { setSlotHeight(d.slots[i], h, snapRatio); });
     },
     setWidth(i, w) {
       edit((d) => { d.slots[i].w = w; });
@@ -728,6 +737,13 @@ export const useEditor = create<EditorState>()((set, get) => {
     /* --- overlays: headline, badge, watermark (lib/overlays.ts) --- */
     editOverlay(key, patch) {
       edit((d) => patchOverlay(d, key, patch));
+    },
+    hideOverlays() {
+      if (!anyOverlay(get().doc)) return;
+      change((d) => {
+        if (!d.overlays) return;
+        for (const o of Object.values(d.overlays)) o.enabled = false;
+      });
     },
     setOverlay(key, patch) {
       change((d) => patchOverlay(d, key, patch));

@@ -6,7 +6,7 @@ import { clampRadius, rectOf, safeArea, scrollAxis, shadowCSS, unit } from '@/li
 import { drawBackground } from '@/lib/render/background';
 import { useImageUrl, useLoadedImage } from '@/lib/images';
 import { MEDIA_DRAG } from '@/lib/media';
-import { snap, snapThreshold } from '@/lib/snap';
+import { snap, snapBottom, snapThreshold } from '@/lib/snap';
 import { scrollAfterMove, scrollValue } from '@/lib/scroll';
 import { useExport } from './ExportSheet';
 import OverlayCanvas from './OverlayCanvas';
@@ -21,6 +21,7 @@ const BG_MAX_PX = 4.5e6; // preview background resolution cap
 type Drag =
   | { mode: 'move'; i: number; id: number; sx: number; sy: number; cx0: number; cy0: number; moved: boolean }
   | { mode: 'resize'; i: number; id: number; l: number; t: number; ar: number; moved: boolean }
+  | { mode: 'height'; i: number; id: number; t: number; moved: boolean }
   | { mode: 'scroll'; i: number; id: number; sx: number; sy: number; f0: number; axis: 'x' | 'y'; moved: boolean };
 
 /** Alt+wheel over the selected layout scrolls its crop; one undo step after this much idle. */
@@ -166,7 +167,7 @@ export default function Stage() {
     return () => cancelAnimationFrame(raf);
   }, [bgKey, W, H, scale, bgImage, hydrated]);
 
-  /* ---------- drag to move, corner handle to resize ---------- */
+  /* ---------- drag to move, corner handle to resize, bottom handle for the height ---------- */
   useEffect(() => {
     const move = (e: globalThis.PointerEvent) => {
       const d = drag.current;
@@ -187,6 +188,16 @@ export default function Stage() {
         // The page follows the pointer: dragging up reveals lower content.
         const dpx = (d.axis === 'y' ? e.clientY - d.sy : e.clientX - d.sx) / k;
         st.setScroll(d.i, scrollAfterMove(st.doc.slots[d.i], d.f0, dpx));
+        d.moved = true;
+      } else if (d.mode === 'height') {
+        const wrap = wrapRef.current;
+        if (!wrap) return;
+        // The bottom edge follows the pointer and snaps to the canvas, the safe area and the other
+        // layouts; unsnapped, a height near Full or a preset takes that crop. Alt: no snapping.
+        const safe = st.ui.showSafeArea ? safeArea(PRESETS[st.doc.preset].safe, st.doc.W, st.doc.H) : null;
+        const sn = snapBottom(st.doc, d.i, (e.clientY - wrap.getBoundingClientRect().top) / k, snapThreshold(k), !e.altKey, safe);
+        st.setHeight(d.i, sn.y - d.t, !e.altKey && sn.gy == null);
+        st.setGuides(null, sn.gy);
         d.moved = true;
       } else {
         const wrap = wrapRef.current;
@@ -311,6 +322,16 @@ export default function Stage() {
     setFocusRing(null);
   };
 
+  const onHeightDown = (e: PointerEvent<HTMLSpanElement>) => {
+    const st = useEditor.getState();
+    const i = st.ui.selected;
+    if (i == null) return;
+    drag.current = { mode: 'height', i, id: e.pointerId, t: rectOf(st.doc.slots[i]).t, moved: false };
+    e.currentTarget.setPointerCapture(e.pointerId);
+    e.preventDefault();
+    e.stopPropagation();
+  };
+
   const onHandleDown = (e: PointerEvent<HTMLSpanElement>) => {
     const st = useEditor.getState();
     const i = st.ui.selected;
@@ -413,6 +434,7 @@ export default function Stage() {
               <span className="sel-tag" id="selTag">
                 {selRect && sel != null ? `Layout ${sel + 1} · ${Math.round(selRect.w)} × ${Math.round(selRect.h)}` : ''}
               </span>
+              <span className="handle-h" id="heightHandle" title="Drag to change the height" onPointerDown={onHeightDown} />
               <span className="handle" id="handle" title="Drag to resize" onPointerDown={onHandleDown} />
             </div>
             {capturing.map((j) => {
