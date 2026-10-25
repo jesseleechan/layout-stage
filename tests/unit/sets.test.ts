@@ -7,6 +7,7 @@ import { cropRatio, groupBounds, rectOf } from '@/lib/render/units';
 import {
   allSizes, closeUp, desktopAndPhone, etsySet, forPreset, isPhone, isWide, mainSlot, sectionStops, setFileName,
 } from '@/lib/sets';
+import { classicComposition } from './helpers';
 
 /** A phone screenshot upload (auto-crop gives Full). */
 const phoneShot = (patch: Partial<Slot> = {}): Slot => ({
@@ -15,7 +16,7 @@ const phoneShot = (patch: Partial<Slot> = {}): Slot => ({
 
 /** The default pin, with three layouts and a scrolled, re-cropped slot 1. */
 function threeUp(): Composition {
-  const d = defaultComposition();
+  const d = classicComposition();
   d.count = 3;
   arrange(d);
   d.slots[1].fy = 40;
@@ -138,7 +139,7 @@ describe('a headline on the new canvas', () => {
 
 describe('allSizes', () => {
   it('gives a pin, Etsy 4:3 and Etsy square, each at its default export scale', () => {
-    const items = allSizes(defaultComposition());
+    const items = allSizes(classicComposition());
     expect(items.map((i) => [i.key, i.doc.W, i.doc.H, i.scale])).toEqual([
       ['pin', 1000, 1500, 2],
       ['etsy43', 3000, 2250, 1],
@@ -151,7 +152,7 @@ describe('allSizes', () => {
 
 describe('layout shapes', () => {
   it('tells phones from desktop pages', () => {
-    const d = defaultComposition();
+    const d = classicComposition();
     expect(isWide(d.slots[0])).toBe(true); // a sample at 16:10
     expect(isPhone(d.slots[0])).toBe(false);
     expect(isPhone(phoneShot())).toBe(true);
@@ -168,7 +169,7 @@ describe('layout shapes', () => {
   });
 
   it('the main layout is the first one that is not a phone', () => {
-    const d = defaultComposition();
+    const d = classicComposition();
     expect(mainSlot(d)).toBe(0);
     d.slots[0] = phoneShot();
     expect(mainSlot(d)).toBe(1);
@@ -178,7 +179,7 @@ describe('layout shapes', () => {
 });
 
 describe('sectionStops', () => {
-  const sample = defaultComposition().slots[0]; // 1440 × 2560 at 16:10: the page is 2.8 windows tall
+  const sample = classicComposition().slots[0]; // 1440 × 2560 at 16:10: the page is 2.8 windows tall
 
   it('three stops spread down a long page', () => {
     expect(sectionStops(sample)).toEqual([0, 50, 100]);
@@ -216,7 +217,7 @@ describe('closeUp and desktopAndPhone', () => {
   });
 
   it('desktop + phone: phone in front, overlapping the desktop, the pair centered', () => {
-    const src = defaultComposition();
+    const src = classicComposition();
     src.slots[1] = phoneShot();
     const d = desktopAndPhone(src, 0, 1);
     expect(d.count).toBe(2);
@@ -236,7 +237,7 @@ describe('closeUp and desktopAndPhone', () => {
 
 describe('etsySet', () => {
   it('hero, three sections and a palette for the default canvas', () => {
-    const items = etsySet(defaultComposition());
+    const items = etsySet(classicComposition());
     expect(items.map((i) => i.key)).toEqual(['hero', 'top', 'middle', 'bottom', 'palette']);
     expect(items.map((i) => i.label)).toEqual(['Hero', 'Top section', 'Middle section', 'Bottom section', 'Palette']);
     items.forEach((i) => expect([i.doc.preset, i.doc.W, i.doc.H]).toEqual(['etsy43', 3000, 2250]));
@@ -248,7 +249,7 @@ describe('etsySet', () => {
   });
 
   it('adds desktop + phone when the canvas has both', () => {
-    const d = defaultComposition();
+    const d = classicComposition();
     d.slots[1] = phoneShot();
     const items = etsySet(d);
     expect(items.map((i) => i.key)).toEqual(['hero', 'top', 'middle', 'bottom', 'desktop-phone', 'palette']);
@@ -256,17 +257,28 @@ describe('etsySet', () => {
   });
 
   it('skips sections when the main layout shows the whole image', () => {
-    const d = defaultComposition();
+    const d = classicComposition();
     Object.assign(d.slots[0], { nw: 2880, nh: 1800, crop: 'full' }); // a first-screen capture
     expect(etsySet(d).map((i) => i.key)).toEqual(['hero', 'palette']);
     // A tall page shown Full is phone-shaped, so the next layout becomes the main one.
-    const e = defaultComposition();
+    const e = classicComposition();
     e.slots[0].crop = 'full';
     expect(mainSlot(e)).toBe(1);
   });
 
+  it('reads showcase pages through the crop a new image gets: close-ups and desktop + phone still come', () => {
+    const d = defaultComposition(); // showcase: whole pages
+    d.slots[0] = { ...d.slots[0], nh: 7680 };
+    d.slots[1] = phoneShot({ nw: 780, nh: 8000, source: { kind: 'url', url: 'https://x.test', capturedAt: '', options: { ...DEFAULT_CAPTURE, width: 390 } } });
+    const items = etsySet(d);
+    expect(items.map((i) => i.key)).toEqual(['hero', 'top', 'middle', 'bottom', 'desktop-phone', 'palette']);
+    expect(items[1].doc.slots[0].crop).toBe('16:10');
+    // The hero keeps the canvas's own look: whole pages.
+    expect(items[0].doc.slots[0].crop).toBe('full');
+  });
+
   it('uses only visible layouts', () => {
-    const d = defaultComposition();
+    const d = classicComposition();
     d.count = 1;
     d.slots[1] = phoneShot();
     expect(etsySet(d).map((i) => i.key)).not.toContain('desktop-phone');

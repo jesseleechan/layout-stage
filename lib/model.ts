@@ -65,13 +65,36 @@ export interface Background {
   grain: number; // 0–40
 }
 
+/** How arrange() starts the layouts (lib/arrange.ts). 'showcase': the pin looks, whole pages running
+ *  off the canvas (1: one long page; 2: two columns; 3: a hero window in front of two others).
+ *  'classic': the prototype's cascades. */
+export type Arrangement = 'showcase' | 'classic';
+
+export interface Placement {
+  cx: number;
+  cy: number;
+  w: number;
+}
+
+/** Where the layouts were on one canvas size (lib/canvas-size.ts). */
+export interface SizePlacement {
+  count: 1 | 2 | 3;
+  arrangement: Arrangement;
+  slots: [Placement, Placement, Placement];
+  order: number[];
+}
+
 export interface Composition {
   preset: PresetId;
   W: number;
   H: number;
   count: 1 | 2 | 3;
+  /** Absent: 'classic' (canvases saved before arrangements existed). */
+  arrangement?: Arrangement;
   slots: [Slot, Slot, Slot]; // only the first `count` are shown
   order: number[]; // z-order bottom → top, all 3 indices
+  /** The placements left behind on other canvas sizes, by `${W}x${H}`, so switching back restores them. */
+  placements?: Record<string, SizePlacement>;
   frame: Frame;
   background: Background;
   /** Headline, badge and watermark above the layouts (lib/overlays.ts). Absent: none. */

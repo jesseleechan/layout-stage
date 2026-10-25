@@ -1,9 +1,10 @@
 /* Scrolling video: which layout scrolls, the frame size, the H.264 level, and where the page is on
-   every frame. Pure, so the timing is exact and testable; lib/video/render.ts draws the frames with
-   the shared renderers in lib/render/. */
+   every frame. A cropped page scrolls inside its frame; a whole page that runs off the bottom of the
+   canvas (the showcase arrangements) slides up through it instead. Pure, so the timing is exact and
+   testable; lib/video/render.ts draws the frames with the shared renderers in lib/render/. */
 import { PRESETS, type Composition, type Slot } from '../model';
 import { hiddenSpan, scrollWindow } from '../scroll';
-import { scrollAxis } from '../render/units';
+import { rectOf, scrollAxis } from '../render/units';
 
 export const VIDEO_FPS = 30;
 export const VIDEO_SECONDS = { min: 6, max: 15, default: 10 };
@@ -27,18 +28,32 @@ export interface VideoSettings {
 
 /* ---------------- which layout ---------------- */
 
-/** Whether a layout's crop hides part of its page, so there is something to scroll. */
-export function canScroll(s: Pick<Slot, 'crop' | 'nw' | 'nh' | 'w' | 'fx' | 'fy'>): boolean {
-  return scrollAxis(s) != null && hiddenSpan(s) >= 1;
+type VideoSlot = Pick<Slot, 'crop' | 'nw' | 'nh' | 'w' | 'fx' | 'fy' | 'cx' | 'cy'>;
+
+/** How far a whole page that runs off the bottom of an H tall canvas slides up, in canvas px: until
+ *  its bottom edge is as far from the canvas bottom as its top edge is from the top. 0 for a cropped
+ *  page (it scrolls inside its frame), and for one that starts above the canvas or ends on it. */
+export function slideSpan(s: VideoSlot, H: number): number {
+  if (scrollAxis(s)) return 0;
+  const r = rectOf(s as Slot);
+  if (r.t < 0 || r.t + r.h <= H) return 0;
+  return r.t + r.h - (H - r.t);
+}
+
+/** Whether there is something to scroll: a crop that hides part of its page, or (given the canvas
+ *  height) a whole page that runs off the bottom of the canvas. */
+export function canScroll(s: VideoSlot, H?: number): boolean {
+  if (scrollAxis(s) != null) return hiddenSpan(s) >= 1;
+  return H != null && slideSpan(s, H) >= 1;
 }
 
 /** The visible layouts that can scroll. */
-export function scrollableSlots(doc: Pick<Composition, 'slots' | 'count'>): number[] {
-  return doc.slots.slice(0, doc.count).flatMap((s, i) => (canScroll(s) ? [i] : []));
+export function scrollableSlots(doc: Pick<Composition, 'slots' | 'count' | 'H'>): number[] {
+  return doc.slots.slice(0, doc.count).flatMap((s, i) => (canScroll(s, doc.H) ? [i] : []));
 }
 
 /** The selected layout if it can scroll, else the first that can, else null. */
-export function defaultScrollSlot(doc: Pick<Composition, 'slots' | 'count'>, selected: number | null): number | null {
+export function defaultScrollSlot(doc: Pick<Composition, 'slots' | 'count' | 'H'>, selected: number | null): number | null {
   const ok = scrollableSlots(doc);
   if (selected != null && ok.includes(selected)) return selected;
   return ok.length ? ok[0] : null;
@@ -149,15 +164,23 @@ export function scrollAtFrame(plan: FramePlan, i: number): number {
   return 100 * ease(plan.easing, p, plan.steps);
 }
 
-/** The frame plan for a slot (screen-by-screen steps depend on how much of the page shows). */
-export function framePlanFor(s: Pick<Slot, 'crop' | 'nw' | 'nh' | 'w' | 'fx' | 'fy'>, settings: Pick<VideoSettings, 'seconds' | 'hold' | 'easing'>, fps = VIDEO_FPS): FramePlan {
+/** The frame plan for a slot (screen-by-screen steps depend on how much of the page shows; for a
+ *  sliding page, the part on an H tall canvas). */
+export function framePlanFor(s: VideoSlot, settings: Pick<VideoSettings, 'seconds' | 'hold' | 'easing'>, fps = VIDEO_FPS, H?: number): FramePlan {
+  if (!scrollAxis(s) && H != null && slideSpan(s, H) > 0) {
+    const r = rectOf(s as Slot);
+    return framePlan(settings, (H - r.t) / r.h, fps);
+  }
   return framePlan(settings, scrollWindow(s).size, fps);
 }
 
-/** The slot as it is on frame i: fy (Scroll) or fx (Pan) moves, nothing else. */
-export function slotAtFrame<S extends Pick<Slot, 'crop' | 'nw' | 'nh' | 'fx' | 'fy'>>(s: S, plan: FramePlan, i: number): S {
+/** The slot as it is on frame i: fy (Scroll) or fx (Pan) moves, or, for a whole page sliding through
+ *  an H tall canvas, its center; nothing else. */
+export function slotAtFrame<S extends VideoSlot>(s: S, plan: FramePlan, i: number, H?: number): S {
   const v = scrollAtFrame(plan, i);
-  return scrollAxis(s) === 'x' ? { ...s, fx: v } : { ...s, fy: v };
+  const axis = scrollAxis(s);
+  if (!axis && H != null) return { ...s, cy: s.cy - (slideSpan(s, H) * v) / 100 };
+  return axis === 'x' ? { ...s, fx: v } : { ...s, fy: v };
 }
 
 /* ---------------- file ---------------- */

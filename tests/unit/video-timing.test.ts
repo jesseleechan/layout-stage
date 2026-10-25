@@ -3,11 +3,13 @@
 import { describe, expect, it } from 'vitest';
 import { defaultComposition } from '@/lib/arrange';
 import { clone, sampleSlot, type Slot } from '@/lib/model';
+import { rectOf } from '@/lib/render/units';
 import {
   avcCodecs, avcLevels, canScroll, clampHold, defaultScrollSlot, ease, framePlan, framePlanFor, frameCount, isKeyFrame,
-  scrollableSlots, scrollAtFrame, slotAtFrame, stepCount, VIDEO_FPS, VIDEO_SIZES, videoBitrate, videoFileName, videoSize,
+  scrollableSlots, scrollAtFrame, slideSpan, slotAtFrame, stepCount, VIDEO_FPS, VIDEO_SIZES, videoBitrate, videoFileName, videoSize,
   type VideoEasing,
 } from '@/lib/video/timing';
+import { classicComposition } from './helpers';
 
 const EASINGS: VideoEasing[] = ['smooth', 'linear', 'steps'];
 const positions = (plan: ReturnType<typeof framePlan>) => Array.from({ length: plan.frames }, (_, i) => scrollAtFrame(plan, i));
@@ -90,7 +92,7 @@ describe('frame plan', () => {
 
 describe('which layout scrolls', () => {
   const doc = () => {
-    const d = defaultComposition();
+    const d = classicComposition();
     d.count = 3;
     return d;
   };
@@ -109,9 +111,10 @@ describe('which layout scrolls', () => {
     expect(defaultScrollSlot(d, null)).toBe(0);
     d.slots[0].crop = 'full';
     expect(defaultScrollSlot(d, 0)).toBe(1);
-    d.slots.forEach((s) => { s.crop = 'full'; });
+    // Whole pages that stay on the canvas: nothing to scroll.
+    d.slots.forEach((s) => { s.crop = 'full'; s.w = 300; s.cy = 750; });
     expect(defaultScrollSlot(d, 1)).toBeNull();
-    const two = defaultComposition(); // layout 3 is hidden
+    const two = classicComposition(); // layout 3 is hidden
     expect(defaultScrollSlot(two, 2)).toBe(0);
   });
 
@@ -124,6 +127,47 @@ describe('which layout scrolls', () => {
     const wide: Slot = { ...clone(tall), nw: 4000, nh: 1000, crop: '1:1', fx: 30 };
     const last = slotAtFrame(wide, plan, 179);
     expect([last.fx, last.fy]).toEqual([100, wide.fy]);
+  });
+});
+
+describe('whole pages running off the canvas slide', () => {
+  /** A 1440 × 7680 page shown whole, 800 wide (4267 tall), its top 172 px down a 1500 tall pin. */
+  const long = (): Slot => ({ ...sampleSlot(0), nh: 7680, crop: 'full', w: 800, cx: 500, cy: 172 + 4266.67 / 2 });
+
+  it('slides until its bottom edge is as far from the canvas bottom as its top was from the top', () => {
+    const s = long();
+    const r = rectOf(s);
+    expect(slideSpan(s, 1500)).toBeCloseTo(r.t + r.h - (1500 - r.t), 6);
+    expect(canScroll(s)).toBe(false); // without the canvas height there's no telling
+    expect(canScroll(s, 1500)).toBe(true);
+  });
+
+  it('a cropped page, one on the canvas, or one starting above it never slides', () => {
+    expect(slideSpan({ ...long(), crop: '16:10' }, 1500)).toBe(0);
+    expect(slideSpan({ ...long(), w: 200, cy: 750 }, 1500)).toBe(0);
+    expect(slideSpan({ ...long(), cy: -100 }, 1500)).toBe(0);
+  });
+
+  it('moves the center from the start to the end, nothing else; steps follow the part on the canvas', () => {
+    const s = long();
+    const plan = framePlanFor(s, { seconds: 6, hold: 0, easing: 'linear' }, 30, 1500);
+    const first = slotAtFrame(s, plan, 0, 1500);
+    const last = slotAtFrame(s, plan, plan.frames - 1, 1500);
+    expect(first).toEqual(s);
+    expect(last.cy).toBeCloseTo(s.cy - slideSpan(s, 1500), 6);
+    expect({ ...last, cy: s.cy }).toEqual(s);
+    const r = rectOf(last);
+    expect(1500 - (r.t + r.h)).toBeCloseTo(rectOf(s).t, 6);
+    const steps = framePlanFor(s, { seconds: 10, hold: 0, easing: 'steps' }, 30, 1500).steps;
+    expect(steps).toBeGreaterThan(1);
+  });
+
+  it('counts among the layouts that can scroll', () => {
+    const d = defaultComposition();
+    d.count = 1;
+    d.slots[0] = long();
+    expect(scrollableSlots(d)).toEqual([0]);
+    expect(defaultScrollSlot(d, null)).toBe(0);
   });
 });
 

@@ -1,4 +1,5 @@
-/* The scrolling video: one layout's page scrolls inside its frame while everything else stays put.
+/* The scrolling video: one layout's page scrolls inside its frame (or, shown whole and running off the
+   canvas, slides up through it) while everything else stays put.
    Every frame is drawn by the shared renderers (drawBackground, drawLayouts, drawOverlays), so a frame
    is the still export at that scroll position. The background never changes, so it is drawn once to
    its own canvas and copied under each frame. Frames are encoded to H.264 with WebCodecs, faster than
@@ -107,7 +108,7 @@ export async function renderScrollVideo(doc: Composition, settings: VideoSetting
   const [c, x] = makeCanvas(w, h);
   x.imageSmoothingQuality = 'high';
 
-  const plan = framePlanFor(doc.slots[settings.slot], settings, fps);
+  const plan = framePlanFor(doc.slots[settings.slot], settings, fps, doc.H);
   const frameDuration = 1000; // media timescale fps × 1000: every frame lasts exactly 1000 units
   const us = (i: number) => Math.round((i * 1e6) / fps);
   // Written by the encoder's callbacks.
@@ -147,7 +148,7 @@ export async function renderScrollVideo(doc: Composition, settings: VideoSetting
     for (let i = 0; i < plan.frames; i++) {
       if (signal?.aborted) throw aborted();
       if (out.failure) throw out.failure;
-      const d: Composition = { ...doc, slots: doc.slots.map((s, k) => (k === settings.slot ? slotAtFrame(s, plan, i) : s)) as Composition['slots'] };
+      const d: Composition = { ...doc, slots: doc.slots.map((s, k) => (k === settings.slot ? slotAtFrame(s, plan, i, doc.H) : s)) as Composition['slots'] };
       x.clearRect(0, 0, w, h);
       x.drawImage(bg, 0, 0);
       drawLayouts(x, d, m, imgs);

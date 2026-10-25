@@ -6,7 +6,7 @@
 import { readFileSync } from 'node:fs';
 import type { Page } from '@playwright/test';
 import type { Composition } from '../../lib/model';
-import { framePlanFor, scrollAtFrame } from '../../lib/video/timing';
+import { framePlanFor, scrollAtFrame, slotAtFrame } from '../../lib/video/timing';
 import { expect, test } from './local';
 
 async function openEditor(page: Page) {
@@ -19,6 +19,46 @@ async function openVideoSheet(page: Page) {
   await page.keyboard.press('ArrowDown');
   await page.getByRole('menuitem', { name: /Scrolling video/ }).click();
   await expect(page.locator('#sheetTitle')).toHaveText('Scrolling video');
+}
+
+/** Starts from the classic arrangement: the samples at 16:10, so each one scrolls inside its frame. */
+async function classic(page: Page) {
+  await page.evaluate(() => window.__layoutStage!.store.getState().setArrangement('classic'));
+}
+
+/** Plays the MP4 in a <video>, takes frame `mid`, and compares it (PSNR) with the still export of
+ *  each of `docs` at the video's size. Also reports the duration, size and whether it seeks. */
+async function framePsnr(page: Page, buf: Buffer, mid: number, docs: Composition[]) {
+  return page.evaluate(
+    async ({ b64, docs, mid }) => {
+      const bytes = Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
+      const v = document.createElement('video');
+      v.muted = true;
+      v.src = URL.createObjectURL(new Blob([bytes], { type: 'video/mp4' }));
+      await new Promise((res, rej) => { v.onloadeddata = res; v.onerror = () => rej(new Error(`video error ${v.error?.code}`)); });
+      const seek = (t: number) => new Promise((res) => { v.onseeked = res; v.currentTime = t; });
+      await seek((mid + 0.5) / 30);
+      const { videoWidth: w, videoHeight: h } = v;
+      const frame = document.createElement('canvas');
+      frame.width = w;
+      frame.height = h;
+      const fx = frame.getContext('2d', { willReadFrequently: true })!;
+      fx.drawImage(v, 0, 0, w, h);
+      const A = fx.getImageData(0, 0, w, h).data;
+      const LS = window.__layoutStage!;
+      const psnr: number[] = [];
+      for (const d of docs) {
+        const c = await LS.renderComposition(d, w / d.W);
+        const B = c.getContext('2d')!.getImageData(0, 0, w, h).data;
+        let se = 0;
+        for (let k = 0; k < A.length; k += 4) for (let ch = 0; ch < 3; ch++) se += (A[k + ch] - B[k + ch]) ** 2;
+        psnr.push(10 * Math.log10((255 * 255) / (se / ((A.length / 4) * 3))));
+      }
+      await seek(v.duration - 0.1);
+      return { duration: v.duration, w, h, seekable: v.seekable.length === 1 && v.seekable.end(0) === v.duration, at: v.currentTime, psnr };
+    },
+    { b64: buf.toString('base64'), docs, mid },
+  );
 }
 
 /** Top-level boxes, and a few numbers from the moov. */
@@ -41,6 +81,7 @@ test.describe('scrolling video', () => {
   test('renders an exact, seekable MP4 whose frames are the still export', async ({ page }) => {
     test.setTimeout(180_000);
     await openEditor(page);
+    await classic(page);
     await openVideoSheet(page);
     await expect(page.locator('#vidRender')).toBeFocused();
     await expect(page.locator('#vidSlot button').first()).toHaveAttribute('aria-pressed', 'true');
@@ -76,38 +117,8 @@ test.describe('scrolling video', () => {
     expect(scrollAtFrame(plan, 0)).toBe(0);
     expect(scrollAtFrame(plan, 179)).toBe(100);
 
-    const got = await page.evaluate(
-      async ({ b64, fys, mid }) => {
-        const bytes = Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
-        const v = document.createElement('video');
-        v.muted = true;
-        v.src = URL.createObjectURL(new Blob([bytes], { type: 'video/mp4' }));
-        await new Promise((res, rej) => { v.onloadeddata = res; v.onerror = () => rej(new Error(`video error ${v.error?.code}`)); });
-        const seek = (t: number) => new Promise((res) => { v.onseeked = res; v.currentTime = t; });
-        await seek((mid + 0.5) / 30);
-        const { videoWidth: w, videoHeight: h } = v;
-        const frame = document.createElement('canvas');
-        frame.width = w;
-        frame.height = h;
-        const fx = frame.getContext('2d', { willReadFrequently: true })!;
-        fx.drawImage(v, 0, 0, w, h);
-        const A = fx.getImageData(0, 0, w, h).data;
-        const LS = window.__layoutStage!;
-        const psnr: number[] = [];
-        for (const fy of fys) {
-          const d = JSON.parse(JSON.stringify(LS.store.getState().doc));
-          d.slots[0].fy = fy;
-          const c = await LS.renderComposition(d, 1080 / 1500);
-          const B = c.getContext('2d')!.getImageData(0, 0, w, h).data;
-          let se = 0;
-          for (let k = 0; k < A.length; k += 4) for (let ch = 0; ch < 3; ch++) se += (A[k + ch] - B[k + ch]) ** 2;
-          psnr.push(10 * Math.log10((255 * 255) / (se / ((A.length / 4) * 3))));
-        }
-        await seek(5.9);
-        return { duration: v.duration, w, h, seekable: v.seekable.length === 1 && v.seekable.end(0) === v.duration, at: v.currentTime, psnr };
-      },
-      { b64: buf.toString('base64'), fys, mid },
-    );
+    const docs = fys.map((fy) => ({ ...doc, slots: doc.slots.map((s, k) => (k === 0 ? { ...s, fy } : s)) as Composition['slots'] }));
+    const got = await framePsnr(page, buf, mid, docs);
     expect(got).toMatchObject({ duration: 6, w: 720, h: 1080, seekable: true, at: 5.9 });
     const [before, at, after] = got.psnr;
     expect(at).toBeGreaterThan(36); // the same picture, give or take video compression
@@ -121,8 +132,39 @@ test.describe('scrolling video', () => {
     await expect(page.locator('#exportMenuBtn')).toBeFocused();
   });
 
+  test('a whole page running off the canvas slides up through it', async ({ page }) => {
+    test.setTimeout(180_000);
+    await openEditor(page);
+    // Showcase, one layout: the sample page, 800 wide, runs off the bottom of the pin.
+    await page.evaluate(() => window.__layoutStage!.store.getState().setCount(1));
+    await openVideoSheet(page);
+    await expect(page.locator('#vidSlotHint')).toHaveText('Juniper & Co. · slides up through the canvas');
+    await page.locator('#vidSeconds').fill('6');
+    await page.locator('#vidHold').fill('0');
+    await page.getByRole('group', { name: 'Motion' }).getByRole('button', { name: 'Steady' }).click();
+    await page.getByRole('group', { name: 'Size in pixels' }).getByRole('button', { name: '720 × 1080' }).click();
+    await page.click('#vidRender');
+    await expect(page.locator('#vidSave')).toBeVisible({ timeout: 120_000 });
+    const [dl] = await Promise.all([page.waitForEvent('download'), page.click('#vidSave')]);
+    const buf = readFileSync(await dl.path());
+    expect(readMp4(buf).frames).toBe(180);
+
+    const doc = await page.evaluate(() => window.__layoutStage!.store.getState().doc as Composition);
+    const plan = framePlanFor(doc.slots[0], { seconds: 6, hold: 0, easing: 'linear' }, 30, doc.H);
+    const mid = 90;
+    const docs = [mid - 1, mid, mid + 1].map((i) => ({ ...doc, slots: doc.slots.map((s, k) => (k === 0 ? slotAtFrame(s, plan, i, doc.H) : s)) as Composition['slots'] }));
+    expect(docs[1].slots[0].cy).toBeLessThan(doc.slots[0].cy);
+    const got = await framePsnr(page, buf, mid, docs);
+    expect(got).toMatchObject({ duration: 6, w: 720, h: 1080, seekable: true });
+    const [before, at, after] = got.psnr;
+    expect(at).toBeGreaterThan(36);
+    expect(at).toBeGreaterThan(before + 3);
+    expect(at).toBeGreaterThan(after + 3);
+  });
+
   test('Cancel stops the render and keeps the settings', async ({ page }) => {
     await openEditor(page);
+    await classic(page);
     await openVideoSheet(page);
     await page.locator('#vidSeconds').fill('15');
     await page.click('#vidRender');

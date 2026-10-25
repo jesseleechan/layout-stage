@@ -3,6 +3,7 @@ import { createStore, del, get, set, type UseStore } from 'idb-keyval';
 import { clone, PRESETS, type Composition, type Style } from './model';
 import { defaultComposition } from './arrange';
 import { cleanSelectors } from './capture/selectors';
+import { sanitizePlacements } from './canvas-size';
 import { sanitizeOverlays } from './overlays';
 import { sanitizePinText } from './pin-text';
 
@@ -66,13 +67,17 @@ export function sanitizeComposition(raw: unknown): Composition | null {
     ...clone(r),
     preset: r.preset && r.preset in PRESETS ? r.preset : 'custom',
     count: r.count === 1 || r.count === 2 || r.count === 3 ? r.count : d.count,
+    // Saved before arrangements existed: arranged the classic way.
+    arrangement: r.arrangement === 'showcase' ? 'showcase' : 'classic',
     order: Array.isArray(r.order) && r.order.length === 3 && [0, 1, 2].every((i) => r.order!.includes(i)) ? [...r.order] : [0, 1, 2],
     frame: { ...d.frame, ...clone(r.frame), shadow: { ...d.frame.shadow, ...clone(r.frame?.shadow) } },
     background: { ...d.background, ...clone(r.background) },
     overlays: sanitizeOverlays(r.overlays),
     pin: sanitizePinText(r.pin),
+    placements: sanitizePlacements(r.placements),
   } as Composition;
   if (!out.pin) delete out.pin;
+  if (!out.placements) delete out.placements;
   // Capture options added later (dark mode, hide elements): defaults for captures saved before them.
   for (const s of out.slots) {
     const o = s.source?.kind === 'url' ? s.source.options : null;

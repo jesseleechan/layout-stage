@@ -2,9 +2,10 @@
    ordinary Composition (or, for the palette card, the canvas it's drawn on), rendered later through
    lib/render like any export. Nothing here touches the store or the DOM, apart from the text
    measure the arrangement sizes the headline with (the page's by default; see arrange()). */
-import { arrange, layoutRoom, pageMeasure } from './arrange';
+import { arrange, arrangementOf, layoutRoom, pageMeasure } from './arrange';
+import { applyPlacement, recall } from './canvas-size';
 import { clone, PRESETS, type Composition, type PresetId, type Slot, type UiState } from './model';
-import { cropRatio, scrollAxis } from './render/units';
+import { autoCrop, cropRatio, scrollAxis } from './render/units';
 import type { Measure } from './render/overlay-layout';
 
 /* ---------------- one composition, another canvas ---------------- */
@@ -13,10 +14,11 @@ const visibleOrder = (d: Composition) => d.order.filter((i) => i < d.count).join
 
 /**
  * The composition on another preset's canvas. Same layouts, crops, scroll positions, frame and
- * background, placed by arrange() for the new shape (leaving room for a top or bottom headline,
- * measured with `measure`). The layer order is kept when the user changed it; an untouched one
- * follows the new shape's own (a 3-up on square and landscape canvases puts the hero in front). On
- * its own preset the composition is returned as it is, positions included.
+ * background, placed where the user left them on that canvas (lib/canvas-size.ts), else by arrange()
+ * for the new shape (leaving room for a top or bottom headline, measured with `measure`). Arranged,
+ * the layer order is kept when the user changed it; an untouched one follows the new shape's own (a
+ * classic 3-up on square and landscape canvases puts the hero in front). On its own preset the
+ * composition is returned as it is, positions included.
  */
 export function forPreset(doc: Composition, preset: Exclude<PresetId, 'custom'>, measure: Measure | null = pageMeasure()): Composition {
   const d = clone(doc);
@@ -25,6 +27,11 @@ export function forPreset(doc: Composition, preset: Exclude<PresetId, 'custom'>,
   d.preset = preset;
   d.W = w;
   d.H = h;
+  const saved = recall(doc, w, h);
+  if (saved) {
+    applyPlacement(d, saved);
+    return d;
+  }
   arrange(d, d.count, measure);
   const ref = clone(doc);
   arrange(ref);
@@ -155,16 +162,27 @@ export type SetItem =
    *  `doc.slots[slot]` (lib/render/palette-card.ts). */
   | { kind: 'palette'; key: string; label: string; doc: Composition; slot: number };
 
+/** The layouts as the set reads them. Showcase shows pages whole, which says nothing about their
+ *  shape, so its whole pages are read through the crop a new image would get (autoCrop): desktop
+ *  pages at 16:10, phone pages at 9:16. */
+function setView(doc: Composition): Composition {
+  if (arrangementOf(doc) !== 'showcase') return doc;
+  const d = clone(doc);
+  for (const s of d.slots) if (s.crop === 'full') s.crop = autoCrop(s.nw, s.nh);
+  return d;
+}
+
 /**
  * The Etsy listing set, on Etsy 4:3:
- * 1. hero: the current layouts, re-arranged (forPreset);
+ * 1. hero: the current layouts on the set's canvas (forPreset);
  * 2–4. section close-ups of the main layout at up to three scroll points (none when its crop shows
- *      the whole image);
+ *      the whole image; see setView for showcase pages);
  * 5. desktop + phone, when the canvas has both;
  * 6. a palette card of the main layout's colors.
  */
-export function etsySet(doc: Composition, measure: Measure | null = pageMeasure()): SetItem[] {
-  const items: SetItem[] = [{ kind: 'composition', key: 'hero', label: 'Hero', doc: forPreset(doc, SET_PRESET, measure) }];
+export function etsySet(src: Composition, measure: Measure | null = pageMeasure()): SetItem[] {
+  const items: SetItem[] = [{ kind: 'composition', key: 'hero', label: 'Hero', doc: forPreset(src, SET_PRESET, measure) }];
+  const doc = setView(src);
   const m = mainSlot(doc);
   const main = doc.slots[m];
   const stops = sectionStops(main);
@@ -178,7 +196,7 @@ export function etsySet(doc: Composition, measure: Measure | null = pageMeasure(
   const desk = visible.findIndex(isWide);
   const phone = visible.findIndex(isPhone);
   if (desk >= 0 && phone >= 0) items.push({ kind: 'composition', key: 'desktop-phone', label: 'Desktop + phone', doc: desktopAndPhone(doc, desk, phone, measure) });
-  items.push({ kind: 'palette', key: 'palette', label: 'Palette', doc: only(doc, [m]), slot: 0 });
+  items.push({ kind: 'palette', key: 'palette', label: 'Palette', doc: only(src, [m]), slot: 0 });
   return items.slice(0, ETSY_MAX_PHOTOS);
 }
 

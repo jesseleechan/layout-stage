@@ -9,12 +9,13 @@
 import { create } from 'zustand';
 import {
   applyStyleTo, clone, CUSTOM_MAX, CUSTOM_MIN, GRADS, MESHES, PRESETS, SHADOWS, defaultUi,
-  type Background, type BackgroundType, type Composition, type CropId, type Frame, type PresetId,
-  type Shadow, type ShadowPreset, type SlotSource, type Style, type UiState,
+  type Arrangement, type Background, type BackgroundType, type Composition, type CropId, type Frame, type PresetId,
+  type Shadow, type ShadowPreset, type Slot, type SlotSource, type Style, type UiState,
 } from './model';
-import { arrange, defaultComposition, pageMeasure } from './arrange';
+import { arrange, arrangementOf, defaultComposition, pageMeasure, showcaseCrop } from './arrange';
+import { isArranged, resizeCanvas } from './canvas-size';
 import { History } from './history';
-import { capHeight, autoCrop, groupBounds, scrollAxis } from './render/units';
+import { capHeight, autoCrop, cropRatio, groupBounds, scrollAxis } from './render/units';
 import { ingestImage, loadImage, pruneImages, releaseImage } from './images';
 import { loadStyles, saveStyles } from './persist';
 import { localImageIds, openStartupProject, saveOpenProject } from './projects/local';
@@ -85,10 +86,15 @@ export interface EditorState {
   loadComposition(doc: Composition): void;
 
   /* --- canvas & layouts --- */
+  /** Another canvas size keeps the work: see lib/canvas-size.ts. */
   setPreset(p: PresetId): void;
   setCustomSize(W: number, H: number): void;
   setCount(n: 1 | 2 | 3): void;
+  /** Starts the layouts over in another arrangement, with its crops (showcase shows pages whole). */
+  setArrangement(a: Arrangement): void;
   rearrange(): void;
+  /** Layout i shows layout 1's page; in the showcase columns it continues where layout 1 leaves off. */
+  continuePage(i: number): void;
   centerSelected(axis: 'h' | 'v'): void;
   centerGroup(): void;
   layer(dir: 1 | -1): void;
@@ -196,6 +202,10 @@ export function shownIds(d: Composition): Set<string> {
   return ids;
 }
 
+/** A layout's top edge, and moving its center so the top edge stays there after its height changed. */
+const topOf = (s: Slot) => s.cy - s.w / cropRatio(s) / 2;
+const keepTop = (s: Slot, top: number) => { s.cy = top + s.w / cropRatio(s) / 2; };
+
 function referencedIds(d: Composition): Set<string> {
   const ids = new Set(d.slots.map((s) => s.imageId));
   if (d.background.imageId) ids.add(d.background.imageId);
@@ -263,10 +273,20 @@ export const useEditor = create<EditorState>()((set, get) => {
     const { id, nw, nh } = got;
     return (d, i) => {
       const s = d.slots[i];
-      Object.assign(s, { imageId: id, name: img.name || 'Pasted image', source: img.source, nw, nh, fx: 50, fy: 0, crop: autoCrop(nw, nh) });
-      capHeight(s, d.H);
+      const top = topOf(s);
+      Object.assign(s, { imageId: id, name: img.name || 'Pasted image', source: img.source, nw, nh, fx: 50, fy: 0 });
+      // Showcase: the page whole, as wide as the layout it replaces and from the same top edge.
+      if (arrangementOf(d) === 'showcase') {
+        s.crop = showcaseCrop;
+        keepTop(s, top);
+      } else {
+        s.crop = autoCrop(nw, nh);
+        capHeight(s, d.H);
+      }
     };
   };
+  /** Showcase layouts still where arrange() put them are placed again after an image changes size. */
+  const freshShowcase = (d: Composition) => arrangementOf(d) === 'showcase' && isArranged(d, pageMeasure());
 
   /** The single-image rule: target slot, else the first sample slot, else add a layout, else layout 1.
    *  The slot is picked once the image has loaded, from the layouts as they are then. */
@@ -284,12 +304,11 @@ export const useEditor = create<EditorState>()((set, get) => {
     }
     const idx = i;
     const old = doc.slots[idx].imageId;
+    const fresh = freshShowcase(doc);
     step((d) => {
       put(d, idx);
-      if (added) {
-        d.count = (idx + 1) as 1 | 2 | 3;
-        arrange(d, d.count, pageMeasure());
-      }
+      if (added) d.count = (idx + 1) as 1 | 2 | 3;
+      if (added || fresh) arrange(d, d.count, pageMeasure());
     });
     setUi({ selected: idx });
     releaseUnused([old]);
@@ -369,32 +388,55 @@ export const useEditor = create<EditorState>()((set, get) => {
 
     setPreset(p) {
       change((d) => {
-        d.preset = p;
-        if (p !== 'custom') { d.W = PRESETS[p].w; d.H = PRESETS[p].h; }
-        arrange(d, d.count, pageMeasure());
+        if (p === 'custom') d.preset = p;
+        else resizeCanvas(d, PRESETS[p].w, PRESETS[p].h, pageMeasure(), p);
       });
       // Etsy crops listing thumbnails to 5:4, so its canvases open with that crop shown.
       setUi({ exportScale: PRESETS[p].scale, showSafeArea: PRESETS[p].safe === 'etsy' });
     },
     setCustomSize(W, H) {
       const clamp = (v: number) => Math.max(CUSTOM_MIN, Math.min(CUSTOM_MAX, Math.round(+v || 0)));
-      change((d) => {
-        d.W = clamp(W);
-        d.H = clamp(H);
-        arrange(d, d.count, pageMeasure());
-      });
+      change((d) => { resizeCanvas(d, clamp(W), clamp(H), pageMeasure()); });
     },
     setCount(n) {
       if (n === get().doc.count) return;
       change((d) => {
+        // Layouts coming into view take the showcase crop.
+        if (arrangementOf(d) === 'showcase') d.slots.forEach((s, i) => { if (i >= d.count && i < n) s.crop = showcaseCrop; });
         d.count = n;
         arrange(d, n, pageMeasure());
       });
       const sel = get().ui.selected;
       if (sel != null && sel >= n) setUi({ selected: n - 1 });
     },
+    setArrangement(a) {
+      if (a === arrangementOf(get().doc)) return;
+      change((d) => {
+        d.arrangement = a;
+        for (let i = 0; i < d.count; i++) {
+          const s = d.slots[i];
+          s.crop = a === 'showcase' ? showcaseCrop : autoCrop(s.nw, s.nh);
+        }
+        arrange(d, d.count, pageMeasure());
+      });
+    },
     rearrange() {
       change((d) => arrange(d, d.count, pageMeasure()));
+    },
+    continuePage(i) {
+      const doc = get().doc;
+      if (i < 1 || i >= doc.count) return;
+      const old = doc.slots[i].imageId;
+      const fresh = freshShowcase(doc);
+      change((d) => {
+        const { imageId, name, source, nw, nh } = d.slots[0];
+        const s = d.slots[i];
+        const top = topOf(s);
+        Object.assign(s, { imageId, name, source: clone(source), nw, nh, fx: 50, fy: 0, crop: showcaseCrop });
+        if (fresh || arrangementOf(d) !== 'showcase') arrange(d, d.count, pageMeasure());
+        else keepTop(s, top);
+      });
+      releaseUnused([old]);
     },
     centerSelected(axis) {
       const i = get().ui.selected;
@@ -443,8 +485,12 @@ export const useEditor = create<EditorState>()((set, get) => {
     },
     setCrop(i, crop) {
       change((d) => {
-        d.slots[i].crop = crop;
-        capHeight(d.slots[i], d.H);
+        const s = d.slots[i];
+        const top = topOf(s);
+        s.crop = crop;
+        // Showcase pages may run off the canvas: the layout keeps its width and top edge.
+        if (arrangementOf(d) === 'showcase') keepTop(s, top);
+        else capHeight(s, d.H);
       });
     },
     setScroll(i, v) {
@@ -628,14 +674,13 @@ export const useEditor = create<EditorState>()((set, get) => {
       const keep = keepFraming && target >= 0;
       const { i, added } = target >= 0 ? { i: target, added: false } : dropSlot(doc, visible(avoidId));
       const old = doc.slots[i].imageId;
+      const fresh = !keep && freshShowcase(doc);
       step((d) => {
         const prev = clone(d.slots[i]);
         put(d, i);
         if (keep) Object.assign(d.slots[i], reframe(prev, d.slots[i], d.H));
-        if (added) {
-          d.count = (i + 1) as 1 | 2 | 3;
-          arrange(d, d.count, pageMeasure());
-        }
+        if (added) d.count = (i + 1) as 1 | 2 | 3;
+        if (added || fresh) arrange(d, d.count, pageMeasure());
       });
       if (!keep) setUi({ selected: i });
       releaseUnused([old]);

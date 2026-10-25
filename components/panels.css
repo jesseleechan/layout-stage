@@ -38,3 +38,7 @@
 .slots .slot-pick { grid-template-columns: 12px 48px minmax(0, 1fr); gap: 7px; }
 .slots .slot-thumb { width: 48px; height: 32px; }
 .slots .slot-actions { gap: 3px; }
+
+/* Arrangement (Layouts panel): under the count, a little lower. */
+.seg.count.arrange { margin-top: 6px; }
+.seg.count.arrange button { height: 44px; font: 500 11.5px var(--font-ui); }

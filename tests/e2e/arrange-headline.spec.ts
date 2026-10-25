@@ -50,28 +50,34 @@ async function arrangeWithHeadline(page: Page, preset: PresetId, place: 'top' | 
 }
 
 test.describe('starting arrangement with a headline', () => {
-  for (const preset of ['pin', 'etsy43', 'etsy11'] as const) {
-    test(`${preset}: layouts start below a top headline and above a bottom one`, async ({ page }) => {
-      await openEditor(page);
-      for (const place of ['top', 'bottom'] as const) {
-        for (const n of [1, 2, 3] as const) {
-          const { doc, ink } = await arrangeWithHeadline(page, preset, place, n, n === 2);
-          const gap = HEADLINE_GAP * unit(doc.W, doc.H);
-          const what = `${preset}, headline ${place}, ${n} layout(s)`;
-          expect(ink.t, what).toBeGreaterThan(0);
-          expect(doc.count).toBe(n);
-          for (let i = 0; i < n; i++) {
-            const r = rectOf(doc.slots[i]);
-            if (place === 'top') {
-              expect(r.t, what).toBeGreaterThanOrEqual(ink.b + gap - 2);
-              expect(r.t + r.h, what).toBeLessThanOrEqual(doc.H + 1);
-            } else {
-              expect(r.t + r.h, what).toBeLessThanOrEqual(ink.t - gap + 2);
-              expect(r.t, what).toBeGreaterThanOrEqual(-1);
+  for (const arrangement of ['classic', 'showcase'] as const) {
+    for (const preset of ['pin', 'etsy43', 'etsy11'] as const) {
+      test(`${arrangement}, ${preset}: layouts start below a top headline and above a bottom one`, async ({ page }) => {
+        await openEditor(page);
+        await page.evaluate((a) => window.__layoutStage!.store.getState().setArrangement(a), arrangement);
+        for (const place of ['top', 'bottom'] as const) {
+          for (const n of [1, 2, 3] as const) {
+            const { doc, ink } = await arrangeWithHeadline(page, preset, place, n, n === 2);
+            const gap = HEADLINE_GAP * unit(doc.W, doc.H);
+            const what = `${arrangement}, ${preset}, headline ${place}, ${n} layout(s)`;
+            expect(ink.t, what).toBeGreaterThan(0);
+            expect(doc.count).toBe(n);
+            for (let i = 0; i < n; i++) {
+              const r = rectOf(doc.slots[i]);
+              // Showcase pages may run on behind a bottom headline (give it a band) and off the canvas;
+              // the classic cascades stay on the canvas and above the headline.
+              if (place === 'top') {
+                expect(r.t, what).toBeGreaterThanOrEqual(ink.b + gap - 2);
+                if (arrangement === 'classic') expect(r.t + r.h, what).toBeLessThanOrEqual(doc.H + 1);
+              } else {
+                if (arrangement === 'classic') expect(r.t + r.h, what).toBeLessThanOrEqual(ink.t - gap + 2);
+                expect(r.t, what).toBeGreaterThanOrEqual(-1);
+                expect(r.t, what).toBeLessThan(ink.t - gap);
+              }
             }
           }
         }
-      }
-    });
+      });
+    }
   }
 });
