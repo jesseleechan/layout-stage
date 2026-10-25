@@ -88,7 +88,11 @@ export function sanitizeComposition(raw: unknown): Composition | null {
   const tex = Number(out.background.texture);
   out.background.texture = Number.isFinite(tex) ? Math.max(0, Math.min(100, tex)) : 0;
   // A free height keeps a usable ratio (else it shows the whole page); other crops carry none.
+  // A zoom is 1–4; 1 isn't kept.
   for (const s of out.slots) {
+    const z = Number(s.zoom);
+    if (Number.isFinite(z) && z > 1) s.zoom = Math.min(4, z);
+    else delete s.zoom;
     const ar = Number(s.ar);
     if (s.crop === 'custom' && !(Number.isFinite(ar) && ar >= 0.02 && ar <= 50)) s.crop = 'full';
     if (s.crop !== 'custom') delete s.ar;

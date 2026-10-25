@@ -97,6 +97,7 @@ export function putImage(d: Composition, i: number, item: MediaItem): void {
   const s = d.slots[i];
   const top = s.cy - s.w / cropRatio(s) / 2;
   Object.assign(s, { imageId: item.imageId, name: item.name, source: clone(item.source), nw: item.nw, nh: item.nh, fx: 50, fy: 0 });
+  delete s.zoom;
   if (arrangementOf(d) === 'showcase') {
     setCropOf(s, showcaseCrop);
     s.cy = top + s.w / cropRatio(s) / 2;

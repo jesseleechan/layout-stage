@@ -2,7 +2,7 @@
 import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type DragEvent, type PointerEvent } from 'react';
 import { captureJobSlot, useEditor } from '@/lib/store';
 import { PRESETS, type Composition } from '@/lib/model';
-import { clampRadius, rectOf, safeArea, scrollAxis, shadowCSS, unit } from '@/lib/render/units';
+import { clampRadius, coverSource, rectOf, safeArea, scrollAxis, shadowCSS, unit, zoomOf } from '@/lib/render/units';
 import { drawBackground } from '@/lib/render/background';
 import { useImageUrl, useLoadedImage } from '@/lib/images';
 import { MEDIA_DRAG } from '@/lib/media';
@@ -63,6 +63,16 @@ interface ShotProps {
   onFocusRing(i: number | null): void;
 }
 
+/** The image inside a layout: a cover crop at object-position fx% fy%, the CSS twin of coverSource.
+ *  Zoomed in, CSS can't express it, so the image is placed from coverSource's own window. */
+function imageStyle(s: Composition['slots'][number], w: number, h: number): CSSProperties {
+  const z = zoomOf(s);
+  if (z <= 1) return { objectPosition: `${s.fx}% ${s.fy}%` };
+  const c = coverSource(s.nw, s.nh, w, h, s.fx, s.fy, z);
+  const k = w / c.sw; // canvas px per image px
+  return { position: 'absolute', objectFit: 'fill', width: s.nw * k, height: s.nh * k, left: -c.sx * k, top: -c.sy * k };
+}
+
 function Shot({ i, doc, shadow, visible, onFocusRing }: ShotProps) {
   const s = doc.slots[i];
   const f = doc.frame;
@@ -93,7 +103,7 @@ function Shot({ i, doc, shadow, visible, onFocusRing }: ShotProps) {
       }}
     >
       {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img src={url ?? undefined} alt="" draggable={false} style={{ objectPosition: `${s.fx}% ${s.fy}%` }} />
+      <img src={url ?? undefined} alt="" draggable={false} style={imageStyle(s, r.w, r.h)} />
     </div>
   );
 }

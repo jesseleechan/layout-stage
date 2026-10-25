@@ -36,6 +36,7 @@ export interface Slot {
   cy: number; // center, canvas px
   w: number; // width, canvas px; height = w / cropRatio
   ar?: number; // width / height of the 'custom' crop (only read for it)
+  zoom?: number; // 1–4: magnifies the crop's window (a zoom callout); absent = 1
 }
 
 /** An image in a project's media gallery (lib/media.ts): what a layout needs to show it again. */

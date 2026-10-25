@@ -25,6 +25,7 @@ import { nextSiteBackground, paletteOf } from './palette';
 import { dropSlot, reframe } from './capture/recapture';
 import { anyOverlay, patchOverlay, type OverlayKey, type Overlays } from './overlays';
 import { setCropOf, setHeight as setSlotHeight } from './crop';
+import { addCallout } from './callout';
 import { addMedia, keepShownInMedia, MAX_MEDIA, mediaOf, putImage, removeMedia, replaceMedia, slotFor } from './media';
 import { PIN_LIMITS, type PinField } from './pin-text';
 
@@ -109,6 +110,12 @@ export interface EditorState {
   /** Live: the layout's height at its width (a free-height crop, lib/crop.ts), keeping its top edge.
    *  `snapRatio` (default on) turns a height near Full or a preset into that crop. Commit on release. */
   setHeight(i: number, h: number, snapRatio?: boolean): void;
+  /** Live: how far layout i zooms into its image (1–4; lib/callout.ts). Commit on release. */
+  setZoom(i: number, zoom: number): void;
+  /** Live: the window's position on both axes (a zoomed layout pans both ways). Commit on release. */
+  setWindow(i: number, at: Partial<Pick<Slot, 'fx' | 'fy'>>): void;
+  /** Adds a zoom callout of layout i: a new layout on top showing its page magnified (one step). */
+  addCallout(i: number): void;
   /** Live: moves the Scroll (y) or Pan (x) position of a cropped image. Commit on release. */
   setScroll(i: number, v: number): void;
   /** Live: slot width. Commit on release. */
@@ -515,6 +522,27 @@ export const useEditor = create<EditorState>()((set, get) => {
     },
     setWidth(i, w) {
       edit((d) => { d.slots[i].w = w; });
+    },
+    setZoom(i, zoom) {
+      edit((d) => {
+        if (zoom > 1) d.slots[i].zoom = Math.min(4, zoom);
+        else delete d.slots[i].zoom;
+      });
+    },
+    setWindow(i, at) {
+      const clamp = (v: number) => Math.max(0, Math.min(100, v));
+      edit((d) => {
+        if (at.fx != null) d.slots[i].fx = clamp(at.fx);
+        if (at.fy != null) d.slots[i].fy = clamp(at.fy);
+      });
+    },
+    addCallout(i) {
+      const doc = get().doc;
+      if (i < 0 || i >= doc.count) return;
+      if (doc.count >= 3) { toast('A callout is a layout of its own, and there are 3 already. Remove one first.'); return; }
+      const j = doc.count;
+      change((d) => { addCallout(d, i, j); });
+      setUi({ selected: j });
     },
 
     editFrame(patch) {

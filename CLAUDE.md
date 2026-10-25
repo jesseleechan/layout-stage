@@ -41,7 +41,8 @@ npx playwright install chromium          # once per machine, for URL capture and
   else scale as one piece), `lib/media.ts` (the media gallery, `doc.media`: every image added, up to 12,
   oldest unused ones make room; `putImage` / `slotFor` place any image in a layout), `lib/crop.ts`
   (free height: crop `custom` with `Slot.ar`, from the Height slider or the bottom-edge handle; snaps
-  to Full or a preset within 1%),
+  to Full or a preset within 1%), `lib/callout.ts` (zoom callouts: a layout with `Slot.zoom`, which
+  `coverSource` applies; the preview places a zoomed image from the same window),
   `lib/snap.ts` (incl. safe-area targets), `lib/align.ts` (align/distribute), `lib/scroll.ts` (moving a
   crop's visible window), `lib/samples.ts`
 - Outputs: `lib/sets.ts` (derived compositions for Export all sizes and the Etsy listing set),

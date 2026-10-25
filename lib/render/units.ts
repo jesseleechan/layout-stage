@@ -28,12 +28,16 @@ export function rectOf(s: Slot, cx: number = s.cx, cy: number = s.cy): Rect {
 }
 
 /** Which axis the Scroll/Pan slider moves, or null when the crop shows the whole image. */
-export function scrollAxis(s: Pick<Slot, 'crop' | 'nw' | 'nh' | 'ar'>): 'x' | 'y' | null {
+export function scrollAxis(s: Pick<Slot, 'crop' | 'nw' | 'nh' | 'ar' | 'zoom'>): 'x' | 'y' | null {
   const ar = cropRatio(s);
   const nr = s.nw / s.nh;
-  if (Math.abs(ar - nr) < 0.01) return null;
+  // Zoomed in, part of the image is hidden even when the frame has its shape: Scroll first, Pan too.
+  if (Math.abs(ar - nr) < 0.01) return zoomOf(s) > 1 ? 'y' : null;
   return nr < ar ? 'y' : 'x';
 }
+
+/** How far a layout is zoomed into its image (1–4; 1 when not set). */
+export const zoomOf = (s: Pick<Slot, 'zoom'>) => (s.zoom && s.zoom > 1 ? Math.min(4, s.zoom) : 1);
 
 /** Starting crop for a newly added image. */
 export function autoCrop(nw: number, nh: number): CropId {
@@ -132,8 +136,8 @@ export function safeArea(safe: 'inset' | 'etsy', W: number, H: number): Rect & {
 }
 
 /** Cover crop, identical to CSS object-fit: cover with object-position fx% fy%. Returns the source rect. */
-export function coverSource(nw: number, nh: number, w: number, h: number, fx: number, fy: number) {
-  const sc = Math.max(w / nw, h / nh);
+export function coverSource(nw: number, nh: number, w: number, h: number, fx: number, fy: number, zoom = 1) {
+  const sc = Math.max(w / nw, h / nh) * Math.max(1, zoom);
   const sw = w / sc, sh = h / sc;
   return { sx: ((nw - sw) * fx) / 100, sy: ((nh - sh) * fy) / 100, sw, sh };
 }

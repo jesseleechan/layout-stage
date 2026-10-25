@@ -68,3 +68,61 @@ test('a layout can be made taller: 1:2, a free height on the canvas, and the Hei
   expect(px.h).toBeGreaterThan(1000);
   expect([[0xE9, 0xF0, 0xF7], [0x2F, 0x7D, 0xE1]]).toContainEqual(px.inside);
 });
+
+test('a zoom callout: the canvas shows the same magnified window as the export', async ({ page }) => {
+  await openEditor(page);
+  // A page of big colored blocks, so the window's place shows in the pixels.
+  await page.evaluate(async () => {
+    const LS = window.__layoutStage!;
+    const c = document.createElement('canvas');
+    c.width = 1440;
+    c.height = 4000;
+    const g = c.getContext('2d')!;
+    const colors = ['#E94F37', '#3F88C5', '#F6AE2D', '#2E933C', '#7B2D8E', '#1B1B1E'];
+    for (let y = 0; y < 4000; y += 400) for (let x = 0; x < 1440; x += 360) {
+      g.fillStyle = colors[(x / 360 + y / 400) % colors.length];
+      g.fillRect(x, y, 360, 400);
+    }
+    const blob = await new Promise<Blob>((res) => c.toBlob((b) => res(b!), 'image/png'));
+    await LS.store.getState().addImage({ blob, name: 'blocks.png', source: { kind: 'file' } }, 0);
+    const S = LS.store.getState();
+    S.setArrangement('classic');
+    S.addCallout(0);
+    S.setZoom(2, 2.5);
+    S.setWindow(2, { fx: 30, fy: 40 });
+    S.commit();
+    S.select(null);
+  });
+  await expect(page.locator('#calloutBtn')).toHaveCount(0); // nothing selected
+  const shot = page.locator('.shot[data-i="2"]');
+  await expect(shot.locator('img')).toHaveJSProperty('complete', true);
+  const png = (await shot.screenshot()).toString('base64');
+  const diff = await page.evaluate(async (b64) => {
+    const LS = window.__layoutStage!;
+    const { doc, scale } = LS.store.getState();
+    const s = doc.slots[2];
+    const h = s.w / (4 / 3);
+    const exp = await LS.renderComposition(doc, scale);
+    const img = new Image();
+    img.src = `data:image/png;base64,${b64}`;
+    await img.decode();
+    // The middle 60% of the callout, in the export and in the screenshot.
+    const w = img.naturalWidth, hh = img.naturalHeight;
+    const a = document.createElement('canvas');
+    a.width = w;
+    a.height = hh;
+    const ax = a.getContext('2d')!;
+    ax.drawImage(img, 0, 0);
+    const b = document.createElement('canvas');
+    b.width = w;
+    b.height = hh;
+    const bx = b.getContext('2d')!;
+    bx.drawImage(exp, (s.cx - s.w / 2) * scale, (s.cy - h / 2) * scale, s.w * scale, h * scale, 0, 0, w, hh);
+    const x0 = Math.round(w * 0.2), y0 = Math.round(hh * 0.2), cw = Math.round(w * 0.6), ch = Math.round(hh * 0.6);
+    const A = ax.getImageData(x0, y0, cw, ch).data, B = bx.getImageData(x0, y0, cw, ch).data;
+    let sum = 0;
+    for (let k = 0; k < A.length; k += 4) sum += Math.abs(A[k] - B[k]) + Math.abs(A[k + 1] - B[k + 1]) + Math.abs(A[k + 2] - B[k + 2]);
+    return sum / (A.length / 4) / 3;
+  }, png);
+  expect(diff).toBeLessThan(6);
+});

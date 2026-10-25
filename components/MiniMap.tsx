@@ -12,7 +12,7 @@ import './canvas-tools.css';
 export default function MiniMap({ i, axis }: { i: number; axis: 'x' | 'y' }) {
   const s = useEditor(useShallow((st) => {
     const t = st.doc.slots[i];
-    return { imageId: t.imageId, nw: t.nw, nh: t.nh, crop: t.crop, ar: t.ar, w: t.w, fx: t.fx, fy: t.fy };
+    return { imageId: t.imageId, nw: t.nw, nh: t.nh, crop: t.crop, ar: t.ar, zoom: t.zoom, w: t.w, fx: t.fx, fy: t.fy };
   }));
   const url = useImageUrl(s.imageId);
   const grab = useRef<{ id: number; off: number } | null>(null);

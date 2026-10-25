@@ -1,7 +1,7 @@
 /* One framed layout on a canvas: shadow layers, cover-cropped image, inset border.
    The DOM preview (components/Stage.tsx) draws the same thing with CSS; keep them in step. */
 import type { Frame, Slot } from '../model';
-import { clampRadius, coverSource, hexA, rectOf, roundRectPath, shadowLayers } from './units';
+import { clampRadius, coverSource, hexA, rectOf, roundRectPath, shadowLayers, zoomOf } from './units';
 
 type Drawable = HTMLImageElement | HTMLCanvasElement | ImageBitmap;
 
@@ -32,7 +32,7 @@ export function drawShot(x: CanvasRenderingContext2D, s: Slot, frame: Frame, u: 
   if (img) {
     const nw = 'naturalWidth' in img ? img.naturalWidth : img.width;
     const nh = 'naturalHeight' in img ? img.naturalHeight : img.height;
-    const c = coverSource(nw, nh, w, h, s.fx, s.fy);
+    const c = coverSource(nw, nh, w, h, s.fx, s.fy, zoomOf(s));
     x.drawImage(img, c.sx, c.sy, c.sw, c.sh, X, Y, w, h);
   }
   x.restore();
