@@ -198,6 +198,18 @@ describe('canvas and layouts', () => {
     expect(S().ui.exportScale).toBe(PRESETS.custom.scale);
   });
 
+  it('Etsy presets open with the 5:4 thumbnail crop shown; others hide it; the toggle still works', () => {
+    expect(S().ui.showSafeArea).toBe(false);
+    S().setPreset('etsy11');
+    expect(S().ui.showSafeArea).toBe(true);
+    S().setUi({ showSafeArea: false });
+    expect(S().ui.showSafeArea).toBe(false);
+    S().setPreset('etsy43');
+    expect(S().ui.showSafeArea).toBe(true);
+    S().setPreset('pin');
+    expect(S().ui.showSafeArea).toBe(false);
+  });
+
   it('setCustomSize clamps each side to 200–6000 and re-arranges', () => {
     S().setPreset('custom');
     S().setCustomSize(100, 9000);

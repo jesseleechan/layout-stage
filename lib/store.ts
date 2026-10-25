@@ -261,7 +261,12 @@ export const useEditor = create<EditorState>()((set, get) => {
         const sel = get().ui.selected;
         set({
           doc: saved,
-          ui: { ...get().ui, selected: sel != null && sel < saved.count ? sel : null, exportScale: PRESETS[saved.preset].scale },
+          ui: {
+            ...get().ui,
+            selected: sel != null && sel < saved.count ? sel : null,
+            exportScale: PRESETS[saved.preset].scale,
+            showSafeArea: PRESETS[saved.preset].safe === 'etsy',
+          },
         });
       } else history.reset(get().doc);
       set({ savedStyles: styles, hydrated: true });
@@ -309,7 +314,8 @@ export const useEditor = create<EditorState>()((set, get) => {
         if (p !== 'custom') { d.W = PRESETS[p].w; d.H = PRESETS[p].h; }
         arrange(d);
       });
-      setUi({ exportScale: PRESETS[p].scale });
+      // Etsy crops listing thumbnails to 5:4, so its canvases open with that crop shown.
+      setUi({ exportScale: PRESETS[p].scale, showSafeArea: PRESETS[p].safe === 'etsy' });
     },
     setCustomSize(W, H) {
       const clamp = (v: number) => Math.max(CUSTOM_MIN, Math.min(CUSTOM_MAX, Math.round(+v || 0)));
