@@ -1,8 +1,9 @@
 /* CAPTURE_DEBUG: memory as Linux sees it while a capture runs, for the phase log, and the free space
    in the temp folder (where the serverless Chromium lives, and its shared memory with
    --disable-dev-shm-usage). Reads /proc (elsewhere those figures are just left out). Server only. */
-import { readdirSync, readFileSync, statfsSync } from 'node:fs';
+import { lstatSync, readdirSync, readFileSync, statfsSync } from 'node:fs';
 import os from 'node:os';
+import path from 'node:path';
 
 const MB = 1024 * 1024;
 const read = (file: string) => {
@@ -98,4 +99,37 @@ export function memoryProbe(everyMs = 250): MemoryProbe {
     },
     stop: () => clearInterval(timer),
   };
+}
+
+/** What takes up the temp folder (its entries, largest first) and whether /dev/shm is there. */
+export function tempReport(): string {
+  const size = (p: string): number => {
+    try {
+      const s = lstatSync(p);
+      if (!s.isDirectory()) return s.size;
+      return readdirSync(p).reduce((n, e) => n + size(path.join(p, e)), 0);
+    } catch {
+      return 0;
+    }
+  };
+  let entries: string[] = [];
+  try {
+    entries = readdirSync(os.tmpdir());
+  } catch {
+    /* leave it empty */
+  }
+  const listed = entries
+    .map((e) => ({ e, n: size(path.join(os.tmpdir(), e)) }))
+    .sort((a, b) => b.n - a.n)
+    .slice(0, 12)
+    .map(({ e, n }) => `${e} ${mb(n)}`)
+    .join(', ');
+  let shm = 'missing';
+  try {
+    const s = statfsSync('/dev/shm');
+    shm = `free ${mb(s.bavail * s.bsize)} of ${mb(s.blocks * s.bsize)}`;
+  } catch {
+    /* no /dev/shm */
+  }
+  return `${os.tmpdir()}: ${listed}; /dev/shm ${shm}`;
 }

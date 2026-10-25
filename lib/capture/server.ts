@@ -12,7 +12,7 @@ import { redactAuth, type CaptureAuth } from './auth';
 import { authError, navError, pageError } from './detect';
 import { CaptureError, NOT_FOUND_MESSAGE, SCHEME_MESSAGE } from './errors';
 import { startGuardProxy, type GuardProxy } from './guard-proxy';
-import { memoryProbe, type MemoryProbe } from './memory';
+import { memoryProbe, tempReport, type MemoryProbe } from './memory';
 import { stitchPngs } from './png';
 import { createSerialQueue, type Serial } from './queue';
 import { selectorCss } from './selectors';
@@ -186,7 +186,7 @@ async function launch(): Promise<Session> {
   try {
     const options: LaunchOptions = pack ? await serverlessChromium(pack, proxy.url) : { headless: true, args: browserArgs(proxy.url) };
     const browser = await chromium.launch(options);
-    if (DEBUG) console.log(`[capture] browser ${browser.version()} up in ${Date.now() - t0}ms${pack ? ' (serverless)' : ''}`);
+    if (DEBUG) console.log(`[capture] browser ${browser.version()} up in ${Date.now() - t0}ms${pack ? ' (serverless)' : ''}; ${tempReport()}`);
     browser.on('disconnected', () => void proxy.close().catch(() => undefined));
     return { browser, proxy, singleUse: !!pack };
   } catch (e) {
