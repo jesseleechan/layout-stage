@@ -41,14 +41,21 @@ npx playwright install chromium          # once per machine, for URL capture and
   else scale as one piece), `lib/media.ts` (the media gallery, `doc.media`: every image added, up to 12,
   oldest unused ones make room; `putImage` / `slotFor` place any image in a layout), `lib/crop.ts`
   (free height: crop `custom` with `Slot.ar`, from the Height slider or the bottom-edge handle; snaps
-  to Full or a preset within 1%),
+  to Full or a preset within 1%), `lib/callout.ts` (zoom callouts: a layout with `Slot.zoom`, which
+  `coverSource` applies; the preview places a zoomed image from the same window),
   `lib/snap.ts` (incl. safe-area targets), `lib/align.ts` (align/distribute), `lib/scroll.ts` (moving a
   crop's visible window), `lib/samples.ts`
 - Outputs: `lib/sets.ts` (derived compositions for Export all sizes and the Etsy listing set),
+  `lib/pages-grid.ts` + `lib/render/pages-grid.ts` (All pages: every page in Media in a grid, drawn with
+  `drawShot`; in the Etsy set and its own export), `lib/variations.ts` (six takes on the canvas: layouts,
+  the page in front, site-color backgrounds; Export ••• → Variations, any one goes on the canvas),
   `lib/render/palette-card.ts`, `lib/palette.ts` (site colors; Match site colors), `lib/zip.ts`
   (stored ZIP writer), `lib/video/` (scrolling video: `timing.ts`, `render.ts` drawing each frame with the
   shared renderers, `mp4.ts` a small MP4 muxer for WebCodecs H.264), `lib/pin-text.ts` (Pin text
   suggestions)
+- Whole-site capture: `lib/capture/pages.ts` (the page list from a site's menu and sitemap, read by
+  `findSitePages` in `server.ts`; route `app/api/pages/route.ts`), `captureSite` in `jobs.ts` (the pages
+  into Media, one after another)
 - `lib/capture/` URL capture: `server.ts` (Playwright, the only file to touch when swapping the
   browser for hosting), `url-guard.ts` + `address.ts` (public addresses only), `guard-proxy.ts`
   (every capture-browser connection is checked here; Playwright routing misses redirect hops),

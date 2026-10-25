@@ -64,3 +64,49 @@ test('the media gallery keeps every image added and puts any of them in a layout
   await expect(page.locator('#mediaCount')).toHaveText('4 of 12');
   await expect(media.locator('img')).toHaveCount(4);
 });
+
+test('All pages: every page in Media in one grid, at three sizes', async ({ page }) => {
+  await openEditor(page);
+  await page.setInputFiles('#mediaFiles', await pngs(page, ['#F2E8DA', '#DCE8F5', '#E3F2E1', '#F5DCE4', '#EDE4F7']));
+  await expect(page.locator('#mediaCount')).toHaveText('5 of 12');
+  await page.click('#exportMenuBtn');
+  await page.getByRole('menuitem', { name: 'All pages image' }).click();
+  await expect(page.locator('#sheetTitle')).toHaveText('All pages');
+  await expect(page.locator('#multiGrid .multi-item[data-status="done"]')).toHaveCount(3, { timeout: 30_000 });
+  await expect(page.locator('#multiGrid')).toContainText('3000 × 2250 px');
+  await expect(page.locator('#multiGrid')).toContainText('2000 × 3000 px');
+  await expect(page.locator('#sheetSaveAll')).toHaveAttribute('download', 'layout-stage-all-pages.zip');
+});
+
+test('Variations: six takes on the canvas from the pages in Media; one can go on the canvas', async ({ page }) => {
+  await openEditor(page);
+  await page.setInputFiles('#mediaFiles', await pngs(page, ['#F2E8DA', '#DCE8F5', '#E3F2E1', '#F5DCE4', '#EDE4F7']));
+  await expect(page.locator('#mediaCount')).toHaveText('5 of 12');
+  await page.click('#exportMenuBtn');
+  await page.getByRole('menuitem', { name: 'Variations' }).click();
+  await expect(page.locator('#sheetTitle')).toHaveText('Variations');
+  await expect(page.locator('#multiGrid .multi-item[data-status="done"]')).toHaveCount(6, { timeout: 60_000 });
+  await expect(page.locator('#sheetSaveAll')).toHaveAttribute('download', 'layout-stage-variations.zip');
+  await page.getByRole('button', { name: /^Use Editorial/ }).click();
+  await expect(page.locator('#sheetTitle')).toHaveCount(0);
+  const doc = await page.evaluate(() => window.__layoutStage!.store.getState().doc);
+  expect([doc.count, doc.arrangement]).toEqual([3, 'showcase']);
+  expect(doc.slots.slice(0, 3).map((s) => s.name)).toEqual(['page-3.png', 'page-4.png', 'page-5.png']);
+  await page.keyboard.press('Control+z');
+  expect(await page.evaluate(() => window.__layoutStage!.store.getState().doc.count)).toBe(2);
+});
+
+test('Preview: the pin at Pinterest feed size, and the Etsy 4:3 photo as a search thumbnail', async ({ page }) => {
+  await openEditor(page);
+  await page.click('#feedBtn');
+  await expect(page.locator('#sheetTitle')).toHaveText('In the feed');
+  const pin = page.locator('#feedPin');
+  await expect(pin).toBeVisible();
+  expect(await pin.evaluate((i: HTMLImageElement) => [Math.round(i.getBoundingClientRect().width), i.naturalWidth])).toEqual([236, 472]);
+  await page.getByRole('button', { name: 'Etsy search' }).click();
+  await expect(page.locator('#feedEtsy')).toBeVisible();
+  await expect(page.locator('#feedNote')).toContainText('Etsy listing · 4:3');
+  await page.keyboard.press('Escape');
+  await expect(page.locator('#sheet')).toHaveCount(0);
+  await expect(page.locator('#feedBtn')).toBeFocused();
+});

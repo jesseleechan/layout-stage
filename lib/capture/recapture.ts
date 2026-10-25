@@ -1,9 +1,9 @@
 /* Re-capture and desktop + phone captures: where an image lands, and how a layout keeps its framing
    when its page is captured again. Pure; used by the store (landCapture) and lib/capture/jobs.ts. */
 import type { CaptureOptions, Composition, Slot } from '../model';
-import { coverSource, cropRatio, scrollAxis } from '../render/units';
+import { coverSource, cropRatio, scrollAxis, zoomOf } from '../render/units';
 
-export type Framing = Pick<Slot, 'crop' | 'ar' | 'fx' | 'fy' | 'cx' | 'cy' | 'w'>;
+export type Framing = Pick<Slot, 'crop' | 'ar' | 'zoom' | 'fx' | 'fy' | 'cx' | 'cy' | 'w'>;
 
 const clampPct = (v: number) => Math.max(0, Math.min(100, v));
 const round2 = (v: number) => Math.round(v * 100) / 100;
@@ -23,13 +23,13 @@ export function reframe(prev: Slot, next: Pick<Slot, 'nw' | 'nh'>, H: number): F
   if (scrollAxis(s) === 'y' && scrollAxis(prev) === 'y') {
     if (prev.fy >= 99.5) s.fy = 100;
     else {
-      const was = coverSource(prev.nw, prev.nh, prev.w, prev.w / cropRatio(prev), prev.fx, prev.fy);
-      const now = coverSource(s.nw, s.nh, s.w, s.w / cropRatio(s), s.fx, 0);
+      const was = coverSource(prev.nw, prev.nh, prev.w, prev.w / cropRatio(prev), prev.fx, prev.fy, zoomOf(prev));
+      const now = coverSource(s.nw, s.nh, s.w, s.w / cropRatio(s), s.fx, 0, zoomOf(s));
       const hidden = s.nh - now.sh;
       s.fy = hidden > 0 ? round2(clampPct(((was.sy / prev.nw) * s.nw * 100) / hidden)) : 0;
     }
   }
-  return { crop: s.crop, ...(s.crop === 'custom' ? { ar: s.ar } : {}), fx: s.fx, fy: s.fy, cx: s.cx, cy: s.cy, w: s.w };
+  return { crop: s.crop, ...(s.crop === 'custom' ? { ar: s.ar } : {}), ...(zoomOf(s) > 1 ? { zoom: s.zoom } : {}), fx: s.fx, fy: s.fy, cx: s.cx, cy: s.cy, w: s.w };
 }
 
 /** The drop-elsewhere rule for one image (as for an upload): the first sample layout, else a new

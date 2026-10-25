@@ -3,7 +3,7 @@
    the canvas), which makes the crop 'custom' with that ratio in `ar`. A free height near Full or a
    preset becomes that crop, so the chips still say what it is. Pure. */
 import { CROPS, type CropId, type Slot } from './model';
-import { coverSource, cropRatio, scrollAxis } from './render/units';
+import { coverSource, cropRatio, scrollAxis, zoomOf } from './render/units';
 
 /** The widest a free height goes, as width / height: a 3:1 band. */
 export const MAX_AR = 3;
@@ -45,13 +45,13 @@ export function setHeight(s: Slot, h: number, snapRatio = true): void {
   const h1 = clamp(h, min, max);
   const h0 = s.w / cropRatio(s);
   const top = s.cy - h0 / 2;
-  const was = coverSource(s.nw, s.nh, s.w, h0, s.fx, s.fy);
+  const was = coverSource(s.nw, s.nh, s.w, h0, s.fx, s.fy, zoomOf(s));
   const c = snapRatio ? cropFor(s, s.w / h1) : { crop: 'custom' as const, ar: s.w / h1 };
   setCropOf(s, c.crop, c.ar);
   const h2 = s.w / cropRatio(s);
   s.cy = top + h2 / 2;
   if (scrollAxis(s) === 'y') {
-    const hidden = s.nh - coverSource(s.nw, s.nh, s.w, h2, s.fx, 0).sh;
+    const hidden = s.nh - coverSource(s.nw, s.nh, s.w, h2, s.fx, 0, zoomOf(s)).sh;
     s.fy = hidden > 0 ? Math.round(clamp((was.sy / hidden) * 100, 0, 100) * 100) / 100 : 0;
   }
 }

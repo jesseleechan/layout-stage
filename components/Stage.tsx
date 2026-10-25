@@ -2,7 +2,7 @@
 import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type DragEvent, type PointerEvent } from 'react';
 import { captureJobSlot, useEditor } from '@/lib/store';
 import { PRESETS, type Composition } from '@/lib/model';
-import { clampRadius, rectOf, safeArea, scrollAxis, shadowCSS, unit } from '@/lib/render/units';
+import { clampRadius, coverSource, rectOf, safeArea, scrollAxis, shadowCSS, unit, zoomOf } from '@/lib/render/units';
 import { drawBackground } from '@/lib/render/background';
 import { useImageUrl, useLoadedImage } from '@/lib/images';
 import { MEDIA_DRAG } from '@/lib/media';
@@ -63,6 +63,16 @@ interface ShotProps {
   onFocusRing(i: number | null): void;
 }
 
+/** The image inside a layout: a cover crop at object-position fx% fy%, the CSS twin of coverSource.
+ *  Zoomed in, CSS can't express it, so the image is placed from coverSource's own window. */
+function imageStyle(s: Composition['slots'][number], w: number, h: number): CSSProperties {
+  const z = zoomOf(s);
+  if (z <= 1) return { objectPosition: `${s.fx}% ${s.fy}%` };
+  const c = coverSource(s.nw, s.nh, w, h, s.fx, s.fy, z);
+  const k = w / c.sw; // canvas px per image px
+  return { position: 'absolute', objectFit: 'fill', width: s.nw * k, height: s.nh * k, left: -c.sx * k, top: -c.sy * k };
+}
+
 function Shot({ i, doc, shadow, visible, onFocusRing }: ShotProps) {
   const s = doc.slots[i];
   const f = doc.frame;
@@ -93,7 +103,7 @@ function Shot({ i, doc, shadow, visible, onFocusRing }: ShotProps) {
       }}
     >
       {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img src={url ?? undefined} alt="" draggable={false} style={{ objectPosition: `${s.fx}% ${s.fy}%` }} />
+      <img src={url ?? undefined} alt="" draggable={false} style={imageStyle(s, r.w, r.h)} />
     </div>
   );
 }
@@ -454,6 +464,10 @@ export default function Stage() {
         <button className="btn sm" id="videoBtn" type="button" title="A video of a page scrolling" onClick={() => void useExport.getState().openVideo('videoBtn')}>
           <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round" aria-hidden="true"><rect x="2" y="3.5" width="12" height="9" rx="2" /><path d="M7 6.2v3.6L10 8z" fill="currentColor" /></svg>
           Video
+        </button>
+        <button className="btn sm" id="feedBtn" type="button" title="See it at feed size, among other pins and listings" onClick={() => useExport.getState().openFeed('feedBtn')}>
+          <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round" aria-hidden="true"><rect x="2" y="2.5" width="5" height="7" rx="1.2" /><rect x="9" y="2.5" width="5" height="4.5" rx="1.2" /><rect x="2" y="11.5" width="5" height="2.5" rx="1" /><rect x="9" y="9" width="5" height="5" rx="1.2" /></svg>
+          Preview
         </button>
         <span className="sep" aria-hidden="true" />
         <button className="btn sm" id="safeBtn" type="button" aria-pressed={showSafe} onClick={() => setUi({ showSafeArea: !showSafe })}>Safe area</button>

@@ -35,6 +35,16 @@ test.describe('POST /api/capture', () => {
     expect(await inUrl.json()).toEqual({ code: 'invalid_url', message: 'Put the username and password under Password-protected site, not in the address.' });
   });
 
+  test('the pages route refuses internal sites and bad bodies too', async ({ request }) => {
+    const res = await request.post('/api/pages', { data: { url: 'http://localhost' } });
+    expect(res.status()).toBe(403);
+    expect(await res.json()).toEqual({ code: 'private', message: PUBLIC_ONLY });
+    const junk = await request.post('/api/pages', { data: 'nope', headers: { 'Content-Type': 'application/json' } });
+    expect((await junk.json()).code).toBe('bad_request');
+    const cross = await request.post('/api/pages', { data: { url: 'https://example.com' }, headers: { 'Sec-Fetch-Site': 'cross-site' } });
+    expect(cross.status()).toBe(400);
+  });
+
   test('refuses requests other sites could send', async ({ request }) => {
     const body = JSON.stringify({ url: 'https://example.com', width: 1440, fullPage: false, scale: 1, delayMs: 0, hideBanners: true });
     const plain = await request.post('/api/capture', { data: body, headers: { 'Content-Type': 'text/plain' } });
@@ -93,6 +103,64 @@ test.describe('capture dialog', () => {
   test('names the replace target', async ({ page }) => {
     await page.evaluate(() => window.__layoutStage!.store.getState().openCapture(1));
     await expect(page.getByRole('dialog', { name: 'Replace layout 2 from URL' })).toBeVisible();
+  });
+
+  test('captures a whole site’s pages into Media (pages and captures served by stand-ins)', async ({ page }) => {
+    const site = 'https://studio.example';
+    await page.route('**/api/pages', (route) =>
+      route.fulfill({
+        json: {
+          pages: [
+            { url: `${site}/`, title: 'Home', nav: true },
+            { url: `${site}/about`, title: 'About', nav: true },
+            { url: `${site}/work`, title: 'Work', nav: true },
+            { url: `${site}/contact`, title: 'Contact', nav: true },
+            { url: `${site}/journal/hello`, title: 'Hello', nav: false },
+          ],
+        },
+      }),
+    );
+    // Each capture is a small PNG; the first waits until the test has seen the pending tiles.
+    const png = Buffer.from(await page.evaluate(() => {
+      const c = document.createElement('canvas');
+      c.width = 360;
+      c.height = 900;
+      c.getContext('2d')!.fillRect(0, 0, 360, 900);
+      return c.toDataURL('image/png').split(',')[1];
+    }), 'base64');
+    let release = () => {};
+    const held = new Promise<void>((r) => { release = r; });
+    let n = 0;
+    await page.route('**/api/capture', async (route) => {
+      const body = route.request().postDataJSON() as { url: string };
+      if (n++ === 0) await held;
+      await route.fulfill({ body: png, headers: { 'Content-Type': 'image/png', 'X-Capture-Trimmed': '0', 'X-Capture-Url': body.url } });
+    });
+
+    await page.evaluate(() => window.__layoutStage!.store.getState().openCapture(null));
+    const dialog = page.getByRole('dialog', { name: 'Capture from URL' });
+    await dialog.getByRole('button', { name: 'Whole site' }).click();
+    await expect(dialog.getByRole('button', { name: /^Both/ })).toHaveCount(0);
+    await dialog.getByLabel('Web address').fill('studio.example');
+    await dialog.getByRole('button', { name: 'Find pages' }).click();
+    // The menu pages are ticked to start.
+    await expect(dialog.locator('#sitePickCount')).toHaveText('4 of 5');
+    await expect(dialog.getByRole('checkbox', { name: /Hello/ })).not.toBeChecked();
+    await dialog.getByRole('checkbox', { name: /Contact/ }).uncheck();
+    await dialog.getByRole('button', { name: 'Capture 3 pages' }).click();
+    await expect(dialog).toBeHidden();
+
+    const media = page.getByRole('list', { name: 'Media' });
+    await expect(media.getByRole('img', { name: /^Capturing/ })).toHaveCount(3);
+    release();
+    await expect(page.locator('#mediaCount')).toHaveText('3 of 12', { timeout: 20_000 });
+    await expect(media.getByRole('img', { name: /^Capturing/ })).toHaveCount(0);
+    const doc = await page.evaluate(() => window.__layoutStage!.store.getState().doc);
+    // The two sample layouts take the first two pages; the third waits in Media.
+    expect(doc.slots.slice(0, doc.count).map((s) => s.name)).toEqual(['studio.example', 'studio.example/about']);
+    expect(doc.media!.map((m) => m.name)).toEqual(['studio.example', 'studio.example/about', 'studio.example/work']);
+    expect(doc.media![2].source).toMatchObject({ kind: 'url', url: `${site}/work` });
+    await expect(page.locator('#toast')).toHaveText('Captured 3 pages into Media.');
   });
 
   test('captures a public page into a layout', async ({ page }) => {

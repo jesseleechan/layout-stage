@@ -2,9 +2,11 @@
    ordinary Composition (or, for the palette card, the canvas it's drawn on), rendered later through
    lib/render like any export. Nothing here touches the store or the DOM, apart from the text
    measure the arrangement sizes the headline with (the page's by default; see arrange()). */
-import { arrange, arrangementOf, layoutRoom, pageMeasure } from './arrange';
+import { applyArrangement, arrange, arrangementOf, layoutRoom, pageMeasure } from './arrange';
+import { mediaOf, putImage } from './media';
 import { applyPlacement, recall } from './canvas-size';
-import { clone, PRESETS, type Composition, type PresetId, type Slot, type UiState } from './model';
+import { clone, PRESETS, type Composition, type MediaItem, type PresetId, type Slot, type UiState } from './model';
+import { gridPages, hasPages } from './pages-grid';
 import { autoCrop, cropRatio, scrollAxis } from './render/units';
 import type { Measure } from './render/overlay-layout';
 
@@ -41,7 +43,7 @@ export function forPreset(doc: Composition, preset: Exclude<PresetId, 'custom'>,
 
 /* ---------------- export all sizes ---------------- */
 
-export const ALL_SIZES: Exclude<PresetId, 'custom'>[] = ['pin', 'etsy43', 'etsy11'];
+export const ALL_SIZES: Exclude<PresetId, 'custom'>[] = ['pin', 'story', 'etsy43', 'etsy11'];
 
 export interface SizeItem {
   key: PresetId;
@@ -57,8 +59,8 @@ export function allSizes(doc: Composition, measure: Measure | null = pageMeasure
 
 /* ---------------- Etsy listing set ---------------- */
 
-/** Etsy shows at most 10 photos per listing. */
-export const ETSY_MAX_PHOTOS = 10;
+/** Etsy takes up to 20 photos per listing (10 until 2025). */
+export const ETSY_MAX_PHOTOS = 20;
 const SET_PRESET = 'etsy43';
 
 /** Shown as a phone: captured at phone width, or shown narrower than 0.6 (width / height). */
@@ -160,7 +162,9 @@ export type SetItem =
   | { kind: 'composition'; key: string; label: string; doc: Composition }
   /** The palette card: drawn on `doc`'s canvas with its frame and background, from the colors of
    *  `doc.slots[slot]` (lib/render/palette-card.ts). */
-  | { kind: 'palette'; key: string; label: string; doc: Composition; slot: number };
+  | { kind: 'palette'; key: string; label: string; doc: Composition; slot: number }
+  /** Every page in Media in a grid on `doc`'s canvas, background and frame (lib/pages-grid.ts). */
+  | { kind: 'pages'; key: string; label: string; doc: Composition; pages: MediaItem[] };
 
 /** The layouts as the set reads them. Showcase shows pages whole, which says nothing about their
  *  shape, so its whole pages are read through the crop a new image would get (autoCrop): desktop
@@ -175,13 +179,17 @@ function setView(doc: Composition): Composition {
 /**
  * The Etsy listing set, on Etsy 4:3:
  * 1. hero: the current layouts on the set's canvas (forPreset);
+ *    then, with two or more pages in Media, all of them in a grid (lib/pages-grid.ts);
  * 2–4. section close-ups of the main layout at up to three scroll points (none when its crop shows
  *      the whole image; see setView for showcase pages);
  * 5. desktop + phone, when the canvas has both;
- * 6. a palette card of the main layout's colors.
+ * then each other page in Media on its own (one page, from the top, in the Scroll layout);
+ * last, a palette card of the main layout's colors. At most ETSY_MAX_PHOTOS in all.
  */
 export function etsySet(src: Composition, measure: Measure | null = pageMeasure()): SetItem[] {
-  const items: SetItem[] = [{ kind: 'composition', key: 'hero', label: 'Hero', doc: forPreset(src, SET_PRESET, measure) }];
+  const hero = forPreset(src, SET_PRESET, measure);
+  const items: SetItem[] = [{ kind: 'composition', key: 'hero', label: 'Hero', doc: hero }];
+  if (hasPages(src)) items.push({ kind: 'pages', key: 'all-pages', label: 'All pages', doc: hero, pages: gridPages(src) });
   const doc = setView(src);
   const m = mainSlot(doc);
   const main = doc.slots[m];
@@ -196,6 +204,15 @@ export function etsySet(src: Composition, measure: Measure | null = pageMeasure(
   const desk = visible.findIndex(isWide);
   const phone = visible.findIndex(isPhone);
   if (desk >= 0 && phone >= 0) items.push({ kind: 'composition', key: 'desktop-phone', label: 'Desktop + phone', doc: desktopAndPhone(doc, desk, phone, measure) });
+  const onHero = new Set(src.slots.slice(0, src.count).map((s) => s.imageId));
+  const rest = mediaOf(src).filter((p) => !onHero.has(p.imageId)).slice(0, Math.max(0, ETSY_MAX_PHOTOS - 1 - items.length));
+  rest.forEach((p, k) => {
+    const d = clone(hero);
+    d.count = 1;
+    putImage(d, 0, p);
+    applyArrangement(d, 'showcase', measure);
+    items.push({ kind: 'composition', key: `page-${k + 1}`, label: p.name, doc: d });
+  });
   items.push({ kind: 'palette', key: 'palette', label: 'Palette', doc: only(src, [m]), slot: 0 });
   return items.slice(0, ETSY_MAX_PHOTOS);
 }
@@ -207,3 +224,13 @@ export function setFileName(index: number, key: string, w: number, h: number, fo
 
 export const ALL_SIZES_ZIP = 'layout-stage-all-sizes.zip';
 export const ETSY_SET_ZIP = 'layout-stage-etsy-set.zip';
+export const PAGES_ZIP = 'layout-stage-all-pages.zip';
+export const VARIATIONS_ZIP = 'layout-stage-variations.zip';
+
+/** The All pages image at each size the shop needs: Etsy 4:3, Pinterest pin, Etsy square. */
+export function pagesImages(src: Composition): { key: string; label: string; preset: Exclude<PresetId, 'custom'>; doc: Composition; pages: MediaItem[] }[] {
+  const pages = gridPages(src);
+  return (['etsy43', 'pin', 'etsy11'] as const).map((p) => ({
+    key: `all-pages-${PRESETS[p].slug}`, label: PRESETS[p].label, preset: p, doc: { ...clone(src), preset: p, W: PRESETS[p].w, H: PRESETS[p].h }, pages,
+  }));
+}

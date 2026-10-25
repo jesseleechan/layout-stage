@@ -176,6 +176,24 @@ test.describe('scrolling video', () => {
     await expect(page.locator('#vidSave')).toHaveCount(0);
   });
 
+  test('renders in another shape without changing the canvas: Pin 9:16 and Etsy 4:3', async ({ page }) => {
+    await openEditor(page);
+    await classic(page);
+    const before = await page.evaluate(() => JSON.stringify(window.__layoutStage!.store.getState().doc));
+    await openVideoSheet(page);
+    const shape = page.getByRole('group', { name: 'Shape' });
+    await expect(shape.getByRole('button', { name: 'Pin 2:3' })).toHaveCount(0); // the canvas is a pin already
+    await shape.getByRole('button', { name: 'Etsy 4:3' }).click();
+    await expect(page.locator('#vidShapeHint')).toContainText('up to 15 seconds');
+    await expect(page.getByRole('group', { name: 'Size in pixels' })).toContainText('1920 × 1440');
+    await shape.getByRole('button', { name: 'Pin 9:16' }).click();
+    await page.getByRole('group', { name: 'Size in pixels' }).getByRole('button', { name: '1080 × 1920' }).click();
+    await page.locator('#vidSeconds').fill('6');
+    await page.click('#vidRender');
+    await expect(page.locator('#vidMeta')).toContainText('1080 × 1920 px · 6 s · MP4', { timeout: 120_000 });
+    expect(await page.evaluate(() => JSON.stringify(window.__layoutStage!.store.getState().doc))).toBe(before);
+  });
+
   test('explains when no layout hides part of its page', async ({ page }) => {
     await openEditor(page);
     await page.evaluate(() => {

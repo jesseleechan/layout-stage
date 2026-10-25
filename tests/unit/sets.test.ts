@@ -105,8 +105,9 @@ describe('a headline on the new canvas', () => {
     const src = headed('top');
     const sizes = allSizes(src, measure);
     expect(sizes[0].doc).toEqual(src); // its own canvas: as it is
-    expect(sizes[1].doc).toEqual(forPreset(src, 'etsy43', measure));
-    expect(sizes[2].doc).toEqual(forPreset(src, 'etsy11', measure));
+    expect(sizes[1].doc).toEqual(forPreset(src, 'story', measure));
+    expect(sizes[2].doc).toEqual(forPreset(src, 'etsy43', measure));
+    expect(sizes[3].doc).toEqual(forPreset(src, 'etsy11', measure));
     expect(etsySet(src, measure)[0].doc).toEqual(forPreset(src, 'etsy43', measure));
     // Without a measure (node has no canvas) the headline gets no room: the arrangement is today's.
     const unmeasured = forPreset(src, 'etsy43');
@@ -138,14 +139,15 @@ describe('a headline on the new canvas', () => {
 });
 
 describe('allSizes', () => {
-  it('gives a pin, Etsy 4:3 and Etsy square, each at its default export scale', () => {
+  it('gives a pin at 2:3 and 9:16, Etsy 4:3 and Etsy square, each at its default export scale', () => {
     const items = allSizes(classicComposition());
     expect(items.map((i) => [i.key, i.doc.W, i.doc.H, i.scale])).toEqual([
       ['pin', 1000, 1500, 2],
+      ['story', 1080, 1920, 1],
       ['etsy43', 3000, 2250, 1],
       ['etsy11', 2000, 2000, 1],
     ]);
-    expect(items.map((i) => i.label)).toEqual([PRESETS.pin.label, PRESETS.etsy43.label, PRESETS.etsy11.label]);
+    expect(items.map((i) => i.label)).toEqual([PRESETS.pin.label, PRESETS.story.label, PRESETS.etsy43.label, PRESETS.etsy11.label]);
     items.forEach((i) => inside(i.doc));
   });
 });

@@ -3,6 +3,8 @@ import { useRef, useState, type DragEvent } from 'react';
 import { useEditor } from '@/lib/store';
 import { useThumbUrl } from '@/lib/images';
 import { MAX_MEDIA, MEDIA_DRAG, slotFor } from '@/lib/media';
+import { stopSiteJob } from '@/lib/capture/jobs';
+import { captureName } from '@/lib/capture/client';
 import type { MediaItem } from '@/lib/model';
 import './panels.css';
 
@@ -51,8 +53,27 @@ function MediaTile({ item, layouts, current, action }: { item: MediaItem; layout
   );
 }
 
+/** A page of a whole-site capture on its way: "Capturing…" until it lands, × stops it. */
+function PendingTile({ id, url }: { id: number; url: string }) {
+  const name = captureName(url);
+  return (
+    <li className="media-item">
+      <span className="media-tile media-pending" role="img" aria-label={`Capturing ${name}`} title={name}>
+        <span className="media-face">
+          <span className="cap-spin" aria-hidden="true" />
+        </span>
+      </span>
+      <button className="media-remove" type="button" aria-label={`Stop capturing ${name}`} title="Stop" onClick={() => stopSiteJob(id)}>
+        ×
+      </button>
+    </li>
+  );
+}
+
 export default function MediaPanel() {
   const media = useEditor((s) => s.doc.media) ?? NONE;
+  // A whole site's pages on their way in, as "id url" lines (a string, so other jobs don't re-render).
+  const pending = useEditor((s) => s.captureJobs.filter((j) => j.media).map((j) => `${j.id} ${j.url}`).join('\n'));
   // The visible layouts' images, one per line (a string, so drags don't re-render).
   const shown = useEditor((s) => s.doc.slots.slice(0, s.doc.count).map((x) => x.imageId).join('\n'));
   const selectedId = useEditor((s) => (s.ui.selected != null && s.ui.selected < s.doc.count ? s.doc.slots[s.ui.selected].imageId : null));
@@ -90,6 +111,10 @@ export default function MediaPanel() {
         {media.map((m) => (
           <MediaTile key={m.imageId} item={m} layouts={layoutsOf(m.imageId)} current={m.imageId === selectedId} action={target} />
         ))}
+        {pending.split('\n').filter(Boolean).map((line) => {
+          const at = line.indexOf(' ');
+          return <PendingTile key={line.slice(0, at)} id={Number(line.slice(0, at))} url={line.slice(at + 1)} />;
+        })}
         <li className="media-item">
           <button className="media-tile media-add" id="mediaAddBtn" type="button" aria-label="Add media" title="Add images to Media" onClick={() => fileRef.current?.click()}>
             <span className="media-face">

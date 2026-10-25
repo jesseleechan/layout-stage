@@ -25,6 +25,7 @@ import { nextSiteBackground, paletteOf } from './palette';
 import { dropSlot, reframe } from './capture/recapture';
 import { anyOverlay, patchOverlay, type OverlayKey, type Overlays } from './overlays';
 import { setCropOf, setHeight as setSlotHeight } from './crop';
+import { addCallout } from './callout';
 import { addMedia, keepShownInMedia, MAX_MEDIA, mediaOf, putImage, removeMedia, replaceMedia, slotFor } from './media';
 import { PIN_LIMITS, type PinField } from './pin-text';
 
@@ -40,6 +41,8 @@ export interface CaptureJob {
   url: string;
   target: number | null;
   targetId: string | null;
+  /** A page of a whole-site capture: it lands in Media (landMedia), not on a layout. */
+  media?: boolean;
 }
 
 /** The visible layout a capture job will replace now, or null when it will use the drop-elsewhere
@@ -107,6 +110,12 @@ export interface EditorState {
   /** Live: the layout's height at its width (a free-height crop, lib/crop.ts), keeping its top edge.
    *  `snapRatio` (default on) turns a height near Full or a preset into that crop. Commit on release. */
   setHeight(i: number, h: number, snapRatio?: boolean): void;
+  /** Live: how far layout i zooms into its image (1–4; lib/callout.ts). Commit on release. */
+  setZoom(i: number, zoom: number): void;
+  /** Live: the window's position on both axes (a zoomed layout pans both ways). Commit on release. */
+  setWindow(i: number, at: Partial<Pick<Slot, 'fx' | 'fy'>>): void;
+  /** Adds a zoom callout of layout i: a new layout on top showing its page magnified (one step). */
+  addCallout(i: number): void;
   /** Live: moves the Scroll (y) or Pan (x) position of a cropped image. Commit on release. */
   setScroll(i: number, v: number): void;
   /** Live: slot width. Commit on release. */
@@ -152,7 +161,7 @@ export interface EditorState {
   /* --- capture --- */
   openCapture(target: number | null): void;
   closeCapture(): void;
-  startCaptureJob(url: string, target: number | null): number;
+  startCaptureJob(url: string, target: number | null, media?: boolean): number;
   endCaptureJob(id: number): void;
 
   /* --- canvas tools: align and distribute (lib/align.ts) --- */
@@ -176,6 +185,11 @@ export interface EditorState {
    *  When that layout is gone (or there is none) it uses the drop-elsewhere rule, never on the layout
    *  showing `avoidId`. Resolves to the new image id, or null when the image couldn't be read. */
   landCapture(img: NewImage, at: { targetId: string | null; keepFraming?: boolean; avoidId?: string | null }): Promise<string | null>;
+  /** Puts a whole composition on the canvas (a pin variation, lib/variations.ts), as one undo step. */
+  putComposition(d: Composition): void;
+  /** Lands a page of a whole-site capture as its own undo step: in the first visible layout still
+   *  showing a sample, else in Media only. Resolves to the new image id, or null when it couldn't be read. */
+  landMedia(img: NewImage): Promise<string | null>;
 
   /* --- overlays: headline, badge, watermark (lib/overlays.ts) --- */
   /** Live: changes an overlay (typing, sliders) without saving a step. Commit on release / pause. */
@@ -509,6 +523,27 @@ export const useEditor = create<EditorState>()((set, get) => {
     setWidth(i, w) {
       edit((d) => { d.slots[i].w = w; });
     },
+    setZoom(i, zoom) {
+      edit((d) => {
+        if (zoom > 1) d.slots[i].zoom = Math.min(4, zoom);
+        else delete d.slots[i].zoom;
+      });
+    },
+    setWindow(i, at) {
+      const clamp = (v: number) => Math.max(0, Math.min(100, v));
+      edit((d) => {
+        if (at.fx != null) d.slots[i].fx = clamp(at.fx);
+        if (at.fy != null) d.slots[i].fy = clamp(at.fy);
+      });
+    },
+    addCallout(i) {
+      const doc = get().doc;
+      if (i < 0 || i >= doc.count) return;
+      if (doc.count >= 3) { toast('A callout is a layout of its own, and there are 3 already. Remove one first.'); return; }
+      const j = doc.count;
+      change((d) => { addCallout(d, i, j); });
+      setUi({ selected: j });
+    },
 
     editFrame(patch) {
       edit((d) => { Object.assign(d.frame, patch); });
@@ -659,11 +694,11 @@ export const useEditor = create<EditorState>()((set, get) => {
     closeCapture() {
       set({ captureDialog: { ...get().captureDialog, open: false } });
     },
-    startCaptureJob(url, target) {
+    startCaptureJob(url, target, media = false) {
       const id = ++jobSeq;
       const doc = get().doc;
-      const targetId = target != null && target < doc.count ? doc.slots[target].imageId : null;
-      set({ captureJobs: [...get().captureJobs, { id, url, target, targetId }] });
+      const targetId = !media && target != null && target < doc.count ? doc.slots[target].imageId : null;
+      set({ captureJobs: [...get().captureJobs, { id, url, target: media ? null : target, targetId, ...(media ? { media } : {}) }] });
       return id;
     },
     endCaptureJob(id) {
@@ -732,6 +767,25 @@ export const useEditor = create<EditorState>()((set, get) => {
       if (dropped) toast(mediaFull(dropped));
       releaseUnused([old]);
       return get().doc.slots[i].imageId;
+    },
+
+    putComposition(next) {
+      change((d) => {
+        for (const k of Object.keys(d) as (keyof Composition)[]) delete d[k];
+        Object.assign(d, clone(next));
+      });
+      setUi({ selected: null });
+    },
+    async landMedia(img) {
+      const item = await ingest(img);
+      if (!item) return null;
+      const doc = get().doc;
+      const sample = doc.slots.findIndex((s, k) => k < doc.count && s.source.kind === 'sample');
+      let dropped = 0;
+      if (sample >= 0) dropped = placeOne(item, sample);
+      else step((d) => { dropped = addMedia(d, [item]); });
+      if (dropped) toast(mediaFull(dropped));
+      return item.imageId;
     },
 
     /* --- overlays: headline, badge, watermark (lib/overlays.ts) --- */

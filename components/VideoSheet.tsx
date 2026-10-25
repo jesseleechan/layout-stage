@@ -5,7 +5,8 @@
    renderers as the still export. Closing the sheet cancels a render in progress. */
 import { useEffect, useRef, useState } from 'react';
 import { useEditor } from '@/lib/store';
-import { clone } from '@/lib/model';
+import { clone, PRESETS, type Composition, type PresetId } from '@/lib/model';
+import { forPreset } from '@/lib/sets';
 import { scrollAxis } from '@/lib/render/units';
 import { hasVideoEncoder, renderScrollVideo, VideoUnsupportedError, type VideoResult } from '@/lib/video/render';
 import {
@@ -18,6 +19,16 @@ import './video.css';
 
 type Phase = 'setup' | 'rendering' | 'done';
 
+/** The video's shape: the canvas as it is, or re-laid on another size as Export all sizes does it. */
+type Shape = 'canvas' | Exclude<PresetId, 'custom' | 'p45' | 'etsy11'>;
+const SHAPES: { value: Shape; label: string }[] = [
+  { value: 'canvas', label: 'This canvas' },
+  { value: 'story', label: 'Pin 9:16' },
+  { value: 'pin', label: 'Pin 2:3' },
+  { value: 'etsy43', label: 'Etsy 4:3' },
+];
+const shaped = (doc: Composition, shape: Shape): Composition => (shape === 'canvas' || shape === doc.preset ? doc : forPreset(doc, shape));
+
 const EASINGS: Option<VideoEasing>[] = [
   { value: 'smooth', label: 'Smooth' },
   { value: 'linear', label: 'Steady' },
@@ -25,15 +36,23 @@ const EASINGS: Option<VideoEasing>[] = [
 ];
 
 /** What the sheet was last set to, so it reopens as it was left (for this visit). */
-let remembered = { seconds: VIDEO_SECONDS.default, hold: VIDEO_HOLD.default, easing: 'smooth' as VideoEasing, long: VIDEO_LONG_DEFAULT as VideoLong };
+let remembered = { seconds: VIDEO_SECONDS.default, hold: VIDEO_HOLD.default, easing: 'smooth' as VideoEasing, long: VIDEO_LONG_DEFAULT as VideoLong, shape: 'canvas' as Shape };
 
 const fmtBytes = (b: number) => (b > 1048576 ? (b / 1048576).toFixed(1) + ' MB' : Math.max(1, Math.round(b / 1024)) + ' KB');
 const fmtSeconds = (s: number) => `${Number.isInteger(s) ? s : s.toFixed(1)} s`;
 
 export default function VideoBody({ onClose, notify, onWide }: { onClose: () => void; notify: (msg: string) => void; onWide: (wide: boolean) => void }) {
-  // The canvas as the sheet opened (only pin text can change while it is open).
-  const [doc] = useState(() => clone(useEditor.getState().doc));
+  // The canvas as the sheet opened (only pin text can change while it is open), in the chosen shape.
+  const [canvas] = useState(() => clone(useEditor.getState().doc));
+  const [shape, setShape] = useState<Shape>(remembered.shape);
+  const [doc, setDoc] = useState(() => shaped(canvas, remembered.shape));
   const [slot, setSlot] = useState<number | null>(() => defaultScrollSlot(doc, useEditor.getState().ui.selected));
+  const pickShape = (s: Shape) => {
+    const d = shaped(canvas, s);
+    setShape(s);
+    setDoc(d);
+    setSlot((cur) => (cur != null && canScroll(d.slots[cur], d.H) && cur < d.count ? cur : defaultScrollSlot(d, useEditor.getState().ui.selected)));
+  };
   const [seconds, setSeconds] = useState(remembered.seconds);
   const [hold, setHold] = useState(remembered.hold);
   const [easing, setEasing] = useState<VideoEasing>(remembered.easing);
@@ -48,7 +67,7 @@ export default function VideoBody({ onClose, notify, onWide }: { onClose: () => 
   const cancelRef = useRef<HTMLButtonElement>(null);
   const saveRef = useRef<HTMLAnchorElement>(null);
 
-  useEffect(() => { remembered = { seconds, hold, easing, long }; }, [seconds, hold, easing, long]);
+  useEffect(() => { remembered = { seconds, hold, easing, long, shape }; }, [seconds, hold, easing, long, shape]);
   // Closing the sheet stops a render in progress.
   useEffect(() => () => abortRef.current?.abort(), []);
   // A file that was shown is revoked a little later, so a download that just started finishes.
@@ -82,7 +101,7 @@ export default function VideoBody({ onClose, notify, onWide }: { onClose: () => 
     let shown = 0;
     try {
       // Pin text may have changed since the sheet opened; nothing it draws has.
-      const r = await renderScrollVideo(clone(useEditor.getState().doc), { slot, seconds, hold, easing, long }, {
+      const r = await renderScrollVideo(clone(shaped(useEditor.getState().doc, shape)), { slot, seconds, hold, easing, long }, {
         signal: ac.signal,
         onProgress(done, total) {
           const now = performance.now();
@@ -159,6 +178,15 @@ export default function VideoBody({ onClose, notify, onWide }: { onClose: () => 
       {!supported && <p className="vid-note" role="alert">This browser can’t make videos. Use Chrome, Edge or Safari 16.4 or later.</p>}
       {error && <p className="vid-note" role="alert">{error}</p>}
       <div className="vid-form">
+        <div className="vid-field">
+          <span className="lbl" aria-hidden="true">Shape</span>
+          <Seg label="Shape" options={SHAPES.filter((o) => o.value === 'canvas' || o.value !== canvas.preset)} value={shape === canvas.preset ? 'canvas' : shape} onPick={pickShape} />
+          <p className="fine vid-hint" id="vidShapeHint">
+            {shape === 'canvas' || shape === canvas.preset
+              ? `${doc.W} × ${doc.H}, as on the canvas.`
+              : `${PRESETS[shape].label}: the layouts re-laid for it, as Export all sizes does.${shape === 'etsy43' ? ' Etsy plays listing videos without sound, up to 15 seconds.' : ''}`}
+          </p>
+        </div>
         <div className="vid-field">
           <span className="lbl" id="vidSlotLbl">Scrolls</span>
           <div className="seg" id="vidSlot" role="group" aria-labelledby="vidSlotLbl">

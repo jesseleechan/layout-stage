@@ -3,16 +3,16 @@
    coverSource(), the cover crop the preview and the export both draw with, so the canvas gestures and
    the mini-map move exactly what is rendered. Pure. */
 import type { Slot } from './model';
-import { coverSource, cropRatio, scrollAxis } from './render/units';
+import { coverSource, cropRatio, scrollAxis, zoomOf } from './render/units';
 
 /** What the scroll math reads from a slot. */
-export type ScrollSlot = Pick<Slot, 'crop' | 'ar' | 'nw' | 'nh' | 'w' | 'fx' | 'fy'>;
+export type ScrollSlot = Pick<Slot, 'crop' | 'ar' | 'zoom' | 'nw' | 'nh' | 'w' | 'fx' | 'fy'>;
 
 const clampPct = (v: number) => Math.max(0, Math.min(100, v));
 const round2 = (v: number) => Math.round(v * 100) / 100;
 
 /** The cover-crop source rect at the slot's current size and position. */
-const source = (s: ScrollSlot) => coverSource(s.nw, s.nh, s.w, s.w / cropRatio(s), s.fx, s.fy);
+const source = (s: ScrollSlot) => coverSource(s.nw, s.nh, s.w, s.w / cropRatio(s), s.fx, s.fy, zoomOf(s));
 
 /** The scroll position along the slot's axis (fy for Scroll, fx for Pan), or null when the crop
  *  shows the whole image. */

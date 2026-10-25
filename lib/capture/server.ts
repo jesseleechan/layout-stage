@@ -15,6 +15,7 @@ import { startGuardProxy, type GuardProxy } from './guard-proxy';
 import { stitchPngs } from './png';
 import { createSerialQueue, type Serial } from './queue';
 import { selectorCss } from './selectors';
+import { childSitemaps, parseSitemap, type SiteScan } from './pages';
 import { checkUrl, createRequestGuard, publicOnly, type HostPolicy, type RequestGuard, type RequestVerdict } from './url-guard';
 
 export const MAX_CAPTURE_HEIGHT = 12_000; // CSS px; taller full pages are trimmed
@@ -544,4 +545,145 @@ async function wakeLazyContent(page: Page): Promise<void> {
     window.scrollTo({ top: 0, behavior: 'instant' });
     await sleep(100);
   }, MAX_CAPTURE_HEIGHT);
+}
+
+/* ---------------- a site's pages (capturing a whole template) ---------------- */
+
+/** Most characters of a sitemap read. */
+const SITEMAP_CHARS = 2_000_000;
+const SITEMAP_TIMEOUT_MS = 8000;
+
+/** Reads a site's menu links and sitemap, starting at `input.url`, with the capture browser behind the
+ *  same guard (public addresses only, every connection checked). lib/capture/pages.ts turns the result
+ *  into the list of pages to capture. Waits its turn like a capture. Throws CaptureError. */
+export function findSitePages(input: { url: string; auth: CaptureAuth | null }, opts: { signal?: AbortSignal; policy?: HostPolicy } = {}): Promise<SiteScan> {
+  return shared.queue(async () => {
+    if (opts.signal?.aborted) throw new CaptureError('aborted');
+    clearTimeout(shared.idle);
+    try {
+      return await scanSite(input, opts.policy ?? publicOnly(), opts.signal);
+    } finally {
+      if ((await shared.session?.catch(() => null))?.singleUse) {
+        await shutdownCapture();
+      } else {
+        shared.idle = setTimeout(() => void shutdownCapture(), IDLE_CLOSE_MS);
+        shared.idle.unref?.();
+      }
+    }
+  });
+}
+
+async function scanSite(input: { url: string; auth: CaptureAuth | null }, policy: HostPolicy, signal?: AbortSignal): Promise<SiteScan> {
+  const target = await checkUrl(input.url, policy);
+  const guard = createRequestGuard(policy);
+  const { browser, proxy, singleUse } = await getSession();
+  proxy.setGuard(guard);
+  let context: BrowserContext;
+  try {
+    context = await browser.newContext({
+      viewport: { width: 1440, height: VIEWPORT_HEIGHT },
+      userAgent: userAgent(browser, false),
+      locale: 'en-US',
+      httpCredentials: input.auth ? { username: input.auth.username, password: input.auth.password, origin: target.origin, send: 'unauthorized' } : undefined,
+      serviceWorkers: 'block',
+      acceptDownloads: false,
+      bypassCSP: true, // so reading the sitemap from the page isn't blocked by its connect-src
+    });
+  } catch (e) {
+    console.error('[capture] new context failed:', loggable(e, input.auth));
+    throw new CaptureError('failed');
+  }
+  const onAbort = () => void (singleUse ? browser : context).close().catch(() => undefined);
+  signal?.addEventListener('abort', onAbort, { once: true });
+  try {
+    return await untilBrowserExits(browser, readSite(context, target, input, guard));
+  } catch (e) {
+    if (signal?.aborted) throw new CaptureError('aborted');
+    const err = navError(e);
+    if (err.code === 'failed') console.error('[capture] reading pages failed:', loggable(e, input.auth));
+    throw err;
+  } finally {
+    signal?.removeEventListener('abort', onAbort);
+    if (browser.isConnected()) await context.close().catch(() => undefined);
+  }
+}
+
+async function readSite(context: BrowserContext, target: URL, input: { auth: CaptureAuth | null }, guard: RequestGuard): Promise<SiteScan> {
+  await context.route('**/*', async (route) => {
+    const v = await guard(route.request().url());
+    return (v === 'ok' ? route.continue() : route.abort('blockedbyclient')).catch(() => undefined);
+  });
+  await context.routeWebSocket(() => true, (ws) => void ws.close().catch(() => undefined));
+  const page = await context.newPage();
+  let status = 0;
+  try {
+    status = (await page.goto(target.href, { waitUntil: 'domcontentloaded', timeout: NAV_TIMEOUT }))?.status() ?? 0;
+  } catch (e) {
+    throw navError(e);
+  }
+  // Menus built by scripts are there by `load`; don't wait long for it.
+  await page.waitForLoadState('load', { timeout: 8000 }).catch(() => undefined);
+  const v = await guard(page.url());
+  if (v !== 'ok') throw refusal(v);
+  const err = authError(status, !!input.auth) ?? (await checkPage(page, status));
+  if (err) throw err;
+
+  const { nav, links } = await page.evaluate(() => {
+    const read = (root: ParentNode) =>
+      Array.from(root.querySelectorAll<HTMLAnchorElement>('a[href]'), (a) => ({ href: a.href, text: (a.innerText || a.textContent || '').trim().slice(0, 120) }));
+    const seen = new Set<string>();
+    const nav: { href: string; text: string }[] = [];
+    for (const el of Array.from(document.querySelectorAll('header, nav, [role="navigation"]'))) {
+      for (const l of read(el)) {
+        if (seen.has(l.href)) continue;
+        seen.add(l.href);
+        nav.push(l);
+      }
+    }
+    return { nav: nav.slice(0, 200), links: read(document).slice(0, 500) };
+  });
+  return { finalUrl: page.url(), nav, links, sitemap: await readSitemap(page) };
+}
+
+/** The site's sitemap page addresses, read from the page itself (same origin, through the guard):
+ *  /sitemap.xml, else the usual WordPress names; an index's page sitemaps first. */
+async function readSitemap(page: Page): Promise<string[]> {
+  const origin = new URL(page.url()).origin;
+  const get = (path: string) =>
+    page
+      .evaluate(
+        async ({ path, max, ms }) => {
+          const ctl = new AbortController();
+          const t = setTimeout(() => ctl.abort(), ms);
+          try {
+            const r = await fetch(path, { credentials: 'same-origin', signal: ctl.signal });
+            if (!r.ok || new URL(r.url).origin !== location.origin) return '';
+            return (await r.text()).slice(0, max);
+          } catch {
+            return '';
+          } finally {
+            clearTimeout(t);
+          }
+        },
+        { path, max: SITEMAP_CHARS, ms: SITEMAP_TIMEOUT_MS },
+      )
+      .catch(() => '');
+  let map = { urls: [] as string[], sitemaps: [] as string[] };
+  for (const path of ['/sitemap.xml', '/sitemap_index.xml', '/wp-sitemap.xml']) {
+    map = parseSitemap(await get(path));
+    if (map.urls.length || map.sitemaps.length) break;
+  }
+  const urls = [...map.urls];
+  const children = map.sitemaps.filter((s) => {
+    try {
+      return new URL(s).origin === origin;
+    } catch {
+      return false;
+    }
+  });
+  for (const s of childSitemaps(children)) {
+    const u = new URL(s);
+    urls.push(...parseSitemap(await get(u.pathname + u.search)).urls);
+  }
+  return urls.slice(0, 2000);
 }

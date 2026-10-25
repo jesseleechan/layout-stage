@@ -28,7 +28,7 @@ export interface VideoSettings {
 
 /* ---------------- which layout ---------------- */
 
-type VideoSlot = Pick<Slot, 'crop' | 'ar' | 'nw' | 'nh' | 'w' | 'fx' | 'fy' | 'cx' | 'cy'>;
+type VideoSlot = Pick<Slot, 'crop' | 'ar' | 'zoom' | 'nw' | 'nh' | 'w' | 'fx' | 'fy' | 'cx' | 'cy'>;
 
 /** How far a whole page that runs off the bottom of an H tall canvas slides up, in canvas px: until
  *  its bottom edge is as far from the canvas bottom as its top edge is from the top. 0 for a cropped

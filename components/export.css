@@ -44,7 +44,9 @@
   grid-column: 1 / -1; height: 190px; border-radius: 8px; background: var(--field);
   display: grid; place-items: center; padding: 10px; overflow: hidden;
 }
-.multi-thumb img { max-width: 100%; max-height: 100%; display: block; border-radius: 2px; box-shadow: 0 3px 12px rgba(0, 0, 0, .16); }
+/* The whole image, never cropped: a percentage max-height doesn't hold inside the grid cell, so the
+   cap is the box's height less its padding. */
+.multi-thumb img { max-width: 100%; max-height: 170px; display: block; border-radius: 2px; box-shadow: 0 3px 12px rgba(0, 0, 0, .16); }
 .multi-wait { font: 500 11.5px var(--font-num); color: var(--ink-2); }
 .multi-item[aria-busy="true"] .multi-wait { animation: multi-wait 1.1s ease-in-out infinite alternate; }
 @keyframes multi-wait { from { opacity: 1; } to { opacity: .4; } }
@@ -59,4 +61,24 @@
 }
 @media (max-width: 460px) {
   .multi-thumb { height: 150px; }
+  .multi-thumb img { max-height: 130px; }
 }
+.multi-buttons { display: flex; gap: 6px; }
+
+/* Feed preview (components/FeedPreview.tsx): a white feed page with placeholders, as the sites look. */
+.sheet.feed-sheet .sheet-card { width: min(1080px, 100%); }
+.feed { margin: 12px 0 8px; padding: 18px; border-radius: 14px; background: #FFFFFF; max-height: min(62vh, 640px); overflow: auto; }
+.feed-pins { display: flex; gap: 16px; justify-content: center; align-items: flex-start; }
+.feed-col { display: grid; gap: 16px; width: 236px; flex: none; }
+.feed-pin { display: block; width: 236px; border-radius: 16px; background: #EFEFEF; margin: 0; overflow: hidden; }
+.feed-pin img { width: 100%; height: 100%; display: block; object-fit: cover; }
+.feed-pin.mine { box-shadow: 0 0 0 2px var(--accent); }
+.feed-etsy { display: grid; grid-template-columns: repeat(4, 220px); gap: 18px 16px; justify-content: center; }
+.feed-card { display: grid; gap: 7px; }
+.feed-thumb { display: block; width: 220px; aspect-ratio: 5 / 4; border-radius: 10px; background: #EFEFEF; margin: 0; overflow: hidden; }
+.feed-thumb img { width: 100%; height: 100%; display: block; object-fit: cover; object-position: center; }
+.feed-thumb.mine { box-shadow: 0 0 0 2px var(--accent); }
+.feed-line { display: block; height: 9px; border-radius: 5px; background: #EFEFEF; }
+.feed-line.short { width: 40%; }
+@media (max-width: 1100px) { .feed-col:nth-child(4) { display: none; } .feed-etsy { grid-template-columns: repeat(3, 220px); } }
+@media (max-width: 820px) { .feed-col:nth-child(3) { display: none; } .feed-etsy { grid-template-columns: repeat(2, 1fr); } .feed-thumb { width: 100%; } }

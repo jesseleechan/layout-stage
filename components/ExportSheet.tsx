@@ -8,17 +8,23 @@ import { makeCanvas } from '@/lib/render/background';
 import { renderPaletteCard } from '@/lib/render/palette-card';
 import { exportScale } from '@/lib/render/units';
 import { loadImage } from '@/lib/images';
-import { paletteOf } from '@/lib/palette';
-import { allSizes, ALL_SIZES_ZIP, etsySet, ETSY_SET_ZIP, setFileName, type SetItem } from '@/lib/sets';
+import { paletteOf, siteBackgrounds } from '@/lib/palette';
+import { allSizes, ALL_SIZES_ZIP, etsySet, ETSY_SET_ZIP, pagesImages, PAGES_ZIP, setFileName, VARIATIONS_ZIP, type SetItem } from '@/lib/sets';
+import { hasPages } from '@/lib/pages-grid';
+import { pinVariations, variationPages } from '@/lib/variations';
+import { pageMeasure } from '@/lib/arrange';
+import { renderPagesGrid } from '@/lib/render/pages-grid';
 import { zipBlobs } from '@/lib/zip';
 import PinTextSection from './PinText';
 import VideoBody from './VideoSheet';
+import FeedBody from './FeedPreview';
 import './export.css';
 
 export const fmtBytes = (b: number) => (b > 1048576 ? (b / 1048576).toFixed(1) + ' MB' : Math.max(1, Math.round(b / 1024)) + ' KB');
 
 type Format = UiState['exportFormat'];
-type Mode = 'single' | 'sizes' | 'etsy' | 'video';
+type Mode = 'single' | 'sizes' | 'etsy' | 'pages' | 'variations' | 'video' | 'feed';
+type MultiMode = Exclude<Mode, 'single' | 'video' | 'feed'>;
 
 /** One file of a multi-image export. */
 export interface SheetItem {
@@ -35,6 +41,8 @@ export interface SheetItem {
   /** A small preview. */
   thumb: string | null;
   error?: string;
+  /** A variation that can be put on the canvas. */
+  doc?: Composition;
 }
 
 interface ExportState {
@@ -56,8 +64,14 @@ interface ExportState {
   runAllSizes(returnTo?: string): Promise<void>;
   /** The Etsy listing set from the current canvas. */
   runEtsySet(returnTo?: string): Promise<void>;
+  /** Every page in Media in one grid, at Etsy 4:3, pin and Etsy square (lib/pages-grid.ts). */
+  runPagesGrid(returnTo?: string): Promise<void>;
+  /** Pin variations of the current canvas (lib/variations.ts). */
+  runVariations(returnTo?: string): Promise<void>;
   /** Opens the scrolling video sheet (components/VideoSheet.tsx). */
   openVideo(returnTo?: string): Promise<void>;
+  /** Opens the feed preview (components/FeedPreview.tsx). */
+  openFeed(returnTo?: string): void;
   /** Shows a short message inside the sheet. */
   notify(msg: string): void;
   copy(): void;
@@ -109,8 +123,8 @@ export const useExport = create<ExportState>()((set, get) => {
 
   /** Renders `plan` one file at a time into the open sheet, then zips the files. */
   const runMulti = async (
-    mode: 'sizes' | 'etsy',
-    plan: { key: string; label: string; render(): Promise<HTMLCanvasElement>; name(w: number, h: number): string }[],
+    mode: MultiMode,
+    plan: { key: string; label: string; render(): Promise<HTMLCanvasElement>; name(w: number, h: number): string; doc?: Composition }[],
     zipName: string,
     format: Format,
     returnTo: string,
@@ -120,7 +134,7 @@ export const useExport = create<ExportState>()((set, get) => {
     clearMulti();
     set({
       mode, open: true, rendering: true, returnTo, note: null,
-      items: plan.map((p) => ({ key: p.key, label: p.label, status: 'pending', name: '', w: 0, h: 0, format, blob: null, url: null, thumb: null })),
+      items: plan.map((p) => ({ key: p.key, label: p.label, status: 'pending', name: '', w: 0, h: 0, format, blob: null, url: null, thumb: null, ...(p.doc ? { doc: p.doc } : {}) })),
     });
     const update = (i: number, patch: Partial<SheetItem>) => set({ items: get().items.map((it, k) => (k === i ? { ...it, ...patch } : it)) });
     for (let i = 0; i < plan.length; i++) {
@@ -200,6 +214,7 @@ export const useExport = create<ExportState>()((set, get) => {
       const render = (it: SetItem) => async () => {
         const m = exportScale(it.doc.W, it.doc.H, scale);
         if (it.kind === 'composition') return renderComposition(it.doc, m);
+        if (it.kind === 'pages') return renderPagesGrid(it.doc, it.pages, it.doc.W, it.doc.H, m);
         const slot = it.doc.slots[it.slot];
         const pal = await paletteOf(slot.imageId, loadImage);
         if (!pal) throw new Error('no colors');
@@ -213,10 +228,46 @@ export const useExport = create<ExportState>()((set, get) => {
       }));
       return runMulti('etsy', plan, ETSY_SET_ZIP, format, returnTo);
     },
+    async runVariations(returnTo = 'exportBtn') {
+      if (get().rendering) return;
+      const { doc, ui } = useEditor.getState();
+      const snap = clone(doc);
+      const format = ui.exportFormat;
+      const lead = variationPages(snap)[0];
+      const pal = lead ? await paletteOf(lead.imageId, loadImage).catch(() => null) : null;
+      const plan = pinVariations(snap, pal ? siteBackgrounds(pal) : null, pageMeasure()).map((v, i) => ({
+        key: v.key,
+        label: v.label,
+        doc: v.doc,
+        render: () => renderComposition(v.doc, exportScale(v.doc.W, v.doc.H, ui.exportScale)),
+        name: (w: number, h: number) => `layout-stage-${PRESETS[v.doc.preset].slug}-variation-${i + 1}-${w}x${h}.${format === 'jpg' ? 'jpg' : 'png'}`,
+      }));
+      return runMulti('variations', plan, VARIATIONS_ZIP, format, returnTo);
+    },
+    async runPagesGrid(returnTo = 'exportBtn') {
+      const { doc, ui, showToast } = useEditor.getState();
+      if (!hasPages(doc)) {
+        showToast('Add two or more pages to Media first: upload them, or capture a whole site.');
+        return;
+      }
+      const format = ui.exportFormat;
+      const plan = pagesImages(clone(doc)).map((it) => ({
+        key: it.key,
+        label: it.label,
+        render: () => renderPagesGrid(it.doc, it.pages, it.doc.W, it.doc.H, exportScale(it.doc.W, it.doc.H, PRESETS[it.preset].scale)),
+        name: (w: number, h: number) => `layout-stage-all-pages-${PRESETS[it.preset].slug}-${w}x${h}.${format === 'jpg' ? 'jpg' : 'png'}`,
+      }));
+      return runMulti('pages', plan, PAGES_ZIP, format, returnTo);
+    },
     async openVideo(returnTo = 'exportBtn') {
       if (get().rendering) return;
       clearMulti();
       set({ mode: 'video', open: true, returnTo, note: null });
+    },
+    openFeed(returnTo = 'feedBtn') {
+      if (get().rendering) return;
+      clearMulti();
+      set({ mode: 'feed', open: true, returnTo, note: null });
     },
     notify: note,
     copy() {
@@ -349,12 +400,26 @@ function VideoSheet() {
   );
 }
 
-const MULTI_COPY: Record<'sizes' | 'etsy', { title: string; lede: string }> = {
+/** The feed preview sheet. */
+function FeedSheet() {
+  const close = useExport((s) => s.close);
+  useEffect(() => document.getElementById('sheetBack')?.focus(), []);
+  return (
+    <Sheet className="feed-sheet">
+      <Head title="In the feed" />
+      <FeedBody onClose={close} />
+    </Sheet>
+  );
+}
+
+const MULTI_COPY: Record<MultiMode, { title: string; lede: string }> = {
   sizes: { title: 'All sizes', lede: 'The same layouts and style, arranged for each size.' },
-  etsy: { title: 'Etsy listing set', lede: 'Listing photos at 3000 × 2250. Etsy shows up to 10 per listing.' },
+  variations: { title: 'Variations', lede: 'Takes on this canvas from the same pages: other layouts, another page in front, backgrounds from the site’s colors. Post several as fresh pins, or put one on the canvas.' },
+  pages: { title: 'All pages', lede: 'Every page in Media in one grid, with your background and frame. Good as an Etsy “what’s included” photo.' },
+  etsy: { title: 'Etsy listing set', lede: 'Listing photos at 3000 × 2250, in listing order. Etsy takes up to 20 per listing.' },
 };
 
-function MultiSheet({ mode }: { mode: 'sizes' | 'etsy' }) {
+function MultiSheet({ mode }: { mode: MultiMode }) {
   const items = useExport((s) => s.items);
   const zip = useExport((s) => s.zip);
   const rendering = useExport((s) => s.rendering);
@@ -368,6 +433,12 @@ function MultiSheet({ mode }: { mode: 'sizes' | 'etsy' }) {
     ? `Rendering ${at} of ${items.length}…`
     : `${done.length} ${done.length === 1 ? 'image' : 'images'} · ${fmtBytes(total)}`;
   const { title, lede } = MULTI_COPY[mode];
+  const putOnCanvas = (it: SheetItem) => {
+    if (!it.doc) return;
+    useEditor.getState().putComposition(it.doc);
+    close();
+    useEditor.getState().showToast(`${it.label.split(' · ')[0]} is on the canvas. Undo goes back.`);
+  };
   return (
     <Sheet className="multi">
       <Head title={title} />
@@ -390,7 +461,12 @@ function MultiSheet({ mode }: { mode: 'sizes' | 'etsy' }) {
                 </span>
               </div>
               {it.status === 'done' && it.url && (
-                <a className="btn sm" href={it.url} download={it.name} aria-label={`Save ${it.name}`}>Save</a>
+                <span className="multi-buttons">
+                  {it.doc && (
+                    <button className="btn sm" type="button" aria-label={`Use ${it.label} on the canvas`} onClick={() => putOnCanvas(it)}>Use</button>
+                  )}
+                  <a className="btn sm" href={it.url} download={it.name} aria-label={`Save ${it.name}`}>Save</a>
+                </span>
               )}
             </li>
           );
@@ -416,5 +492,6 @@ export default function ExportSheet() {
   if (!open) return null;
   if (mode === 'single') return hasResult ? <SingleSheet /> : null;
   if (mode === 'video') return <VideoSheet />;
+  if (mode === 'feed') return <FeedSheet />;
   return <MultiSheet key={mode} mode={mode} />;
 }
