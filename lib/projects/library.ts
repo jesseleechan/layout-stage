@@ -89,6 +89,10 @@ let flushTimer: ReturnType<typeof setTimeout> | undefined;
 let thumbTimer: ReturnType<typeof setTimeout> | undefined;
 let retryTimer: ReturnType<typeof setTimeout> | undefined;
 let backoff = 30_000;
+/** After a push fails, no push before this unless asked for; the wait doubles with each failure (every
+ *  attempt costs store operations). */
+let pushRetryAt = 0;
+let pushBackoff = PUSH_GAP;
 /** The open project changed since its thumbnail was made. */
 let thumbStale = false;
 let openAbort: AbortController | null = null;
@@ -163,7 +167,7 @@ export const useProjects = create<ProjectsState>()((set, get) => {
     if (!canSync()) return;
     const now = Date.now();
     if (!dirtySince) dirtySince = now;
-    const due = Math.max(lastPushAt + PUSH_GAP, Math.min(now + PUSH_QUIET, dirtySince + PUSH_MAX_WAIT));
+    const due = Math.max(lastPushAt + PUSH_GAP, pushRetryAt, Math.min(now + PUSH_QUIET, dirtySince + PUSH_MAX_WAIT));
     clearTimeout(flushTimer);
     flushTimer = setTimeout(() => void flush(false), Math.max(0, due - now));
   };
@@ -255,7 +259,7 @@ export const useProjects = create<ProjectsState>()((set, get) => {
     clearTimeout(flushTimer);
     const mode = get().mode;
     if (mode !== 'blob' && mode !== 'local') return Promise.resolve();
-    if (leaving && !force && Date.now() - lastPushAt < LEAVE_GAP) {
+    if (!force && (Date.now() < pushRetryAt || (leaving && Date.now() - lastPushAt < LEAVE_GAP))) {
       scheduleFlush();
       return Promise.resolve();
     }
@@ -274,8 +278,14 @@ export const useProjects = create<ProjectsState>()((set, get) => {
         }
         for (const id of work) await pushOne(id, leaving, mode);
         dirtySince = 0;
+        pushRetryAt = 0;
+        pushBackoff = PUSH_GAP;
         synced();
       } catch (e) {
+        if (!(e instanceof api.OfflineError) && !isBusyError(e)) {
+          pushRetryAt = Date.now() + pushBackoff;
+          pushBackoff = Math.min(pushBackoff * 2, 30 * 60_000);
+        }
         failed(e);
       }
     });

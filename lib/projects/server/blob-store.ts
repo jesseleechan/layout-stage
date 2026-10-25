@@ -31,9 +31,9 @@ async function readToken(): Promise<IssuedSignedToken> {
   return signed;
 }
 
-async function open(path: string, fresh: boolean) {
+async function open(path: string, fresh: boolean, headers?: HeadersInit) {
   try {
-    const r = await get(path, { access: ACCESS, useCache: !fresh });
+    const r = await get(path, { access: ACCESS, useCache: !fresh, headers });
     return r && r.statusCode === 200 ? r : null;
   } catch (e) {
     if (e instanceof BlobNotFoundError) return null;
@@ -46,9 +46,13 @@ export function blobStore(): ProjectStore {
     kind: 'blob',
 
     async readJson<T>(path: string): Promise<StoredJson<T> | null> {
-      const r = await open(path, true);
+      // Uncompressed: the ETag of a compressed answer isn't one ifMatch accepts (every update to an
+      // existing project was refused). A weak one is logged: writes to that file may be refused.
+      const r = await open(path, true, { 'accept-encoding': 'identity' });
       if (!r) return null;
-      return { data: JSON.parse(await new Response(r.stream).text()) as T, etag: r.blob.etag };
+      const etag = r.blob.etag.replace(/^W\//, '');
+      if (etag !== r.blob.etag || !etag) console.warn('[projects] weak or missing ETag on', path);
+      return { data: JSON.parse(await new Response(r.stream).text()) as T, etag };
     },
 
     async writeJson(path, data, ifMatch) {
