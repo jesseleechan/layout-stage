@@ -155,9 +155,11 @@ function PendingRow({ job }: { job: CaptureJob }) {
 export default function LayoutsPanel() {
   const count = useEditor((s) => s.doc.count);
   const selected = useEditor((s) => s.ui.selected);
-  const jobs = useEditor((s) => s.captureJobs);
+  // Captures for layouts (a whole site's pages show in Media instead).
+  const all = useEditor((s) => s.captureJobs);
+  const jobs = all.filter((j) => !j.media);
   // Where each capture will land now ("" = the drop-elsewhere rule); a string so drags don't re-render.
-  const jobSlots = useEditor((s) => s.captureJobs.map((j) => captureJobSlot(s.doc, j) ?? '').join(','));
+  const jobSlots = useEditor((s) => s.captureJobs.filter((j) => !j.media).map((j) => captureJobSlot(s.doc, j) ?? '').join(','));
   const slotOf = (k: number) => jobSlots.split(',')[k];
   const openCapture = useEditor((s) => s.openCapture);
   // Layouts captured from a URL, and how many of them aren't capturing now (for Re-capture all).

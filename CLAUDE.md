@@ -49,6 +49,9 @@ npx playwright install chromium          # once per machine, for URL capture and
   (stored ZIP writer), `lib/video/` (scrolling video: `timing.ts`, `render.ts` drawing each frame with the
   shared renderers, `mp4.ts` a small MP4 muxer for WebCodecs H.264), `lib/pin-text.ts` (Pin text
   suggestions)
+- Whole-site capture: `lib/capture/pages.ts` (the page list from a site's menu and sitemap, read by
+  `findSitePages` in `server.ts`; route `app/api/pages/route.ts`), `captureSite` in `jobs.ts` (the pages
+  into Media, one after another)
 - `lib/capture/` URL capture: `server.ts` (Playwright, the only file to touch when swapping the
   browser for hosting), `url-guard.ts` + `address.ts` (public addresses only), `guard-proxy.ts`
   (every capture-browser connection is checked here; Playwright routing misses redirect hops),

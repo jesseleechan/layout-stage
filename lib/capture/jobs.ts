@@ -1,5 +1,5 @@
 /* Capture jobs in the editor: a capture from the dialog, a desktop + phone pair, a one-click
-   re-capture and Re-capture all. Each job shows "Capturing…" on its layout (store.captureJobs) until
+   re-capture, Re-capture all, and a whole site's pages into Media (captureSite). Each job shows "Capturing…" on its layout (store.captureJobs) until
    its image lands as its own undo step; captures run one at a time (client.ts queues them).
    Credentials, when given, go with the request only (client.ts) and never into a layout. Browser only. */
 import type { CaptureOptions, SlotSource } from '../model';
@@ -8,6 +8,7 @@ import type { CaptureAuth } from './auth';
 import { addRecentUrl, captureName, captureUrl, TRIMMED_MESSAGE } from './client';
 import { CAPTURE_MESSAGES, CaptureError } from './errors';
 import { hostOf, pairOptions, pairTarget, recapturable } from './recapture';
+import type { SitePage } from './pages';
 
 export interface CaptureSpec {
   url: string;
@@ -130,4 +131,64 @@ export async function recaptureAll(): Promise<void> {
   if (failure) S().showToast(`Re-captured ${done} of ${layouts(queued.length)}. ${failure}${skipped}`);
   else if (queued.length) S().showToast(`Re-captured ${layouts(done)}.${skipped}`);
   else if (skipped) S().showToast(skipped.trim());
+}
+
+/* ---------------- a whole site into Media ---------------- */
+
+/** The running whole-site jobs, so a page can be stopped from the Media panel. */
+const siteJobs = new Map<number, AbortController>();
+
+/** Stops one page of a whole-site capture: skipped if it hasn't started, cut off if it has. */
+export function stopSiteJob(job: number): void {
+  siteJobs.get(job)?.abort();
+}
+
+const pathOf = (url: string) => {
+  try {
+    return new URL(url).pathname || '/';
+  } catch {
+    return url;
+  }
+};
+const pages = (n: number) => `${n} page${n === 1 ? '' : 's'}`;
+
+/** Captures each page, one after another, into Media (store.landMedia: a layout still showing a
+ *  sample takes it first). Each page shows as "Capturing…" in Media until it lands or is stopped; a
+ *  toast sums up at the end. Credentials go with each request only. */
+export async function captureSite(list: Pick<SitePage, 'url'>[], options: CaptureOptions, auth?: CaptureAuth | null): Promise<void> {
+  const jobs = list.map((p) => {
+    const job = S().startCaptureJob(p.url, null, true);
+    siteJobs.set(job, new AbortController());
+    return { url: p.url, job };
+  });
+  let done = 0;
+  let stopped = 0;
+  let failure = '';
+  for (const { url, job } of jobs) {
+    const ctl = siteJobs.get(job)!;
+    try {
+      if (ctl.signal.aborted) {
+        stopped++;
+        continue;
+      }
+      const { blob, trimmed, finalUrl } = await captureUrl(url, options, ctl.signal, auth);
+      const source: SlotSource = { kind: 'url', url, capturedAt: new Date().toISOString(), options, ...(auth ? { needsPassword: true } : {}) };
+      if (await S().landMedia({ blob, name: captureName(finalUrl), source })) {
+        done++;
+        void addRecentUrl(url);
+        if (trimmed) S().showToast(TRIMMED_MESSAGE);
+      }
+    } catch (e) {
+      if (ctl.signal.aborted) stopped++;
+      else failure ||= `${pathOf(url)}: ${errorMessage(e)}`;
+    } finally {
+      siteJobs.delete(job);
+      S().endCaptureJob(job);
+    }
+  }
+  const tried = jobs.length - stopped;
+  const ended = stopped ? ` Stopped ${pages(stopped)}.` : '';
+  if (failure) S().showToast(`Captured ${done} of ${pages(tried)} into Media. ${failure}${ended}`);
+  else if (tried) S().showToast(`Captured ${pages(done)} into Media.${ended}`);
+  else if (stopped) S().showToast(ended.trim());
 }

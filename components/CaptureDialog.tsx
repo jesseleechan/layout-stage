@@ -2,19 +2,24 @@
 import { useEffect, useId, useRef, useState, type FormEvent, type KeyboardEvent } from 'react';
 import { useEditor } from '@/lib/store';
 import { CAPTURE_WIDTHS, DEFAULT_CAPTURE, type CaptureOptions } from '@/lib/model';
-import { getRecentUrls, normalizeUrl, precheckUrl } from '@/lib/capture/client';
+import { findPages, getRecentUrls, normalizeUrl, precheckUrl } from '@/lib/capture/client';
+import { defaultPicks, type SitePage } from '@/lib/capture/pages';
+import { MAX_MEDIA } from '@/lib/media';
 import { CaptureError } from '@/lib/capture/errors';
 import { authProblem, splitUrlCredentials, type CaptureAuth } from '@/lib/capture/auth';
 import { parseSelectors, selectorsText } from '@/lib/capture/selectors';
-import { errorMessage, runJobs, startJobs } from '@/lib/capture/jobs';
+import { captureSite, errorMessage, runJobs, startJobs } from '@/lib/capture/jobs';
 import './capture.css';
 
 /* Capture from URL: a small sheet over the editor. The capture runs as a store job, so the sheet can
-   be closed while it works; the target slot shows "Capturing…" until the image lands. */
+   be closed while it works; the target slot shows "Capturing…" until the image lands. "Whole site"
+   (from From URL…) lists the site's pages (its menu and sitemap, app/api/pages); the ones ticked are
+   captured one after another into Media (lib/capture/jobs.ts captureSite). */
 
 /** Last-used options, kept for the session only (never the username or password). */
 let sessionOptions: CaptureOptions = { ...DEFAULT_CAPTURE };
 let sessionPair = false;
+let sessionSite = false;
 /** The job the open sheet is waiting on. Errors for any other job become toasts. */
 let watchedJob: number | null = null;
 
@@ -61,6 +66,15 @@ function invalidSelector(selectors: string[]): string | null {
   return null;
 }
 
+/** A page's path for the list ("/" for the home page). */
+function pagePath(url: string): string {
+  try {
+    return decodeURI(new URL(url).pathname);
+  } catch {
+    return url;
+  }
+}
+
 const FOCUSABLE = 'button:not(:disabled), input:not(:disabled), textarea:not(:disabled), summary, [tabindex]:not([tabindex="-1"])';
 
 function CaptureSheet({ target, recapture }: { target: number | null; recapture: boolean }) {
@@ -76,6 +90,11 @@ function CaptureSheet({ target, recapture }: { target: number | null; recapture:
   const [recent, setRecent] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<{ field: Field; msg: string } | null>(null);
+  // Whole site: offered when capturing something new; the list once it's been read, and the pages ticked.
+  const siteable = target == null && !recapture;
+  const [site, setSite] = useState(siteable && sessionSite);
+  const [pages, setPages] = useState<SitePage[] | null>(null);
+  const [picked, setPicked] = useState<string[]>([]);
   const urlRef = useRef<HTMLInputElement>(null);
   const hideRef = useRef<HTMLTextAreaElement>(null);
   const userRef = useRef<HTMLInputElement>(null);
@@ -86,7 +105,7 @@ function CaptureSheet({ target, recapture }: { target: number | null; recapture:
   const uid = useId();
   const ids = {
     title: `${uid}t`, url: `${uid}u`, list: `${uid}l`, hint: `${uid}h`, err: `${uid}e`, width: `${uid}w`, page: `${uid}p`, scale: `${uid}s`,
-    delay: `${uid}d`, hide: `${uid}x`, hideHint: `${uid}xh`, user: `${uid}n`, pass: `${uid}pw`, authHint: `${uid}ah`,
+    delay: `${uid}d`, hide: `${uid}x`, hideHint: `${uid}xh`, user: `${uid}n`, pass: `${uid}pw`, authHint: `${uid}ah`, pagesHint: `${uid}ph`,
   };
 
   // Focus the URL field on open (the username when only the password is missing); give focus back
@@ -166,6 +185,32 @@ function CaptureSheet({ target, recapture }: { target: number | null; recapture:
 
     const options: CaptureOptions = { ...opts, hideSelectors: hide.selectors };
     sessionOptions = options;
+    if (site) {
+      sessionSite = true;
+      if (!pages) {
+        setError(null);
+        setBusy(true);
+        try {
+          const list = await findPages(u, undefined, auth);
+          if (!live.current) return;
+          if (!list.length) return fail('url', 'Couldn’t find any pages on that site. Try One page.');
+          setPages(list);
+          setPicked(defaultPicks(list));
+        } catch (err) {
+          if (live.current) fail(fieldOf(err), errorMessage(err));
+        } finally {
+          if (live.current) setBusy(false);
+        }
+        return;
+      }
+      const chosen = pages.filter((p) => picked.includes(p.url));
+      if (!chosen.length) return fail('url', 'Tick the pages to capture.');
+      void captureSite(chosen, options, auth);
+      useEditor.getState().showToast(`Capturing ${chosen.length === 1 ? '1 page' : `${chosen.length} pages`} into Media…`);
+      closeCapture();
+      return;
+    }
+    sessionSite = false;
     sessionPair = pair;
     const jobs = startJobs(u, target, pair);
     watchedJob = jobs[0];
@@ -231,6 +276,16 @@ function CaptureSheet({ target, recapture }: { target: number | null; recapture:
         </div>
         <form className="cap-form" onSubmit={submit} noValidate>
           <fieldset disabled={busy}>
+            {siteable && (
+              <div className="seg cap-mode" role="group" aria-label="What to capture">
+                <button type="button" aria-pressed={!site} onClick={() => { setSite(false); setError(null); }}>
+                  One page
+                </button>
+                <button type="button" aria-pressed={site} onClick={() => { setSite(true); setPair(false); setError(null); }}>
+                  Whole site
+                </button>
+              </div>
+            )}
             <div className="cap-field">
               <label className="cap-label" htmlFor={ids.url}>
                 Web address
@@ -250,6 +305,7 @@ function CaptureSheet({ target, recapture }: { target: number | null; recapture:
                 onChange={(e) => {
                   setUrl(e.target.value);
                   setError(null);
+                  setPages(null);
                 }}
                 aria-invalid={error?.field === 'url' ? true : undefined}
                 aria-describedby={describe('url', ids.hint)}
@@ -260,9 +316,37 @@ function CaptureSheet({ target, recapture }: { target: number | null; recapture:
                 ))}
               </datalist>
               <p className="fine" id={ids.hint}>
-                Public pages only. Pages behind a sign-in form can’t be captured.
+                {site ? 'The site’s home page or any page on it. ' : ''}Public pages only. Pages behind a sign-in form can’t be captured.
               </p>
             </div>
+
+            {site && pages && (
+              <fieldset className="cap-pages" aria-describedby={ids.pagesHint}>
+                <legend className="cap-label">
+                  Pages <span className="note" id="sitePickCount">{picked.length} of {Math.min(MAX_MEDIA, pages.length)}</span>
+                </legend>
+                <div className="cap-page-list">
+                  {pages.map((p) => {
+                    const on = picked.includes(p.url);
+                    return (
+                      <label key={p.url} className="cap-check cap-page" title={p.url}>
+                        <input
+                          type="checkbox"
+                          checked={on}
+                          disabled={!on && picked.length >= MAX_MEDIA}
+                          onChange={(e) => setPicked((list) => (e.target.checked ? [...list, p.url] : list.filter((x) => x !== p.url)))}
+                        />
+                        <span className="cap-page-title">{p.title}</span>
+                        <span className="cap-page-path">{pagePath(p.url)}</span>
+                      </label>
+                    );
+                  })}
+                </div>
+                <p className="fine" id={ids.pagesHint}>
+                  Up to {MAX_MEDIA}, captured one after another into Media with the settings below. Menu pages are ticked to start.
+                </p>
+              </fieldset>
+            )}
 
             <div className="cap-field">
               <span className="cap-label" id={ids.width}>
@@ -283,10 +367,12 @@ function CaptureSheet({ target, recapture }: { target: number | null; recapture:
                     <small>{width}</small>
                   </button>
                 ))}
-                <button type="button" aria-pressed={pair} title="Desktop and phone" onClick={() => setPair(true)}>
-                  <span>Both</span>
-                  <small>1440 + 390</small>
-                </button>
+                {!site && (
+                  <button type="button" aria-pressed={pair} title="Desktop and phone" onClick={() => setPair(true)}>
+                    <span>Both</span>
+                    <small>1440 + 390</small>
+                  </button>
+                )}
               </div>
               {pair && (
                 <p className="fine">Desktop full page and Phone first screen, into two layouts.</p>
@@ -435,7 +521,13 @@ function CaptureSheet({ target, recapture }: { target: number | null; recapture:
             </p>
           )}
           <p className="cap-status fine" role="status" aria-live="polite">
-            {busy && (
+            {busy && site && (
+              <>
+                <span className="cap-spin" aria-hidden="true" />
+                Reading the site’s pages…
+              </>
+            )}
+            {busy && !site && (
               <>
                 <span className="cap-spin" aria-hidden="true" />
                 Capturing… You can close this; the {pair ? 'layouts update' : 'layout updates'} when it’s done.
@@ -447,8 +539,18 @@ function CaptureSheet({ target, recapture }: { target: number | null; recapture:
             <button ref={closeRef} className="btn" type="button" onClick={closeCapture}>
               {busy ? 'Close' : 'Cancel'}
             </button>
-            <button className="btn primary" type="submit" disabled={busy}>
-              {busy ? 'Capturing…' : recapture ? 'Re-capture' : 'Capture'}
+            <button className="btn primary" type="submit" id="captureSubmit" disabled={busy}>
+              {site
+                ? busy
+                  ? 'Reading pages…'
+                  : pages
+                    ? `Capture ${picked.length === 1 ? '1 page' : `${picked.length} pages`}`
+                    : 'Find pages'
+                : busy
+                  ? 'Capturing…'
+                  : recapture
+                    ? 'Re-capture'
+                    : 'Capture'}
             </button>
           </div>
         </form>

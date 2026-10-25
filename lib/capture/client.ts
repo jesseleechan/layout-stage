@@ -4,6 +4,7 @@ import { getValue, setValue } from '../persist';
 import { checkUrlShape } from './address';
 import type { CaptureAuth } from './auth';
 import { CaptureError, isCaptureErrorCode, SCHEME_MESSAGE } from './errors';
+import type { SitePage } from './pages';
 import { createSerialQueue } from './queue';
 
 export const CAPTURE_ENDPOINT = '/api/capture';
@@ -98,6 +99,34 @@ export function captureUrl(url: string, options: CaptureOptions, signal?: AbortS
       throw new CaptureError('failed');
     }
     return { blob, trimmed: res.headers.get('X-Capture-Trimmed') === '1', finalUrl: res.headers.get('X-Capture-Url') || url };
+  });
+}
+
+export const PAGES_ENDPOINT = '/api/pages';
+
+/** A site's pages, for capturing a whole template (app/api/pages). Waits its turn with the captures
+ *  (the server runs one browser job at a time anyway). Throws CaptureError. */
+export function findPages(url: string, signal?: AbortSignal, auth?: CaptureAuth | null): Promise<SitePage[]> {
+  return queue(async () => {
+    if (signal?.aborted) throw new CaptureError('aborted');
+    let res: Response;
+    try {
+      res = await fetch(PAGES_ENDPOINT, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url, ...(auth ? { auth } : {}) }),
+        cache: 'no-store',
+        signal,
+      });
+    } catch {
+      throw new CaptureError(signal?.aborted ? 'aborted' : 'network');
+    }
+    const data = (await res.json().catch(() => null)) as { pages?: unknown; code?: unknown; message?: unknown } | null;
+    if (!res.ok || !Array.isArray(data?.pages)) {
+      const code = isCaptureErrorCode(data?.code) ? data.code : 'failed';
+      throw new CaptureError(code, typeof data?.message === 'string' ? data.message : undefined);
+    }
+    return (data.pages as SitePage[]).filter((p) => p && typeof p.url === 'string' && typeof p.title === 'string');
   });
 }
 

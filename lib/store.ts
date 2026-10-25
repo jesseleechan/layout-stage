@@ -40,6 +40,8 @@ export interface CaptureJob {
   url: string;
   target: number | null;
   targetId: string | null;
+  /** A page of a whole-site capture: it lands in Media (landMedia), not on a layout. */
+  media?: boolean;
 }
 
 /** The visible layout a capture job will replace now, or null when it will use the drop-elsewhere
@@ -152,7 +154,7 @@ export interface EditorState {
   /* --- capture --- */
   openCapture(target: number | null): void;
   closeCapture(): void;
-  startCaptureJob(url: string, target: number | null): number;
+  startCaptureJob(url: string, target: number | null, media?: boolean): number;
   endCaptureJob(id: number): void;
 
   /* --- canvas tools: align and distribute (lib/align.ts) --- */
@@ -176,6 +178,9 @@ export interface EditorState {
    *  When that layout is gone (or there is none) it uses the drop-elsewhere rule, never on the layout
    *  showing `avoidId`. Resolves to the new image id, or null when the image couldn't be read. */
   landCapture(img: NewImage, at: { targetId: string | null; keepFraming?: boolean; avoidId?: string | null }): Promise<string | null>;
+  /** Lands a page of a whole-site capture as its own undo step: in the first visible layout still
+   *  showing a sample, else in Media only. Resolves to the new image id, or null when it couldn't be read. */
+  landMedia(img: NewImage): Promise<string | null>;
 
   /* --- overlays: headline, badge, watermark (lib/overlays.ts) --- */
   /** Live: changes an overlay (typing, sliders) without saving a step. Commit on release / pause. */
@@ -659,11 +664,11 @@ export const useEditor = create<EditorState>()((set, get) => {
     closeCapture() {
       set({ captureDialog: { ...get().captureDialog, open: false } });
     },
-    startCaptureJob(url, target) {
+    startCaptureJob(url, target, media = false) {
       const id = ++jobSeq;
       const doc = get().doc;
-      const targetId = target != null && target < doc.count ? doc.slots[target].imageId : null;
-      set({ captureJobs: [...get().captureJobs, { id, url, target, targetId }] });
+      const targetId = !media && target != null && target < doc.count ? doc.slots[target].imageId : null;
+      set({ captureJobs: [...get().captureJobs, { id, url, target: media ? null : target, targetId, ...(media ? { media } : {}) }] });
       return id;
     },
     endCaptureJob(id) {
@@ -732,6 +737,18 @@ export const useEditor = create<EditorState>()((set, get) => {
       if (dropped) toast(mediaFull(dropped));
       releaseUnused([old]);
       return get().doc.slots[i].imageId;
+    },
+
+    async landMedia(img) {
+      const item = await ingest(img);
+      if (!item) return null;
+      const doc = get().doc;
+      const sample = doc.slots.findIndex((s, k) => k < doc.count && s.source.kind === 'sample');
+      let dropped = 0;
+      if (sample >= 0) dropped = placeOne(item, sample);
+      else step((d) => { dropped = addMedia(d, [item]); });
+      if (dropped) toast(mediaFull(dropped));
+      return item.imageId;
     },
 
     /* --- overlays: headline, badge, watermark (lib/overlays.ts) --- */
