@@ -18,6 +18,7 @@ import { capHeight, autoCrop, groupBounds, scrollAxis } from './render/units';
 import { loadImage, pruneImages, putImage, releaseImage } from './images';
 import { loadComposition, loadStyles, saveComposition, saveStyles } from './persist';
 import { exportComposition, renderComposition } from './render/export';
+import { nextSiteBackground, paletteOf } from './palette';
 
 export interface Toast {
   id: number;
@@ -128,6 +129,11 @@ export interface EditorState {
   closeCapture(): void;
   startCaptureJob(url: string, target: number | null): number;
   endCaptureJob(id: number): void;
+
+  /* --- match site colors (output features) --- */
+  /** Background from the colors of the selected layout (else layout 1): a mesh, then a gradient,
+   *  then a solid on each further click. One undo step per click. */
+  matchSiteColors(): Promise<void>;
 }
 
 const NOT_IMAGE = 'That file isn’t an image. Use PNG, JPG or WebP.';
@@ -519,6 +525,23 @@ export const useEditor = create<EditorState>()((set, get) => {
     },
     endCaptureJob(id) {
       set({ captureJobs: get().captureJobs.filter((j) => j.id !== id) });
+    },
+
+    /* --- match site colors (output features) --- */
+    async matchSiteColors() {
+      const { doc, ui } = get();
+      const i = ui.selected != null && ui.selected < doc.count ? ui.selected : 0;
+      const { imageId } = doc.slots[i];
+      const pal = await paletteOf(imageId, loadImage);
+      if (!pal) {
+        toast(`Couldn’t read the colors of layout ${i + 1}.`);
+        return;
+      }
+      // Decided on the last saved state, which is what the step below changes.
+      const { variant, patch } = nextSiteBackground(history.current.background, pal);
+      step((d) => { Object.assign(d.background, clone(patch)); });
+      const [made, next] = { mesh: ['Mesh', 'a gradient'], gradient: ['Gradient', 'a solid color'], solid: ['Solid color', 'the mesh'] }[variant];
+      toast(`${made} from layout ${i + 1}’s colors. Click again for ${next}.`);
     },
   };
 });

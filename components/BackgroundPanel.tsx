@@ -1,5 +1,5 @@
 'use client';
-import { useMemo, useRef } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { useShallow } from 'zustand/react/shallow';
 import { GRADS, MESHES, SOLIDS, type Background, type BackgroundType } from '@/lib/model';
 import { useEditor } from '@/lib/store';
@@ -53,6 +53,7 @@ export default function BackgroundPanel() {
         <h2>Background</h2>
       </div>
       <Seg label="Background type" options={TYPE_OPTIONS} value={b.type} onPick={setBackgroundType} />
+      <MatchSiteColors layout={b.blurOf} />
 
       {b.type === 'solid' && (
         <div className="stack" data-pane="solid">
@@ -161,5 +162,31 @@ export default function BackgroundPanel() {
         }}
       />
     </section>
+  );
+}
+
+/** "Match site colors": a background from the selected layout's colors (else layout 1). Each click is
+ *  one undo step and moves on to the next variant: mesh → gradient → solid → mesh. */
+function MatchSiteColors({ layout }: { layout: number }) {
+  const busy = useRef(false);
+  const [working, setWorking] = useState(false);
+  const run = async () => {
+    if (busy.current) return; // the first read of an image can take a moment
+    busy.current = true;
+    setWorking(true);
+    try {
+      await useEditor.getState().matchSiteColors();
+    } finally {
+      busy.current = false;
+      setWorking(false);
+    }
+  };
+  return (
+    <button className="btn sm wide" id="matchSiteBtn" type="button" aria-busy={working} title={`Uses layout ${layout}’s colors`} onClick={() => void run()}>
+      <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.4" aria-hidden="true">
+        <circle cx="4.5" cy="5" r="2.6" /><circle cx="9.5" cy="5" r="2.6" /><circle cx="7" cy="9.4" r="2.6" />
+      </svg>
+      Match site colors
+    </button>
   );
 }
