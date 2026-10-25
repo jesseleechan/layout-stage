@@ -266,3 +266,42 @@ test('the autosave from before projects opens as “Untitled 1”, and other pro
   await sync(page);
   await page.context().close();
 });
+
+test('a store that keeps refusing a project: the editor tries again less and less often, Sync now at once', async ({ browser, baseURL }) => {
+  test.setTimeout(90_000);
+  const context = await browser.newContext({ baseURL, viewport: { width: 1440, height: 900 }, deviceScaleFactor: 1 });
+  await context.route((url) => !LOCAL_HOSTS.has(url.hostname), (route) => route.abort('blockedbyclient'));
+  // The store answers everything except saving a project's canvas.
+  let refusing = true;
+  let puts = 0;
+  await context.route(/\/api\/projects\/prj_[^/]+$/, async (route) => {
+    if (route.request().method() !== 'PUT') return route.continue();
+    puts++;
+    if (!refusing) return route.continue();
+    return route.fulfill({ status: 502, json: { code: 'store_error', message: 'The project store didn’t answer.' } });
+  });
+  const page = await context.newPage();
+  await page.clock.install();
+  await page.goto('/');
+  await page.waitForFunction(() => window.__layoutStage?.store.getState().hydrated === true && window.__layoutProjects?.getState().mode != null, null, { timeout: 45_000 });
+
+  await pick(page, '#2A6F4E');
+  // Ten minutes of editor time: the first push fails after the pause in editing, then retries wait
+  // 3 and 6 minutes (they used to come every 30–45 seconds).
+  for (let t = 0; t < 40; t++) {
+    await page.clock.runFor(15_000);
+    await page.waitForTimeout(60);
+  }
+  expect(puts).toBeGreaterThanOrEqual(2);
+  expect(puts).toBeLessThanOrEqual(3);
+  await expect(page.locator('.proj-status-text')).toHaveText('Saved on this device');
+
+  // Sync now doesn't wait; once the store takes it, it's synced.
+  refusing = false;
+  const before = puts;
+  await sync(page);
+  expect(puts).toBe(before + 1);
+  await expect(page.locator('.proj-status-text')).toHaveText('Synced');
+  expect((await current(page)).dirty).toBe(false);
+  await context.close();
+});

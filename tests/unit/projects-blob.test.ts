@@ -1,11 +1,11 @@
 /* The Vercel Blob store module (lib/projects/server/blob-store.ts) with the real SDK, offline: client
    upload tokens are signed locally from a (fake) read-write token, and presigned download URLs are
-   signed locally from a delegation; only issueSignedToken (a network call) is replaced. What only a
-   real store can show (uploads landing, the URLs answering) is checked on a Vercel preview. */
+   signed locally from a delegation; only issueSignedToken and get (network calls) are replaced. What
+   only a real store can show (uploads landing, the URLs answering) is checked on a Vercel preview. */
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { getPayloadFromClientToken } from '@vercel/blob/client';
 
-const issued = vi.hoisted(() => ({ calls: 0 }));
+const issued = vi.hoisted(() => ({ calls: 0, getHeaders: [] as (HeadersInit | undefined)[] }));
 vi.mock('@vercel/blob', async (orig) => {
   const real = await orig<typeof import('@vercel/blob')>();
   return {
@@ -15,6 +15,11 @@ vi.mock('@vercel/blob', async (orig) => {
       const validUntil = o.validUntil ?? Date.now() + 3600_000;
       const payload = Buffer.from(JSON.stringify({ storeId: 'store_teststore123', pathname: '*', operations: o.operations, validUntil })).toString('base64url');
       return { delegationToken: `${payload}.sig`, clientSigningToken: 'signing-key', validUntil };
+    }),
+    // What the store's host answered for a JSON file when compression was allowed: a weak ETag.
+    get: vi.fn(async (_path: string, o: { headers?: HeadersInit }) => {
+      issued.getHeaders.push(o.headers);
+      return { statusCode: 200, stream: new Response('{"v":1}').body, headers: new Headers(), blob: { etag: 'W/"abc123"' } };
     }),
   };
 });
@@ -73,5 +78,13 @@ describe('direct download URLs', () => {
     const fresh = new URL((await store.directUrl(`projects/${P}/thumb.jpg`, true))!);
     expect(fresh.searchParams.get('cache')).toBe('0'); // a replaced thumbnail is read from the store, not a CDN copy
     expect(issued.calls).toBe(1);
+  });
+});
+
+describe('JSON reads', () => {
+  it('ask for the file uncompressed and hand ifMatch a strong ETag', async () => {
+    const r = await blobStore().readJson('projects/index.json');
+    expect(r).toEqual({ data: { v: 1 }, etag: '"abc123"' });
+    expect(new Headers(issued.getHeaders.at(-1)).get('accept-encoding')).toBe('identity');
   });
 });
