@@ -460,3 +460,29 @@ export function useThumbUrl(id: string | null | undefined): string | null {
   }, [id, known]);
   return (id && thumbs.get(id)?.url) || null;
 }
+
+/* ---------------- projects: images from another device (lib/projects) ---------------- */
+
+/** Whether an image's blob is on this device (samples always are: they're drawn). */
+export async function hasImage(id: string): Promise<boolean> {
+  if (blobs.has(id) || isSampleId(id)) return true;
+  try {
+    const s = db();
+    return !!s && (await get(id, s)) instanceof Blob;
+  } catch {
+    return false;
+  }
+}
+
+/** Stores a downloaded image under its own id, as it was stored on the device that added it. Its
+ *  thumbnail is made on first use. An earlier failed load of the id is forgotten, so it loads now. */
+export async function storeImage(id: string, blob: Blob): Promise<void> {
+  fresh.add(id);
+  blobs.set(id, blob);
+  await save(id, blob);
+  const e = entries.get(id);
+  if (e && !e.img) entries.delete(id);
+  const t = thumbs.get(id);
+  if (t && !t.url) thumbs.delete(id);
+  emit();
+}

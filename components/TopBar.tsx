@@ -6,6 +6,7 @@ import { exportSize } from '@/lib/render/units';
 import { useExport } from './ExportSheet';
 import './export.css';
 import ThemeToggle from './ThemeToggle';
+import ProjectsControl from './ProjectsControl';
 
 export default function TopBar() {
   const preset = useEditor((s) => s.doc.preset);
@@ -63,6 +64,7 @@ export default function TopBar() {
         </svg>
         <span>Layout Stage</span>
       </div>
+      <ProjectsControl />
       <label className="field">
         <span className="field-lbl">Canvas</span>
         <select id="canvasSel" value={preset} onChange={(e) => setPreset(e.target.value as PresetId)}>
