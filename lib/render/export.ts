@@ -18,10 +18,16 @@ export async function renderComposition(doc: Composition, m: number): Promise<HT
   const [c, x] = makeCanvas(Math.round(doc.W * m), Math.round(doc.H * m));
   x.imageSmoothingQuality = 'high';
   drawBackground(x, doc.background, doc.W, doc.H, m, bgImg);
-  const u = unit(doc.W, doc.H);
-  doc.order.filter((i) => i < doc.count).forEach((i) => drawShot(x, doc.slots[i], doc.frame, u, m, imgs[i]));
+  drawLayouts(x, doc, m, imgs);
   await paintOverlays(x, doc, m);
   return c;
+}
+
+/** The visible layouts in z-order at m output px per canvas px; imgs[i] is slot i's decoded image.
+ *  Also draws every frame of the scrolling video (lib/video/render.ts). */
+export function drawLayouts(x: CanvasRenderingContext2D, doc: Composition, m: number, imgs: (HTMLImageElement | HTMLCanvasElement | ImageBitmap | null)[]): void {
+  const u = unit(doc.W, doc.H);
+  doc.order.filter((i) => i < doc.count).forEach((i) => drawShot(x, doc.slots[i], doc.frame, u, m, imgs[i] ?? null));
 }
 
 export function exportFileName(doc: Pick<Composition, 'preset'>, w: number, h: number, format: UiState['exportFormat']): string {
