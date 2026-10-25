@@ -5,7 +5,6 @@ import { anyOverlay } from '@/lib/overlays';
 import { drawOverlays } from '@/lib/render/overlays';
 import { fontsVersion, loadOverlayFonts, overlayFontsReady, subscribeFonts } from '@/lib/render/overlay-fonts';
 import { useLoadedImage } from '@/lib/images';
-import './overlays.css';
 
 /* The preview's headline, badge and watermark: a transparent canvas above the layouts, drawn by the
    same drawOverlays the export calls (lib/render/overlays.ts), at the background canvas's resolution.

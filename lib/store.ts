@@ -23,7 +23,7 @@ import { exportComposition, renderComposition } from './render/export';
 import { alignLayouts, canAlign, distributeLayouts, type AlignEdge } from './align';
 import { nextSiteBackground, paletteOf } from './palette';
 import { dropSlot, reframe } from './capture/recapture';
-import { patchOverlay, type OverlayKey, type Overlays } from './overlays';
+import { anyOverlay, patchOverlay, type OverlayKey, type Overlays } from './overlays';
 import { setCropOf, setHeight as setSlotHeight } from './crop';
 import { addMedia, keepShownInMedia, MAX_MEDIA, mediaOf, putImage, removeMedia, replaceMedia, slotFor } from './media';
 import { PIN_LIMITS, type PinField } from './pin-text';
@@ -180,6 +180,8 @@ export interface EditorState {
   /* --- overlays: headline, badge, watermark (lib/overlays.ts) --- */
   /** Live: changes an overlay (typing, sliders) without saving a step. Commit on release / pause. */
   editOverlay<K extends OverlayKey>(key: K, patch: Partial<Overlays[K]>): void;
+  /** Turns every overlay off in one step (canvases from when the editor had a Text & logo panel). */
+  hideOverlays(): void;
   /** Discrete: changes an overlay and saves one step (toggles, presets, fonts). */
   setOverlay<K extends OverlayKey>(key: K, patch: Partial<Overlays[K]>): void;
   /** Stores a logo and makes it the watermark: one step once it has loaded. */
@@ -735,6 +737,13 @@ export const useEditor = create<EditorState>()((set, get) => {
     /* --- overlays: headline, badge, watermark (lib/overlays.ts) --- */
     editOverlay(key, patch) {
       edit((d) => patchOverlay(d, key, patch));
+    },
+    hideOverlays() {
+      if (!anyOverlay(get().doc)) return;
+      change((d) => {
+        if (!d.overlays) return;
+        for (const o of Object.values(d.overlays)) o.enabled = false;
+      });
     },
     setOverlay(key, patch) {
       change((d) => patchOverlay(d, key, patch));

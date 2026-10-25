@@ -110,3 +110,14 @@ test.describe('layouts', () => {
     await expect(page.locator('#sheetTitle')).toHaveText('Scrolling video');
   });
 });
+
+test('a canvas saved with text or a logo on can take them off; the panels are gone', async ({ page }) => {
+  await openEditor(page);
+  await expect(page.getByRole('heading', { name: 'Styles' })).toHaveCount(0);
+  await page.getByRole('button', { name: 'Canvas', exact: true }).click();
+  await expect(page.locator('#hideOverlaysBtn')).toHaveCount(0);
+  await page.evaluate(() => window.__layoutStage!.store.getState().setOverlay('headline', { enabled: true }));
+  await page.click('#hideOverlaysBtn');
+  expect(await page.evaluate(() => window.__layoutStage!.store.getState().doc.overlays!.headline.enabled)).toBe(false);
+  await expect(page.locator('#hideOverlaysBtn')).toHaveCount(0);
+});

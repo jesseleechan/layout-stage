@@ -65,8 +65,9 @@ npx playwright install chromium          # once per machine, for URL capture and
   `server/api.ts` route logic for `app/api/projects/`. UI: `components/ProjectsControl.tsx`,
   `components/ProjectsSheet.tsx`
 - `components/` one file per panel / surface: `Editor.tsx` (the shell), `TopBar.tsx` (the three top
-  clusters), `LeftPanel.tsx` (Mockup: screenshots, `MediaPanel.tsx` the gallery, styles, frame; Canvas:
-  background, text & logo),
+  clusters), `LeftPanel.tsx` (Mockup: screenshots, `MediaPanel.tsx` the gallery, frame; Canvas:
+  background; there is no Styles or Text & logo panel, and `LegacyOverlays.tsx` only lets a canvas saved
+  with overlays on turn them off; the overlay model and renderer stay for later),
   `RightPanel.tsx` (`LayoutPresets.tsx` live thumbnails drawn with `renderComposition`, then the selected
   layout), `Stage.tsx` (canvas + floating toolbar); `controls.tsx` holds the pill slider and `Tiles`
 - `proxy.ts` (Next 16's request interceptor, formerly `middleware.ts`): every request needs HTTP Basic
