@@ -19,6 +19,8 @@ function db(): UseStore | null {
 }
 
 const blobs = new Map<string, Blob>();
+/** Ids stored during this session: never pruned (an upload can land while the startup prune runs). */
+const fresh = new Set<string>();
 
 interface Entry {
   url: string;
@@ -39,6 +41,7 @@ const newId = () =>
 /** Stores a blob and returns its id. */
 export async function putImage(blob: Blob): Promise<string> {
   const id = newId();
+  fresh.add(id);
   blobs.set(id, blob);
   try {
     const s = db();
@@ -134,12 +137,13 @@ export function releaseImage(id: string | null | undefined): void {
 
 /** Deletes stored blobs that are not in `keep`. Run at startup, after the saved canvas is restored. */
 export async function pruneImages(keep: Set<string>): Promise<void> {
-  for (const id of Array.from(blobs.keys())) if (!keep.has(id) && !isSampleId(id)) blobs.delete(id);
+  const drop = (id: string) => !keep.has(id) && !fresh.has(id) && !isSampleId(id);
+  for (const id of Array.from(blobs.keys())) if (drop(id)) blobs.delete(id);
   try {
     const s = db();
     if (!s) return;
     const all = (await keys(s)) as string[];
-    await Promise.all(all.filter((id) => !keep.has(id)).map((id) => del(id, s)));
+    await Promise.all(all.filter(drop).map((id) => del(id, s)));
   } catch {
     /* ignore */
   }

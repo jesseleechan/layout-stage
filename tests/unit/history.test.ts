@@ -110,3 +110,33 @@ describe('History', () => {
     expect(h.commit(at(5))).toBe(false);
   });
 });
+
+describe('History.commitPatch (a change that lands during an edit in progress)', () => {
+  it('saves only the patch; the live edit becomes its own step later', () => {
+    const h = new History(at(0));
+    const live = at(0);
+    live.slots[1].cx = 711; // mid-drag, not committed
+    const patch = (d: Composition) => { d.slots[0].name = 'captured'; };
+    patch(live);
+    expect(h.commitPatch(patch)).toBe(true);
+    expect(h.current.slots[1].cx).not.toBe(711); // the drag stayed out of the step
+    expect(h.current.slots[0].name).toBe('captured');
+    expect(h.commit(live)).toBe(true); // drag end: a step with just the drag
+    expect(h.undo()!.slots[1].cx).not.toBe(711);
+    expect(h.undo()!.slots[0].name).not.toBe('captured');
+  });
+
+  it('is a no-op when the patch changes nothing', () => {
+    const h = new History(at(0));
+    expect(h.commitPatch(() => {})).toBe(false);
+    expect(h.canUndo).toBe(false);
+  });
+
+  it('current is the last saved state, as a copy', () => {
+    const h = new History(at(0));
+    h.commit(at(5));
+    const c = h.current;
+    c.slots[0].cx = 99;
+    expect(h.current.slots[0].cx).toBe(5);
+  });
+});

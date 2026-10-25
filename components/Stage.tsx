@@ -1,6 +1,6 @@
 'use client';
 import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type DragEvent, type PointerEvent } from 'react';
-import { useEditor } from '@/lib/store';
+import { captureJobSlot, useEditor } from '@/lib/store';
 import { PRESETS, type Composition } from '@/lib/model';
 import { clampRadius, rectOf, safeArea, shadowCSS, unit } from '@/lib/render/units';
 import { drawBackground } from '@/lib/render/background';
@@ -263,7 +263,7 @@ export default function Stage() {
   const selRect = hydrated && sel != null && sel < doc.count ? rectOf(doc.slots[sel]) : null;
   const ringRect = hydrated && focusRing != null && focusRing < doc.count ? rectOf(doc.slots[focusRing]) : null;
   const safe = showSafe ? safeArea(PRESETS[doc.preset].safe, W, H) : null;
-  const capturing = hydrated ? jobs.filter((j) => j.target != null && j.target < doc.count) : [];
+  const capturing = hydrated ? jobs.flatMap((j) => { const i = captureJobSlot(doc, j); return i == null ? [] : [{ id: j.id, i }]; }) : [];
 
   return (
     <section className="board" id="board" aria-label="Canvas" onDragEnter={onDragEnter} onDragOver={onDragOver} onDragLeave={onDragLeave} onDrop={onDrop}>
@@ -294,7 +294,7 @@ export default function Stage() {
               <span className="handle" id="handle" title="Drag to resize" onPointerDown={onHandleDown} />
             </div>
             {capturing.map((j) => {
-              const r = rectOf(doc.slots[j.target!]);
+              const r = rectOf(doc.slots[j.i]);
               return (
                 <div key={j.id} className="capturing" style={{ left: (r.l + r.w / 2) * scale, top: (r.t + r.h / 2) * scale }}>
                   Capturing…

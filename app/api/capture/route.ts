@@ -16,7 +16,16 @@ function failure(e: unknown): Response {
   return Response.json({ code: err.code, message: err.message }, { status: err.status, headers: NO_STORE });
 }
 
+/** Only the editor itself may start captures: a JSON body (which a cross-site page can't send without
+ *  a CORS preflight that fails) and, when the browser says where the request came from, same-origin. */
+function fromEditor(request: Request): boolean {
+  const type = request.headers.get('content-type') || '';
+  const site = request.headers.get('sec-fetch-site');
+  return /^application\/json\b/i.test(type) && (!site || site === 'same-origin' || site === 'none');
+}
+
 export async function POST(request: Request): Promise<Response> {
+  if (!fromEditor(request)) return failure(new CaptureError('bad_request'));
   let body: unknown;
   try {
     body = await request.json();

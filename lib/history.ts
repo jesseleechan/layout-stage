@@ -34,6 +34,27 @@ export class History {
     return true;
   }
 
+  /** Saves a step that applies `recipe` to the last saved state, so an edit in progress (a drag, a
+   *  slider, a pending nudge) stays out of it and lands in its own step later. Returns whether a
+   *  step was saved. */
+  commitPatch(recipe: (d: Composition) => void): boolean {
+    const next = clone(this.base);
+    recipe(next);
+    const st = stamp(next);
+    if (st === this.baseStamp) return false;
+    this.past.push(this.base);
+    if (this.past.length > this.limit) this.past.shift();
+    this.future = [];
+    this.base = next;
+    this.baseStamp = st;
+    return true;
+  }
+
+  /** The last saved state: what autosave stores. */
+  get current(): Composition {
+    return clone(this.base);
+  }
+
   /** Returns the previous state, or null. Uncommitted live edits are discarded. */
   undo(): Composition | null {
     const prev = this.past.pop();

@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { arrange, defaultComposition } from '@/lib/arrange';
 import { clone, GRADS, MESHES, PRESETS, SHADOWS, STYLES, defaultUi, type Composition } from '@/lib/model';
 import { capHeight, cropRatio, groupBounds, rectOf } from '@/lib/render/units';
-import { useEditor } from '@/lib/store';
+import { captureJobSlot, useEditor } from '@/lib/store';
 
 const S = () => useEditor.getState();
 const doc = () => S().doc;
@@ -461,5 +461,31 @@ describe('helpers the store relies on', () => {
     s.w = 1400;
     capHeight(s, 1500);
     expect(s.w).toBe(Math.round(1350 * 0.8));
+  });
+});
+
+describe('capture jobs follow their layout', () => {
+  it('a job keeps its target layout when an earlier layout is removed', () => {
+    load(moved(), null);
+    const b = doc().slots[1].imageId;
+    const id = S().startCaptureJob('https://example.com', 1);
+    S().removeSlot(0);
+    const job = S().captureJobs.find((j) => j.id === id)!;
+    expect(captureJobSlot(doc(), job)).toBe(0);
+    expect(doc().slots[0].imageId).toBe(b);
+    S().endCaptureJob(id);
+  });
+
+  it('falls back to the drop-elsewhere rule when its layout is gone, or it had none', () => {
+    load(moved(), null);
+    const id = S().startCaptureJob('https://example.com', 2);
+    const none = S().startCaptureJob('https://example.org', null);
+    S().removeSlot(2);
+    const [a, b] = S().captureJobs;
+    expect(captureJobSlot(doc(), a)).toBeNull();
+    expect(captureJobSlot(doc(), b)).toBeNull();
+    S().endCaptureJob(id);
+    S().endCaptureJob(none);
+    expect(S().captureJobs).toEqual([]);
   });
 });

@@ -1,6 +1,6 @@
 'use client';
 import { useEffect, useId, useRef, useState, type FormEvent, type KeyboardEvent } from 'react';
-import { useEditor } from '@/lib/store';
+import { captureJobSlot, useEditor } from '@/lib/store';
 import { CAPTURE_WIDTHS, DEFAULT_CAPTURE, type CaptureOptions } from '@/lib/model';
 import { addRecentUrl, captureName, captureUrl, getRecentUrls, normalizeUrl, precheckUrl, TRIMMED_MESSAGE } from '@/lib/capture/client';
 import { CAPTURE_MESSAGES, CaptureError } from '@/lib/capture/errors';
@@ -105,8 +105,10 @@ function CaptureSheet({ target }: { target: number | null }) {
     closeRef.current?.focus(); // the form is disabled while it works
     try {
       const { blob, trimmed, finalUrl } = await captureUrl(u, options);
-      const { doc, addImage, showToast } = useEditor.getState();
-      const slot = target != null && target < doc.count ? target : null; // the layout may have been removed meanwhile
+      const { doc, addImage, showToast, captureJobs } = useEditor.getState();
+      // The target layout follows its image, in case layouts were removed or reordered meanwhile.
+      const running = captureJobs.find((j) => j.id === job);
+      const slot = running ? captureJobSlot(doc, running) : null;
       const source = { kind: 'url' as const, url: u, capturedAt: new Date().toISOString(), options };
       if (await addImage({ blob, name: captureName(finalUrl), source }, slot)) {
         void addRecentUrl(u);

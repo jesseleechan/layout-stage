@@ -59,8 +59,16 @@ export function sanitizeComposition(raw: unknown): Composition | null {
   return out;
 }
 
-export async function loadComposition(): Promise<Composition | null> {
-  return sanitizeComposition(await getValue<Composition>(K_DOC));
+/** The autosaved canvas. `ok` is false when the read failed (as opposed to nothing being saved),
+ *  so the caller doesn't mistake a storage error for a first run and overwrite the save. */
+export async function loadComposition(): Promise<{ ok: boolean; doc: Composition | null }> {
+  try {
+    const s = db();
+    if (!s) return { ok: false, doc: null };
+    return { ok: true, doc: sanitizeComposition(await get(K_DOC, s)) };
+  } catch {
+    return { ok: false, doc: null };
+  }
 }
 
 export function saveComposition(doc: Composition): Promise<boolean> {

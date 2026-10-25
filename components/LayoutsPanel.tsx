@@ -1,6 +1,6 @@
 'use client';
 import { useRef, useState, type DragEvent } from 'react';
-import { useEditor, type CaptureJob } from '@/lib/store';
+import { captureJobSlot, useEditor, type CaptureJob } from '@/lib/store';
 import { useImageUrl } from '@/lib/images';
 import { Seg, type Option } from './controls';
 import './panels.css';
@@ -174,6 +174,9 @@ export default function LayoutsPanel() {
   const count = useEditor((s) => s.doc.count);
   const selected = useEditor((s) => s.ui.selected);
   const jobs = useEditor((s) => s.captureJobs);
+  // Where each capture will land now ("" = the drop-elsewhere rule); a string so drags don't re-render.
+  const jobSlots = useEditor((s) => s.captureJobs.map((j) => captureJobSlot(s.doc, j) ?? '').join(','));
+  const slotOf = (k: number) => jobSlots.split(',')[k];
   const setCount = useEditor((s) => s.setCount);
   const openCapture = useEditor((s) => s.openCapture);
   const manyRef = useRef<HTMLInputElement>(null);
@@ -194,10 +197,10 @@ export default function LayoutsPanel() {
       <Seg className="count" label="Number of layouts" options={COUNT_OPTIONS} value={count} onPick={setCount} />
       <ol className="slots" id="slots">
         {Array.from({ length: count }, (_, i) => (
-          <SlotRow key={i} i={i} count={count} on={selected === i} busy={jobs.some((j) => j.target === i)} onReplace={replace} />
+          <SlotRow key={i} i={i} count={count} on={selected === i} busy={jobs.some((_, k) => slotOf(k) === String(i))} onReplace={replace} />
         ))}
         {jobs
-          .filter((j) => j.target == null)
+          .filter((_, k) => slotOf(k) === '')
           .map((j) => (
             <PendingRow key={j.id} job={j} />
           ))}

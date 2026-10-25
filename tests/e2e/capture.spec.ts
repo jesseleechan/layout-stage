@@ -21,6 +21,14 @@ test.describe('POST /api/capture', () => {
     expect(junk.status()).toBe(400);
     expect((await junk.json()).code).toBe('bad_request');
   });
+
+  test('refuses requests other sites could send', async ({ request }) => {
+    const body = JSON.stringify({ url: 'https://example.com', width: 1440, fullPage: false, scale: 1, delayMs: 0, hideBanners: true });
+    const plain = await request.post('/api/capture', { data: body, headers: { 'Content-Type': 'text/plain' } });
+    expect(plain.status()).toBe(400);
+    const cross = await request.post('/api/capture', { data: body, headers: { 'Content-Type': 'application/json', 'Sec-Fetch-Site': 'cross-site' } });
+    expect(cross.status()).toBe(400);
+  });
 });
 
 test.describe('capture dialog', () => {

@@ -24,11 +24,21 @@ export interface Toast {
   msg: string;
 }
 
-/** A capture in flight. `target` is the slot it will replace, or null for the drop-elsewhere rule. */
+/** A capture in flight. `target` is the layout it was asked to replace (null: the drop-elsewhere
+ *  rule); `targetId` is that layout's image, which follows the layout if others are removed. */
 export interface CaptureJob {
   id: number;
   url: string;
   target: number | null;
+  targetId: string | null;
+}
+
+/** The visible layout a capture job will replace now, or null when it will use the drop-elsewhere
+ *  rule (no target, or its layout was removed or replaced meanwhile). */
+export function captureJobSlot(doc: Composition, job: CaptureJob): number | null {
+  if (job.targetId == null) return null;
+  const i = doc.slots.findIndex((s, k) => k < doc.count && s.imageId === job.targetId);
+  return i < 0 ? null : i;
 }
 
 export interface NewImage {
@@ -125,7 +135,7 @@ const isImageFile = (f: Blob) => f.type.startsWith('image/');
 
 let history = new History(defaultComposition());
 let nudgeTimer: ReturnType<typeof setTimeout> | undefined;
-let saveTimer: ReturnType<typeof setTimeout> | undefined;
+let autosave = false; // on once the saved canvas has been read
 let toastSeq = 0;
 let jobSeq = 0;
 let initStarted = false;
@@ -137,11 +147,9 @@ function referencedIds(d: Composition): Set<string> {
 }
 
 export const useEditor = create<EditorState>()((set, get) => {
-  /** Autosave shortly after each undo step (coalesces bursts). */
-  const persistSoon = () => {
-    if (!get().hydrated) return;
-    clearTimeout(saveTimer);
-    saveTimer = setTimeout(() => void saveComposition(get().doc), 200);
+  /** Autosave: stores the last undo step (never a half-finished drag) as soon as it's saved. */
+  const persist = () => {
+    if (autosave) void saveComposition(history.current);
   };
   const syncHistory = () => set({ canUndo: history.canUndo, canRedo: history.canRedo });
   const edit = (recipe: (d: Composition) => void) => {
@@ -152,12 +160,21 @@ export const useEditor = create<EditorState>()((set, get) => {
   const commit = () => {
     if (history.commit(get().doc)) {
       syncHistory();
-      persistSoon();
+      persist();
     }
   };
   const change = (recipe: (d: Composition) => void) => {
     edit(recipe);
     commit();
+  };
+  /** A change that arrives asynchronously (an image finished loading): its own undo step on top of
+   *  the last saved state, so an edit in progress (drag, slider, pending nudge) stays out of it. */
+  const step = (recipe: (d: Composition) => void) => {
+    edit(recipe);
+    if (history.commitPatch(recipe)) {
+      syncHistory();
+      persist();
+    }
   };
   const toast = (msg: string) => set({ toast: { id: ++toastSeq, msg } });
   const setUi = (patch: Partial<UiState>) => set({ ui: { ...get().ui, ...patch } });
@@ -165,7 +182,7 @@ export const useEditor = create<EditorState>()((set, get) => {
     const sel = get().ui.selected;
     set({ doc: d, ui: { ...get().ui, selected: sel != null && sel >= d.count ? null : sel } });
     syncHistory();
-    persistSoon();
+    persist();
   };
   /** Revokes object URLs of images that are no longer on the canvas. */
   const releaseUnused = (ids: (string | null)[]) => {
@@ -173,52 +190,51 @@ export const useEditor = create<EditorState>()((set, get) => {
     ids.forEach((id) => id && !keep.has(id) && releaseImage(id));
   };
 
-  /** Loads a blob into slot i (live; caller commits). */
-  const setSlotImage = async (i: number, img: NewImage): Promise<boolean> => {
+  /** Stores and decodes an image. Returns what puts it into a slot, or null (with a toast). */
+  const loadSlotImage = async (img: NewImage): Promise<((d: Composition, i: number) => void) | null> => {
     if (!isImageFile(img.blob)) {
       toast(NOT_IMAGE);
-      return false;
+      return null;
     }
     const id = await putImage(img.blob);
     const el = await loadImage(id);
     if (!el) {
       toast(`Couldn’t read ${img.name || 'that image'}.`);
-      return false;
+      return null;
     }
-    const old = get().doc.slots[i].imageId;
-    edit((d) => {
+    const nw = el.naturalWidth, nh = el.naturalHeight;
+    return (d, i) => {
       const s = d.slots[i];
-      Object.assign(s, {
-        imageId: id, name: img.name || 'Pasted image', source: img.source, nw: el.naturalWidth, nh: el.naturalHeight,
-        fx: 50, fy: 0, crop: autoCrop(el.naturalWidth, el.naturalHeight),
-      });
+      Object.assign(s, { imageId: id, name: img.name || 'Pasted image', source: img.source, nw, nh, fx: 50, fy: 0, crop: autoCrop(nw, nh) });
       capHeight(s, d.H);
-    });
-    releaseUnused([old]);
-    return true;
+    };
   };
 
-  /** The single-image rule: target slot, else the first sample slot, else add a layout, else layout 1. */
+  /** The single-image rule: target slot, else the first sample slot, else add a layout, else layout 1.
+   *  The slot is picked once the image has loaded, from the layouts as they are then. */
   const placeOne = async (img: NewImage, target: number | null): Promise<boolean> => {
+    const put = await loadSlotImage(img);
+    if (!put) return false;
     const doc = get().doc;
-    let i = target;
+    let i = target != null && target < doc.count ? target : -1;
     let added = false;
-    if (i == null) {
+    if (i < 0) {
       i = doc.slots.slice(0, doc.count).findIndex((s) => s.source.kind === 'sample');
       if (i < 0) {
         if (doc.count < 3) { i = doc.count; added = true; } else i = 0;
       }
     }
-    if (!(await setSlotImage(i, img))) return false;
     const idx = i;
-    edit((d) => {
+    const old = doc.slots[idx].imageId;
+    step((d) => {
+      put(d, idx);
       if (added) {
         d.count = (idx + 1) as 1 | 2 | 3;
         arrange(d);
       }
     });
     setUi({ selected: idx });
-    commit();
+    releaseUnused([old]);
     return true;
   };
 
@@ -238,7 +254,8 @@ export const useEditor = create<EditorState>()((set, get) => {
     async init() {
       if (initStarted) return;
       initStarted = true;
-      const [saved, styles] = await Promise.all([loadComposition(), loadStyles()]);
+      const [loaded, styles] = await Promise.all([loadComposition(), loadStyles()]);
+      const saved = loaded.doc;
       if (saved) {
         history = new History(saved);
         const sel = get().ui.selected;
@@ -249,8 +266,12 @@ export const useEditor = create<EditorState>()((set, get) => {
       } else history.reset(get().doc);
       set({ savedStyles: styles, hydrated: true });
       syncHistory();
-      void pruneImages(referencedIds(get().doc));
-      if (!saved) void saveComposition(get().doc);
+      autosave = true;
+      // A failed read isn't a first run: keep the stored canvas and images untouched.
+      if (loaded.ok) {
+        void pruneImages(referencedIds(get().doc));
+        if (!saved) persist();
+      }
     },
     edit,
     commit,
@@ -279,7 +300,7 @@ export const useEditor = create<EditorState>()((set, get) => {
       history = new History(doc);
       set({ doc: clone(doc), ui: { ...get().ui, selected: null } });
       syncHistory();
-      persistSoon();
+      persist();
     },
 
     setPreset(p) {
@@ -410,7 +431,7 @@ export const useEditor = create<EditorState>()((set, get) => {
       const id = await putImage(file);
       if (!(await loadImage(id))) { toast(`Couldn’t read ${file.name}.`); return; }
       const old = get().doc.background.imageId;
-      change((d) => { Object.assign(d.background, { type: 'image', imageId: id, imageName: file.name, blur: 0, dim: 0 }); });
+      step((d) => { Object.assign(d.background, { type: 'image', imageId: id, imageName: file.name, blur: 0, dim: 0 }); });
       releaseUnused([old]);
     },
     backgroundFromLayout() {
@@ -457,18 +478,18 @@ export const useEditor = create<EditorState>()((set, get) => {
       const imgs = files.filter(isImageFile).slice(0, 3);
       if (!imgs.length) { toast('Use PNG, JPG or WebP images.'); return; }
       if (imgs.length > 1 && target == null) {
-        let ok = 0;
-        for (let k = 0; k < imgs.length; k++) {
-          if (await setSlotImage(k, { blob: imgs[k], name: imgs[k].name, source: { kind: 'file' } })) ok++;
-        }
-        if (!ok) return;
-        edit((d) => {
+        const puts: (((d: Composition, i: number) => void) | null)[] = [];
+        for (const f of imgs) puts.push(await loadSlotImage({ blob: f, name: f.name, source: { kind: 'file' } }));
+        if (!puts.some(Boolean)) return;
+        const olds = get().doc.slots.map((s) => s.imageId);
+        step((d) => {
+          puts.forEach((put, k) => put?.(d, k));
           d.count = imgs.length as 1 | 2 | 3;
           arrange(d);
         });
         setUi({ selected: 0 });
         toast(`Placed ${imgs.length} layouts.`);
-        commit();
+        releaseUnused(olds);
       } else {
         await placeOne({ blob: imgs[0], name: imgs[0].name, source: { kind: 'file' } }, target);
       }
@@ -485,7 +506,9 @@ export const useEditor = create<EditorState>()((set, get) => {
     },
     startCaptureJob(url, target) {
       const id = ++jobSeq;
-      set({ captureJobs: [...get().captureJobs, { id, url, target }] });
+      const doc = get().doc;
+      const targetId = target != null && target < doc.count ? doc.slots[target].imageId : null;
+      set({ captureJobs: [...get().captureJobs, { id, url, target, targetId }] });
       return id;
     },
     endCaptureJob(id) {
