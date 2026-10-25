@@ -1,0 +1,86 @@
+/* Hides common cookie-consent banners before a capture (Hide cookie banners).
+   Injected into every frame of the captured page. To support another banner, add its outermost
+   container's selector to the list below; keep generic patterns off <html> and <body>. */
+
+/* OneTrust */
+#onetrust-consent-sdk, #onetrust-banner-sdk, #onetrust-pc-sdk, .onetrust-pc-dark-filter, #ot-sdk-btn-floating,
+/* Cookiebot */
+#CybotCookiebotDialog, #CybotCookiebotDialogBodyUnderlay, #CookiebotWidget, #cookiebanner,
+/* Didomi */
+#didomi-host, #didomi-notice, #didomi-popup, .didomi-popup-backdrop,
+/* Quantcast Choice */
+#qc-cmp2-container, .qc-cmp2-container, #qcCmpUi, .qc-cmp-ui-container,
+/* TrustArc / TRUSTe */
+#truste-consent-track, #truste-consent-content, #consent_blackbar, #teconsent, .truste_overlay, .truste_box_overlay, .truste_popframe,
+/* Osano */
+.osano-cm-window, .osano-cm-dialog, .osano-cm-widget,
+/* Usercentrics */
+#usercentrics-root, #usercentrics-cmp-ui, #uc-banner-modal,
+/* CookieYes / GDPR Cookie Consent (WordPress) */
+.cky-consent-container, .cky-overlay, .cky-btn-revisit-wrapper, #cookie-law-info-bar, #cookie-law-info-again, .cli-modal-backdrop,
+/* Termly */
+#termly-code-snippet-support, [class*="termly-styles-module-root"],
+/* iubenda */
+#iubenda-cs-banner, .iubenda-cs-container, #iubenda-iframe, .iubenda-tp-btn,
+/* Klaro */
+.klaro .cookie-notice, .klaro .cookie-modal,
+/* Complianz */
+#cmplz-cookiebanner-container, .cmplz-cookiebanner, #cmplz-manage-consent,
+/* Borlabs */
+#BorlabsCookieBox, #BorlabsCookieWidget,
+/* Cookie Consent (Osano open source, orestbida) */
+.cc-window, .cc-banner, .cc-revoke, #cc-main, #cc--main,
+/* Sourcepoint */
+[id^="sp_message_container_"], .sp_veil,
+/* Google Funding Choices */
+.fc-consent-root, .fc-dialog-overlay,
+/* Consentmanager */
+#cmpbox, #cmpbox2, .cmpboxBG,
+/* Axeptio */
+#axeptio_overlay, .axeptio_mount,
+/* Civic Cookie Control */
+#ccc, #ccc-overlay,
+/* Ketch */
+#lanyard_root,
+/* CookieFirst */
+.cookiefirst-root,
+/* Evidon / Crownpeak */
+#_evidon_banner, #_evidon-background, #_evidon-barrier-wrapper,
+/* HubSpot */
+#hs-eu-cookie-confirmation,
+/* Shopify */
+#shopify-pc__banner, .shopify-pc__banner__dialog,
+/* Squarespace */
+.sqs-cookie-banner-v2, .sqs-cookie-banner-v2-container,
+/* Wix */
+[data-hook="consent-banner-root"],
+/* Webflow, Cookie Notice, Moove GDPR (WordPress) */
+.fs-cc-components, #cookie-notice, #moove_gdpr_cookie_info_bar, #moove_gdpr_cookie_modal,
+/* Generic patterns */
+:is(div, section, aside, dialog, footer, form)[id*="cookie-banner" i],
+:is(div, section, aside, dialog, footer, form)[class*="cookie-banner" i],
+:is(div, section, aside, dialog, footer, form)[id*="cookie-consent" i],
+:is(div, section, aside, dialog, footer, form)[class*="cookie-consent" i],
+:is(div, section, aside, dialog, footer, form)[id*="cookieconsent" i],
+:is(div, section, aside, dialog, footer, form)[id*="consent-banner" i],
+:is(div, section, aside, dialog, footer, form)[class*="consent-banner" i],
+:is(div, section, aside, dialog, footer, form)[id*="cookie-notice" i],
+:is(div, section, aside, dialog, footer, form)[id*="gdpr-banner" i],
+:is(div, section, aside, dialog)[role="dialog"][aria-label*="cookie" i],
+:is(div, section, aside, dialog)[role="alertdialog"][aria-label*="cookie" i],
+:is(div, section, aside, dialog)[role="region"][aria-label*="cookie" i] {
+  display: none !important;
+}
+
+/* Some banners lock page scrolling while open; give it back so Full page captures everything. */
+html.didomi-popup-open, body.didomi-popup-open,
+html.sp-message-open, body.sp-message-open,
+html.qc-cmp-ui-showing, body.qc-cmp-ui-showing,
+html.cmpbox-open, body.cmpbox-open,
+body.cky-modal-open, body.cli-barmodal-open,
+html.cc--active, body.cc--active,
+html.show--consent, body.show--consent,
+body.ot-overflow-hidden,
+body.iubenda-cs-banner-visible {
+  overflow: visible !important;
+}

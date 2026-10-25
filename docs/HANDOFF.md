@@ -352,9 +352,9 @@ Seven milestones, each ending in something Jesse can open and check against the 
 
 ## Open questions
 
-- [ ] Run it only on your computer, or deploy it so it works anywhere? This decides how URL capture is hosted.
-- [ ] Is 1440 px the right default desktop width for your clients' sites?
-- [ ] Should Etsy canvases show the thumbnail crop by default?
+- [x] Run it only on your computer, or deploy it so it works anywhere? This decides how URL capture is hosted. **Decided: deploy on Vercel** (setup in `docs/DEPLOY.md`).
+- [x] Is 1440 px the right default desktop width for your clients' sites? **Decided: yes.**
+- [x] Should Etsy canvases show the thumbnail crop by default? **Decided: yes.** Choosing an Etsy preset (or reloading one) turns the 5:4 crop overlay on; other presets turn it off; the Safe area button still toggles it.
 
 ## Sources
 

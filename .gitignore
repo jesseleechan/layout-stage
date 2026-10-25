@@ -1,0 +1,15 @@
+node_modules/
+.next/
+out/
+next-env.d.ts
+*.tsbuildinfo
+test-results/
+playwright-report/
+.DS_Store
+.env*.local
+
+# local project store (lib/projects/server/fs-store.ts)
+.data/
+
+# subagent git worktrees
+.claude/worktrees/

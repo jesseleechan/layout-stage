@@ -1,0 +1,66 @@
+/* Capture from URL sheet. Builds on the prototype's .sheet / .seg / .row / .btn styles in globals.css. */
+.capture { --cap-danger: #C42F4A; }
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .capture { --cap-danger: #FF8297; }
+}
+:root[data-theme="dark"] .capture { --cap-danger: #FF8297; }
+
+.capture .sheet-card { width: min(480px, 100%); gap: 14px; }
+.cap-form { display: grid; gap: 12px; margin: 0; }
+.cap-form fieldset { display: grid; gap: 14px; margin: 0; padding: 0; border: 0; min-width: 0; }
+.cap-form fieldset:disabled { opacity: .55; }
+.cap-field { display: grid; gap: 6px; min-width: 0; }
+.cap-label { font-size: 12px; color: var(--ink-2); font-weight: 500; }
+.cap-input {
+  width: 100%; height: 36px; padding: 0 10px; border: 1px solid var(--line); border-radius: 8px;
+  background: var(--paper); color: var(--ink); font: 13px var(--font-ui);
+}
+.cap-input:hover { border-color: var(--line-strong); }
+.cap-input::placeholder { color: var(--ink-2); opacity: .7; }
+.cap-input[aria-invalid="true"] { border-color: var(--cap-danger); }
+.cap-field .fine { margin: 0; }
+
+.seg.cap-widths button { height: 44px; flex-direction: column; gap: 1px; line-height: 1.15; }
+.seg.cap-widths small { font: 500 10.5px var(--font-num); font-variant-numeric: tabular-nums; opacity: .8; }
+.cap-pair { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.capture .row { grid-template-columns: max-content minmax(0, 1fr) 40px; }
+
+.cap-check { display: flex; align-items: center; gap: 8px; font-size: 12.5px; font-weight: 500; cursor: pointer; width: max-content; }
+.cap-check input { width: 16px; height: 16px; margin: 0; accent-color: var(--accent); cursor: pointer; }
+
+/* Hide cookie banners + Dark mode; Hide elements; Password-protected site (collapsed). */
+.cap-checks { display: flex; flex-wrap: wrap; gap: 8px 20px; }
+.cap-area { height: auto; min-height: 52px; padding: 7px 10px; line-height: 1.45; resize: vertical; font: 12px/1.45 var(--font-num); }
+.seg.cap-widths button:disabled, .cap-form .seg button:disabled { cursor: default; opacity: .55; }
+.cap-auth { border: 1px solid var(--line); border-radius: 10px; }
+.cap-auth summary {
+  display: flex; align-items: center; gap: 8px; min-height: 36px; padding: 0 10px; cursor: pointer;
+  font-size: 12.5px; font-weight: 500; border-radius: 9px; list-style: none;
+}
+.cap-auth summary::-webkit-details-marker { display: none; }
+.cap-auth summary::before {
+  content: ""; width: 6px; height: 6px; margin: 0 2px; border: solid var(--ink-2); border-width: 0 1.5px 1.5px 0;
+  transform: rotate(-45deg); transition: transform .12s;
+}
+.cap-auth[open] summary::before { transform: rotate(45deg) translate(-1px, -1px); }
+.cap-auth summary:hover { background: var(--field); }
+.cap-auth-body { display: grid; gap: 8px; padding: 2px 10px 10px; }
+
+.cap-error {
+  margin: 0; padding: 8px 10px; border-radius: 8px; font-size: 12.5px; font-weight: 500; line-height: 1.4;
+  color: var(--cap-danger); background: color-mix(in srgb, var(--cap-danger) 11%, transparent);
+}
+.cap-status { margin: 0; display: flex; align-items: center; gap: 8px; min-height: 0; }
+.cap-status:empty { display: none; }
+.cap-spin {
+  flex: none; width: 14px; height: 14px; border-radius: 50%;
+  border: 2px solid var(--line); border-top-color: var(--accent); animation: cap-spin .8s linear infinite;
+}
+@keyframes cap-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .cap-spin { animation-duration: 2.4s; } }
+
+@media (max-width: 460px) {
+  .cap-pair { grid-template-columns: minmax(0, 1fr); }
+  .capture .row { grid-template-columns: minmax(0, 1fr) 40px; }
+  .capture .row label { grid-column: 1 / -1; }
+}

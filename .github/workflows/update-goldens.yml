@@ -1,0 +1,66 @@
+name: Update goldens
+
+# Regenerates the golden export PNGs (tests/e2e/__golden__) on CI's runner and commits the ones that
+# changed to the branch picked under "Use workflow from". The fallback for when CI renders a golden
+# slightly differently from the machine that made it. Run it from the Actions tab, or:
+#   gh workflow run update-goldens.yml --ref <branch>
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write # push the regenerated PNGs
+  actions: write # start CI on the new commit (a push made with GITHUB_TOKEN starts no workflow)
+
+concurrency:
+  group: update-goldens-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  NEXT_TELEMETRY_DISABLED: 1
+
+jobs:
+  update:
+    if: github.ref_type == 'branch'
+    runs-on: ubuntu-24.04 # same image as CI
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - name: Install Playwright Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Build
+        run: npx next build
+
+      # playwright test golden --update-snapshots: rewrites only the goldens that fail on this runner,
+      # against the build above, as CI's e2e step does (CI=true).
+      - name: Regenerate goldens
+        run: npm run test:e2e:update
+
+      - name: Check the new goldens pass
+        run: npx playwright test golden
+
+      - name: Commit and push changed goldens
+        env:
+          BRANCH: ${{ github.ref_name }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          git add tests/e2e/__golden__
+          if git diff --cached --quiet; then
+            echo "The goldens already pass on CI's runner; nothing to commit." | tee -a "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          git diff --cached --stat | tee -a "$GITHUB_STEP_SUMMARY"
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit -m 'Regenerate golden PNGs on CI' \
+            -m "Regenerated on the GitHub Actions runner (ubuntu-24.04) by the Update goldens workflow, run $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID."
+          git push origin "HEAD:refs/heads/$BRANCH"
+          gh workflow run ci.yml --ref "$BRANCH"

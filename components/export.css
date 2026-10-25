@@ -1,0 +1,67 @@
+/* Export additions: the Export menu in the top bar, Copy, the in-sheet toast and the multi-image sheet.
+   Builds on the prototype's .sheet / .btn styles in app/globals.css. */
+
+/* ---------- Export ▾ split button and menu ---------- */
+.export-split { position: relative; display: inline-flex; }
+.export-menu-wrap { display: inline-flex; }
+.export-split #exportBtn { border-top-right-radius: 0; border-bottom-right-radius: 0; }
+.export-split .export-caret {
+  padding: 0; width: 30px; border-top-left-radius: 0; border-bottom-left-radius: 0;
+  border-left: 1px solid color-mix(in srgb, var(--accent-ink) 30%, transparent);
+}
+.export-caret svg { transition: transform .12s; }
+.export-caret[aria-expanded="true"] svg { transform: rotate(180deg); }
+.export-menu {
+  position: absolute; right: 0; top: calc(100% + 6px); z-index: 40; min-width: 250px;
+  display: grid; gap: 2px; padding: 6px; border-radius: 12px; border: 1px solid var(--line);
+  background: var(--paper); box-shadow: 0 14px 40px rgba(10, 12, 20, .18), 0 2px 6px rgba(10, 12, 20, .08);
+}
+.export-menu [role="menuitem"] {
+  display: grid; gap: 1px; width: 100%; padding: 8px 10px; border: 0; border-radius: 8px; background: transparent;
+  text-align: left; cursor: pointer; color: var(--ink); font-weight: 600; font-size: 12.5px;
+}
+.export-menu [role="menuitem"]:hover, .export-menu [role="menuitem"]:focus-visible { background: var(--field); }
+.export-menu [role="menuitem"]:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.export-menu [role="menuitem"] small { font: 500 11px var(--font-ui); color: var(--ink-2); }
+.export-menu [role="menuitem"]:disabled { opacity: .45; cursor: default; }
+
+/* ---------- in-sheet toast (the editor's toast sits under the scrim) ---------- */
+.sheet-card { position: relative; }
+.sheet-toast {
+  position: absolute; left: 50%; top: 64px; transform: translate(-50%, -8px); z-index: 2;
+  background: var(--ink); color: var(--paper); padding: 8px 12px; border-radius: 8px;
+  font-size: 12.5px; font-weight: 500; opacity: 0; pointer-events: none; transition: opacity .18s, transform .18s;
+  max-width: calc(100% - 24px); text-align: center;
+}
+.sheet-toast.show { opacity: 1; transform: translate(-50%, 0); }
+
+/* ---------- multi-image sheet ---------- */
+.sheet.multi .sheet-card { width: min(900px, 100%); }
+.multi-grid {
+  list-style: none; margin: 0; padding: 0; display: grid; gap: 12px;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 250px), 1fr));
+}
+.multi-item {
+  display: grid; grid-template-columns: minmax(0, 1fr) auto; grid-template-rows: auto auto; gap: 8px 10px;
+  align-items: end; min-width: 0; padding: 8px; border: 1px solid var(--line); border-radius: 12px; background: var(--paper);
+}
+.multi-thumb {
+  grid-column: 1 / -1; height: 190px; border-radius: 8px; background: var(--board);
+  display: grid; place-items: center; padding: 10px; overflow: hidden;
+}
+.multi-thumb img { max-width: 100%; max-height: 100%; display: block; border-radius: 2px; box-shadow: 0 3px 12px rgba(0, 0, 0, .16); }
+.multi-wait { font: 500 11.5px var(--font-num); color: var(--ink-2); }
+.multi-item[aria-busy="true"] .multi-wait { animation: multi-wait 1.1s ease-in-out infinite alternate; }
+@keyframes multi-wait { from { opacity: 1; } to { opacity: .4; } }
+.multi-item[data-status="error"] .multi-meta .fine { color: #C42F4A; }
+.multi-meta { display: grid; gap: 2px; min-width: 0; }
+.multi-label { font-weight: 600; font-size: 12.5px; }
+.multi-name { font: 500 11px var(--font-num); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.multi-actions { align-items: center; }
+.multi-status { flex: 1 1 160px; font-variant-numeric: tabular-nums; }
+@media (prefers-reduced-motion: reduce) {
+  .multi-item[aria-busy="true"] .multi-wait { animation: none; }
+}
+@media (max-width: 460px) {
+  .multi-thumb { height: 150px; }
+}
