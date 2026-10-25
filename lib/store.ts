@@ -12,7 +12,7 @@ import {
   type Arrangement, type Background, type BackgroundType, type Composition, type CropId, type Frame, type PresetId,
   type Shadow, type ShadowPreset, type Slot, type SlotSource, type Style, type UiState,
 } from './model';
-import { arrange, arrangementOf, defaultComposition, pageMeasure, showcaseCrop } from './arrange';
+import { applyArrangement, arrange, arrangementOf, defaultComposition, pageMeasure, showcaseCrop, showFirstPage } from './arrange';
 import { isArranged, resizeCanvas } from './canvas-size';
 import { History } from './history';
 import { capHeight, autoCrop, cropRatio, groupBounds, scrollAxis } from './render/units';
@@ -411,14 +411,7 @@ export const useEditor = create<EditorState>()((set, get) => {
     },
     setArrangement(a) {
       if (a === arrangementOf(get().doc)) return;
-      change((d) => {
-        d.arrangement = a;
-        for (let i = 0; i < d.count; i++) {
-          const s = d.slots[i];
-          s.crop = a === 'showcase' ? showcaseCrop : autoCrop(s.nw, s.nh);
-        }
-        arrange(d, d.count, pageMeasure());
-      });
+      change((d) => applyArrangement(d, a, pageMeasure()));
     },
     rearrange() {
       change((d) => arrange(d, d.count, pageMeasure()));
@@ -429,10 +422,9 @@ export const useEditor = create<EditorState>()((set, get) => {
       const old = doc.slots[i].imageId;
       const fresh = freshShowcase(doc);
       change((d) => {
-        const { imageId, name, source, nw, nh } = d.slots[0];
         const s = d.slots[i];
         const top = topOf(s);
-        Object.assign(s, { imageId, name, source: clone(source), nw, nh, fx: 50, fy: 0, crop: showcaseCrop });
+        showFirstPage(d, i);
         if (fresh || arrangementOf(d) !== 'showcase') arrange(d, d.count, pageMeasure());
         else keepTop(s, top);
       });

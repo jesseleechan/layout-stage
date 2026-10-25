@@ -1,20 +1,15 @@
 /* Export additions: the Export menu in the top bar, Copy, the in-sheet toast and the multi-image sheet.
    Builds on the prototype's .sheet / .btn styles in app/globals.css. */
 
-/* ---------- Export ▾ split button and menu ---------- */
-.export-split { position: relative; display: inline-flex; }
+/* ---------- Export pill (top right) and its ••• menu ---------- */
+.top-right { position: relative; }
 .export-menu-wrap { display: inline-flex; }
-.export-split #exportBtn { border-top-right-radius: 0; border-bottom-right-radius: 0; }
-.export-split .export-caret {
-  padding: 0; width: 30px; border-top-left-radius: 0; border-bottom-left-radius: 0;
-  border-left: 1px solid color-mix(in srgb, var(--accent-ink) 30%, transparent);
-}
-.export-caret svg { transition: transform .12s; }
-.export-caret[aria-expanded="true"] svg { transform: rotate(180deg); }
+.export-caret { width: 32px; height: 32px; }
+.export-caret[aria-expanded="true"] { background: var(--field); }
 .export-menu {
-  position: absolute; right: 0; top: calc(100% + 6px); z-index: 40; min-width: 250px;
-  display: grid; gap: 2px; padding: 6px; border-radius: 12px; border: 1px solid var(--line);
-  background: var(--paper); box-shadow: 0 14px 40px rgba(10, 12, 20, .18), 0 2px 6px rgba(10, 12, 20, .08);
+  position: absolute; right: 0; top: calc(100% + 8px); z-index: 40; min-width: 250px;
+  display: grid; gap: 2px; padding: 6px; border-radius: 14px;
+  background: var(--paper); box-shadow: 0 0 0 1px var(--line), 0 14px 40px rgba(10, 12, 20, .18), 0 2px 6px rgba(10, 12, 20, .08);
 }
 .export-menu [role="menuitem"] {
   display: grid; gap: 1px; width: 100%; padding: 8px 10px; border: 0; border-radius: 8px; background: transparent;
@@ -46,7 +41,7 @@
   align-items: end; min-width: 0; padding: 8px; border: 1px solid var(--line); border-radius: 12px; background: var(--paper);
 }
 .multi-thumb {
-  grid-column: 1 / -1; height: 190px; border-radius: 8px; background: var(--board);
+  grid-column: 1 / -1; height: 190px; border-radius: 8px; background: var(--field);
   display: grid; place-items: center; padding: 10px; overflow: hidden;
 }
 .multi-thumb img { max-width: 100%; max-height: 100%; display: block; border-radius: 2px; box-shadow: 0 3px 12px rgba(0, 0, 0, .16); }

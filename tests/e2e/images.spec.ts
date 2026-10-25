@@ -120,20 +120,27 @@ test('the panels show thumbnails, and a reload brings everything back', async ({
     await st.addImage({ blob: await w.__makeImage(4000, 3000, 'image/png'), name: 'wide.png', source: { kind: 'file' } }, 0);
     await st.setBackgroundFile(new File([await w.__makeImage(3000, 2000, 'image/jpeg')], 'photo.jpg', { type: 'image/jpeg' }));
   });
-  const thumbs = () =>
-    page.evaluate(() => {
-      const row = document.querySelector<HTMLImageElement>('.slot[data-i="0"] .slot-thumb');
-      const bg = document.querySelector<HTMLImageElement>('#bgImgThumb');
-      const shot = document.querySelector<HTMLImageElement>('.shot[data-i="0"] img');
-      return { row: row && [row.naturalWidth, row.naturalHeight], bg: bg && [bg.naturalWidth, bg.naturalHeight], shot: shot && [shot.naturalWidth, shot.naturalHeight] };
-    });
-  await expect.poll(thumbs).toEqual({ row: [216, 162], bg: [216, 144], shot: [2880, 2160] });
+  // The layout rows are on the left panel's Mockup tab, the background photo on its Canvas tab.
+  const tab = (name: 'Mockup' | 'Canvas') => page.getByRole('button', { name, exact: true }).click();
+  const size = (sel: string) =>
+    page.evaluate((sel) => {
+      const img = document.querySelector<HTMLImageElement>(sel);
+      return img && [img.naturalWidth, img.naturalHeight];
+    }, sel);
+  const thumbs = async () => {
+    await tab('Mockup');
+    await expect.poll(() => size('.slot[data-i="0"] .slot-thumb')).toEqual([216, 162]);
+    await expect.poll(() => size('.shot[data-i="0"] img')).toEqual([2880, 2160]);
+    await tab('Canvas');
+    await expect.poll(() => size('#bgImgThumb')).toEqual([216, 144]);
+  };
+  await thumbs();
 
   const before = await page.evaluate(() => JSON.stringify(window.__layoutStage!.store.getState().doc));
   await page.reload();
   await page.waitForFunction(() => window.__layoutStage?.store.getState().hydrated === true, null, { timeout: 45_000 });
   expect(await page.evaluate(() => JSON.stringify(window.__layoutStage!.store.getState().doc))).toBe(before);
-  await expect.poll(thumbs).toEqual({ row: [216, 162], bg: [216, 144], shot: [2880, 2160] });
+  await thumbs();
 });
 
 test('an image stored before thumbnails existed gets one on first use, stored for next time', async ({ page }) => {

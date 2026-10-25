@@ -361,7 +361,7 @@ export default function Stage() {
   const capturing = hydrated ? jobs.flatMap((j) => { const i = captureJobSlot(doc, j); return i == null ? [] : [{ id: j.id, i }]; }) : [];
 
   return (
-    <section className="board" id="board" aria-label="Canvas" onDragEnter={onDragEnter} onDragOver={onDragOver} onDragLeave={onDragLeave} onDrop={onDrop}>
+    <main className="board" id="board" aria-label="Canvas" onDragEnter={onDragEnter} onDragOver={onDragOver} onDragLeave={onDragLeave} onDrop={onDrop}>
       <div
         className="viewport" id="viewport" ref={viewportRef}
         onPointerDown={(e) => { if (e.target === e.currentTarget) { useEditor.getState().select(null); blurShot(); } }}
@@ -403,15 +403,17 @@ export default function Stage() {
         <div className="droptint" id="dropTint" hidden={!dropping}><span>Drop 1–3 screenshots</span></div>
         <div className={toastOn ? 'toast show' : 'toast'} id="toast" role="status" aria-live="polite">{toast?.msg}</div>
       </div>
-      <div className="boardbar">
-        <p className="hint">Drag to move · corner handle resizes · arrow keys nudge (Shift for 10) · hold Alt to skip snapping · Space-drag or Alt-scroll scrolls a crop</p>
-        <div className="bar-actions">
-          <button className="btn sm" id="safeBtn" type="button" aria-pressed={showSafe} onClick={() => setUi({ showSafeArea: !showSafe })}>Safe area</button>
-          <button className="btn sm" id="centerAllBtn" type="button" onClick={centerGroup}>Center group</button>
-          <button className="btn sm" id="arrangeBtn" type="button" onClick={rearrange}>Re-arrange</button>
-          <span className="zoom" id="zoomOut">{Math.round(scale * 100)}%</span>
-        </div>
+      <div className="canvas-bar" role="toolbar" aria-label="Canvas tools">
+        <button className="btn sm" id="videoBtn" type="button" title="A video of a page scrolling" onClick={() => void useExport.getState().openVideo('videoBtn')}>
+          <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round" aria-hidden="true"><rect x="2" y="3.5" width="12" height="9" rx="2" /><path d="M7 6.2v3.6L10 8z" fill="currentColor" /></svg>
+          Video
+        </button>
+        <span className="sep" aria-hidden="true" />
+        <button className="btn sm" id="safeBtn" type="button" aria-pressed={showSafe} onClick={() => setUi({ showSafeArea: !showSafe })}>Safe area</button>
+        <button className="btn sm" id="centerAllBtn" type="button" onClick={centerGroup}>Center group</button>
+        <button className="btn sm" id="arrangeBtn" type="button" onClick={rearrange}>Re-arrange</button>
+        <span className="zoom" id="zoomOut">{Math.round(scale * 100)}%</span>
       </div>
-    </section>
+    </main>
   );
 }

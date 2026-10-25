@@ -8,7 +8,7 @@
    With the headline on at the top or bottom, the layouts start in the part of the canvas it leaves,
    measured with the overlay layout the renderer draws. */
 import { applyStyleTo, defaultBackground, sampleSlot, STYLES, clone, type Arrangement, type Composition, type Slot } from './model';
-import { cropRatio, unit } from './render/units';
+import { autoCrop, cropRatio, unit } from './render/units';
 import { defaultOverlays, overlaysOf } from './overlays';
 import { layoutOverlays, type Measure } from './render/overlay-layout';
 import { canvasMeasure } from './render/overlay-fonts';
@@ -221,6 +221,24 @@ export function arrange(doc: Composition, n: 1 | 2 | 3 = doc.count, measure?: Me
     ? n === 3 ? [1, 2, 0] : Array.from({ length: n }, (_, i) => i)
     : canvasKind(W, H) !== 'port' && n === 3 ? [1, 2, 0] : Array.from({ length: n }, (_, i) => i);
   doc.order = [...vis, ...[0, 1, 2].filter((i) => !vis.includes(i))];
+}
+
+/** Starts the layouts over in arrangement `a`, with its crops: showcase shows pages whole; classic
+ *  gives each page the crop a new image gets. Mutates `doc`. */
+export function applyArrangement(doc: Composition, a: Arrangement, measure?: Measure | null): void {
+  doc.arrangement = a;
+  for (let i = 0; i < doc.count; i++) {
+    const s = doc.slots[i];
+    s.crop = a === 'showcase' ? showcaseCrop : autoCrop(s.nw, s.nh);
+  }
+  arrange(doc, doc.count, measure);
+}
+
+/** Layout i shows layout 1's page, whole (in the showcase columns it then continues it). Mutates
+ *  `doc`; positions are the caller's. */
+export function showFirstPage(doc: Composition, i: number): void {
+  const { imageId, name, source, nw, nh } = doc.slots[0];
+  Object.assign(doc.slots[i], { imageId, name, source: clone(source), nw, nh, fx: 50, fy: 0, crop: showcaseCrop });
 }
 
 /** The first-run canvas: a Pinterest pin with two sample sites as showcase columns, in the Blush

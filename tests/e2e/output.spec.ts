@@ -114,6 +114,7 @@ test.describe('match site colors', () => {
 
   test('light site → light mesh, then gradient and solid, one undo step each; dark site → dark', async ({ page }) => {
     await openEditor(page);
+    await page.getByRole('button', { name: 'Canvas', exact: true }).click(); // the left panel's Canvas tab
     const bg = () => page.evaluate(() => window.__layoutStage!.store.getState().doc.background);
     await page.evaluate(() => window.__layoutStage!.store.getState().select(0)); // Juniper: light
     const types: string[] = [];

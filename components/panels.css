@@ -15,7 +15,7 @@
 
 /* A layout row's Replace menu (components/ReplaceMenu.tsx). */
 .menu-wrap { display: flex; } /* the menu hangs from the whole row (.slots .slot is positioned) */
-.icon-btn[aria-expanded="true"] { border-color: var(--accent); color: var(--accent); background: var(--accent-soft); }
+.icon-btn[aria-expanded="true"] { background: var(--field-2); }
 .menu {
   position: absolute; left: 4px; right: 4px; top: calc(100% + 3px); z-index: 20; display: grid; gap: 1px;
   padding: 4px; border-radius: 10px; border: 1px solid var(--line);
@@ -39,6 +39,24 @@
 .slots .slot-thumb { width: 48px; height: 32px; }
 .slots .slot-actions { gap: 3px; }
 
-/* Arrangement (Layouts panel): under the count, a little lower. */
-.seg.count.arrange { margin-top: 6px; }
-.seg.count.arrange button { height: 44px; font: 500 11.5px var(--font-ui); }
+/* Layout presets (right panel): live thumbnails of the canvas in each arrangement. */
+.presets { display: grid; grid-template-columns: repeat(var(--cols, 2), minmax(0, 1fr)); gap: 10px 8px; }
+.preset .tile-face { aspect-ratio: var(--ar); background: var(--field); }
+
+/* "Match site colors": a highlighted card, like Shots' Magic background. */
+.magic {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px; width: 100%; padding: 10px 12px;
+  border: 0; border-radius: 12px; cursor: pointer; text-align: left; color: var(--ink);
+  background: linear-gradient(120deg, color-mix(in srgb, #F4B6C2 45%, var(--paper)), color-mix(in srgb, #C7D7F5 55%, var(--paper)));
+  box-shadow: var(--lift-sm);
+}
+.magic:hover { box-shadow: 0 0 0 1px var(--line-strong); }
+.magic[aria-busy="true"] { opacity: .7; cursor: progress; }
+.magic-text { display: grid; gap: 2px; min-width: 0; }
+.magic-text strong { font-size: 12.5px; }
+.magic-text span { font-size: 11px; color: var(--ink-2); line-height: 1.35; }
+.magic-icon { flex: none; color: var(--ink-2); }
+
+/* Crop choices for the selected layout: six even chips on one line. */
+#cropChips { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 4px; }
+#cropChips .chip { padding: 0; font-size: 11.5px; }

@@ -1,80 +1,12 @@
 'use client';
-import { useRef, useState, type DragEvent, type ReactNode } from 'react';
+import { useRef, useState, type DragEvent } from 'react';
 import { captureJobSlot, useEditor, type CaptureJob } from '@/lib/store';
-import { arrangementOf, canContinuePage, pageMeasure } from '@/lib/arrange';
-import type { Arrangement } from '@/lib/model';
+import { canContinuePage, pageMeasure } from '@/lib/arrange';
 import { useThumbUrl } from '@/lib/images';
 import { recapture, recaptureAll } from '@/lib/capture/jobs';
 import { hostOf, recapturable } from '@/lib/capture/recapture';
-import { Seg, type Option } from './controls';
 import ReplaceMenu, { type MenuItem } from './ReplaceMenu';
 import './panels.css';
-
-/** A 30 × 18 layout icon; shapes that run past the box run off the canvas. */
-const LayoutIcon = ({ children }: { children: ReactNode }) => (
-  <svg width="30" height="18" viewBox="0 0 30 18" fill="none" stroke="currentColor" strokeWidth="1.4" aria-hidden="true">
-    {children}
-  </svg>
-);
-
-const CLASSIC_SHAPES: Record<1 | 2 | 3, ReactNode> = {
-  1: <rect x="7" y="3" width="16" height="12" rx="2" fill="currentColor" fillOpacity=".14" />,
-  2: (
-    <>
-      <rect x="4" y="2" width="14" height="10" rx="2" />
-      <rect x="12" y="6.5" width="14" height="10" rx="2" fill="currentColor" fillOpacity=".14" />
-    </>
-  ),
-  3: (
-    <>
-      <rect x="2.5" y="1" width="12" height="8.5" rx="1.8" />
-      <rect x="9" y="4.8" width="12" height="8.5" rx="1.8" />
-      <rect x="15.5" y="8.5" width="12" height="8.5" rx="1.8" fill="currentColor" fillOpacity=".14" />
-    </>
-  ),
-};
-
-const SHOWCASE_SHAPES: Record<1 | 2 | 3, ReactNode> = {
-  1: <rect x="8" y="3.5" width="14" height="18" rx="1.6" fill="currentColor" fillOpacity=".14" />,
-  2: (
-    <>
-      <rect x="6" y="2.5" width="8" height="18" rx="1.4" fill="currentColor" fillOpacity=".14" />
-      <rect x="16" y="5.5" width="8" height="18" rx="1.4" fill="currentColor" fillOpacity=".14" />
-    </>
-  ),
-  3: (
-    <>
-      <path d="M9.5 7.5H4.9a1.4 1.4 0 0 0-1.4 1.4V19M20.5 7.5h4.6a1.4 1.4 0 0 1 1.4 1.4V19" />
-      <rect x="9.5" y="4" width="11" height="17" rx="1.4" fill="currentColor" fillOpacity=".14" />
-    </>
-  ),
-};
-
-const COUNT_OPTIONS: Option<1 | 2 | 3>[] = ([1, 2, 3] as const).map((n) => ({
-  value: n,
-  label: (
-    <>
-      <LayoutIcon>{CLASSIC_SHAPES[n]}</LayoutIcon>
-      {n}
-    </>
-  ),
-}));
-
-const ARRANGEMENT_NAMES: Record<Arrangement, Record<1 | 2 | 3, string>> = {
-  showcase: { 1: 'Scroll', 2: 'Columns', 3: 'Editorial' },
-  classic: { 1: 'Centered', 2: 'Cascade', 3: 'Cascade' },
-};
-
-const arrangementOptions = (count: 1 | 2 | 3): Option<Arrangement>[] =>
-  (['showcase', 'classic'] as const).map((a) => ({
-    value: a,
-    label: (
-      <>
-        <LayoutIcon>{(a === 'showcase' ? SHOWCASE_SHAPES : CLASSIC_SHAPES)[count]}</LayoutIcon>
-        {ARRANGEMENT_NAMES[a][count]}
-      </>
-    ),
-  }));
 
 const ReplaceIcon = () => (
   <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
@@ -213,14 +145,11 @@ function PendingRow({ job }: { job: CaptureJob }) {
 
 export default function LayoutsPanel() {
   const count = useEditor((s) => s.doc.count);
-  const arrangement = useEditor((s) => arrangementOf(s.doc));
-  const setArrangement = useEditor((s) => s.setArrangement);
   const selected = useEditor((s) => s.ui.selected);
   const jobs = useEditor((s) => s.captureJobs);
   // Where each capture will land now ("" = the drop-elsewhere rule); a string so drags don't re-render.
   const jobSlots = useEditor((s) => s.captureJobs.map((j) => captureJobSlot(s.doc, j) ?? '').join(','));
   const slotOf = (k: number) => jobSlots.split(',')[k];
-  const setCount = useEditor((s) => s.setCount);
   const openCapture = useEditor((s) => s.openCapture);
   // Layouts captured from a URL, and how many of them aren't capturing now (for Re-capture all).
   const fromUrl = useEditor((s) => recapturable(s.doc).length);
@@ -237,11 +166,9 @@ export default function LayoutsPanel() {
   return (
     <section className="group">
       <div className="group-head">
-        <h2>Layouts</h2>
-        <span className="note">1 to 3 images</span>
+        <h2>Screenshots</h2>
+        <span className="note">1 to 3</span>
       </div>
-      <Seg className="count" label="Number of layouts" options={COUNT_OPTIONS} value={count} onPick={setCount} />
-      <Seg className="count arrange" label="Arrangement" options={arrangementOptions(count)} value={arrangement} onPick={setArrangement} />
       <ol className="slots" id="slots">
         {Array.from({ length: count }, (_, i) => (
           <SlotRow key={i} i={i} count={count} on={selected === i} busy={jobs.some((_, k) => slotOf(k) === String(i))} onReplace={replace} />

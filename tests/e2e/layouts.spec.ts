@@ -84,4 +84,29 @@ test.describe('layouts', () => {
     await page.getByRole('button', { name: 'Replace layout 2' }).click();
     await expect(page.getByRole('menuitem', { name: 'Continue layout 1’s page' })).toHaveCount(0);
   });
+
+  test('layout presets are live thumbnails; picking the one in use starts it over', async ({ page }) => {
+    await openEditor(page);
+    const group = page.getByRole('group', { name: 'Arrangement' });
+    // Each preset draws the canvas in its arrangement (a JPEG of the canvas's shape).
+    await expect.poll(() => group.locator('img').evaluateAll((els) => els.map((e) => (e as HTMLImageElement).naturalWidth > 0 && (e as HTMLImageElement).src.startsWith('data:image/jpeg')))).toEqual([true, true]);
+    // Dragged, then Columns again: back to its starting positions.
+    await page.evaluate(() => { const S = window.__layoutStage!.store.getState(); S.edit((d) => { d.slots[0].cx += 50; }); S.commit(); });
+    await group.getByRole('button', { name: 'Columns' }).click();
+    const d = await getDoc(page);
+    expect([d.arrangement, d.slots[0].cx]).toEqual(['showcase', 288]);
+  });
+
+  test('the left panel remembers its tab, and the canvas toolbar opens the video', async ({ page }) => {
+    await openEditor(page);
+    await page.getByRole('button', { name: 'Canvas', exact: true }).click();
+    await expect(page.getByRole('group', { name: 'Background type' })).toBeVisible();
+    await page.reload();
+    await page.waitForFunction(() => window.__layoutStage?.store.getState().hydrated === true, null, { timeout: 45_000 });
+    await expect(page.getByRole('group', { name: 'Background type' })).toBeVisible();
+    await page.getByRole('button', { name: 'Mockup', exact: true }).click();
+    await expect(page.getByRole('button', { name: 'Upload screenshots…' })).toBeVisible();
+    await page.click('#videoBtn');
+    await expect(page.locator('#sheetTitle')).toHaveText('Scrolling video');
+  });
 });

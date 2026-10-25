@@ -2,7 +2,9 @@
 
 Next.js (App Router) + TypeScript editor that turns 1–3 website screenshots into a Pinterest pin or
 Etsy listing image. Spec: `docs/HANDOFF.md`. Behavioral reference: `reference/layout-stage.html`
-(match its behavior, layout and rendering math).
+(match its behavior and rendering math). The editor's look and layout follow Shots (shots.so): floating
+clusters on top, a Mockup / Canvas tabbed panel on the left, the layout count and live layout presets on
+the right, a floating toolbar under the canvas.
 
 ## The rule
 
@@ -59,7 +61,10 @@ npx playwright install chromium          # once per machine, for URL capture and
   `server/fs-store.ts` the local store (`.data/sync`, `PROJECTS_STORE_DIR`, `off` disables);
   `server/api.ts` route logic for `app/api/projects/`. UI: `components/ProjectsControl.tsx`,
   `components/ProjectsSheet.tsx`
-- `components/` one file per panel / surface
+- `components/` one file per panel / surface: `Editor.tsx` (the shell), `TopBar.tsx` (the three top
+  clusters), `LeftPanel.tsx` (Mockup: screenshots, styles, frame; Canvas: background, text & logo),
+  `RightPanel.tsx` (`LayoutPresets.tsx` live thumbnails drawn with `renderComposition`, then the selected
+  layout), `Stage.tsx` (canvas + floating toolbar); `controls.tsx` holds the pill slider and `Tiles`
 - `proxy.ts` (Next 16's request interceptor, formerly `middleware.ts`): every request needs HTTP Basic
   auth when `ACCESS_PASSWORD` is set (any user name)
 
