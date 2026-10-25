@@ -1,7 +1,7 @@
 'use client';
 import { useRef, useState, type DragEvent } from 'react';
 import { captureJobSlot, useEditor, type CaptureJob } from '@/lib/store';
-import { useImageUrl } from '@/lib/images';
+import { useThumbUrl } from '@/lib/images';
 import { Seg, type Option } from './controls';
 import './panels.css';
 
@@ -75,7 +75,7 @@ function SlotRow({ i, count, on, busy, onReplace }: { i: number; count: number; 
   const nw = useEditor((s) => s.doc.slots[i].nw);
   const nh = useEditor((s) => s.doc.slots[i].nh);
   const kind = useEditor((s) => s.doc.slots[i].source.kind);
-  const url = useImageUrl(imageId);
+  const url = useThumbUrl(imageId);
   const [over, setOver] = useState(false);
   const n = i + 1;
   const meta = busy ? 'Capturing…' : `${nw}×${nh}${kind === 'sample' ? ' · sample' : kind === 'url' ? ' · from URL' : ''}`;

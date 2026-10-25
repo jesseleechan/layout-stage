@@ -15,7 +15,7 @@ import {
 import { arrange, defaultComposition } from './arrange';
 import { History } from './history';
 import { capHeight, autoCrop, groupBounds, scrollAxis } from './render/units';
-import { loadImage, pruneImages, putImage, releaseImage } from './images';
+import { ingestImage, pruneImages, releaseImage } from './images';
 import { loadComposition, loadStyles, saveComposition, saveStyles } from './persist';
 import { exportComposition, renderComposition } from './render/export';
 
@@ -140,6 +140,13 @@ let toastSeq = 0;
 let jobSeq = 0;
 let initStarted = false;
 
+/** Images this doc shows: the visible layouts, and the background photo while it's the background. */
+export function shownIds(d: Composition): Set<string> {
+  const ids = new Set(d.slots.slice(0, d.count).map((s) => s.imageId));
+  if (d.background.type === 'image' && d.background.imageId) ids.add(d.background.imageId);
+  return ids;
+}
+
 function referencedIds(d: Composition): Set<string> {
   const ids = new Set(d.slots.map((s) => s.imageId));
   if (d.background.imageId) ids.add(d.background.imageId);
@@ -190,19 +197,19 @@ export const useEditor = create<EditorState>()((set, get) => {
     ids.forEach((id) => id && !keep.has(id) && releaseImage(id));
   };
 
-  /** Stores and decodes an image. Returns what puts it into a slot, or null (with a toast). */
+  /** Stores (downscaled when over the storage budget) and decodes an image. Returns what puts it into
+   *  a slot, or null (with a toast). */
   const loadSlotImage = async (img: NewImage): Promise<((d: Composition, i: number) => void) | null> => {
     if (!isImageFile(img.blob)) {
       toast(NOT_IMAGE);
       return null;
     }
-    const id = await putImage(img.blob);
-    const el = await loadImage(id);
-    if (!el) {
+    const got = await ingestImage(img.blob);
+    if (!got) {
       toast(`Couldn’t read ${img.name || 'that image'}.`);
       return null;
     }
-    const nw = el.naturalWidth, nh = el.naturalHeight;
+    const { id, nw, nh } = got;
     return (d, i) => {
       const s = d.slots[i];
       Object.assign(s, { imageId: id, name: img.name || 'Pasted image', source: img.source, nw, nh, fx: 50, fy: 0, crop: autoCrop(nw, nh) });
@@ -434,8 +441,9 @@ export const useEditor = create<EditorState>()((set, get) => {
     },
     async setBackgroundFile(file) {
       if (!isImageFile(file)) { toast(NOT_IMAGE); return; }
-      const id = await putImage(file);
-      if (!(await loadImage(id))) { toast(`Couldn’t read ${file.name}.`); return; }
+      const got = await ingestImage(file);
+      if (!got) { toast(`Couldn’t read ${file.name}.`); return; }
+      const id = got.id;
       const old = get().doc.background.imageId;
       step((d) => { Object.assign(d.background, { type: 'image', imageId: id, imageName: file.name, blur: 0, dim: 0 }); });
       releaseUnused([old]);
@@ -521,6 +529,17 @@ export const useEditor = create<EditorState>()((set, get) => {
       set({ captureJobs: get().captureJobs.filter((j) => j.id !== id) });
     },
   };
+});
+
+/* Don't keep what isn't shown: when a change stops showing an image (replace, remove, fewer layouts,
+   undo, redo, another background type), or drops a hidden one from the doc, revoke its object URLs and
+   drop its decoded copy. The blob stays stored, so showing it again (undo, more layouts) reloads it. */
+useEditor.subscribe((s, prev) => {
+  if (s.doc === prev.doc) return;
+  const shown = shownIds(s.doc), refs = referencedIds(s.doc), was = shownIds(prev.doc);
+  referencedIds(prev.doc).forEach((id) => {
+    if (was.has(id) ? !shown.has(id) : !refs.has(id)) releaseImage(id);
+  });
 });
 
 /* Test hook: lets Playwright load a fixed composition, read the store and run the export renderer. */
