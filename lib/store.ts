@@ -15,7 +15,7 @@ import {
 import { arrange, defaultComposition } from './arrange';
 import { History } from './history';
 import { capHeight, autoCrop, groupBounds, scrollAxis } from './render/units';
-import { ingestImage, pruneImages, releaseImage } from './images';
+import { ingestImage, loadImage, pruneImages, releaseImage } from './images';
 import { loadComposition, loadStyles, saveComposition, saveStyles } from './persist';
 import { exportComposition, renderComposition } from './render/export';
 import { alignLayouts, canAlign, distributeLayouts, type AlignEdge } from './align';
