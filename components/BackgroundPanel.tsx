@@ -3,7 +3,7 @@ import { useMemo, useRef, useState } from 'react';
 import { useShallow } from 'zustand/react/shallow';
 import { GRADS, MESHES, SOLIDS, type Background, type BackgroundType } from '@/lib/model';
 import { useEditor } from '@/lib/store';
-import { useImageUrl } from '@/lib/images';
+import { useThumbUrl } from '@/lib/images';
 import { ColorInput, ColorRow, RangeRow, Seg, cols, type Option } from './controls';
 import { getMeshThumbs } from './thumbs';
 
@@ -36,7 +36,7 @@ export default function BackgroundPanel() {
   );
   const { editBackground, setBackgroundType, pickSolid, pickGradient, pickMesh, shuffleMesh, backgroundFromLayout } = useEditor.getState();
   const meshThumbs = useMemo(() => getMeshThumbs(), []);
-  const imgUrl = useImageUrl(b.imageId);
+  const imgUrl = useThumbUrl(b.imageId);
   const fileRef = useRef<HTMLInputElement>(null);
   const mesh = [b.m0, b.m1, b.m2, b.m3];
   const meshKey = lc(mesh.join());
