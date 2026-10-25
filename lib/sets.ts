@@ -1,9 +1,11 @@
 /* Derived compositions for "Export all sizes" and the "Etsy listing set". Pure: each item is an
    ordinary Composition (or, for the palette card, the canvas it's drawn on), rendered later through
-   lib/render like any export. Nothing here touches the store or the DOM. */
-import { arrange } from './arrange';
+   lib/render like any export. Nothing here touches the store or the DOM, apart from the text
+   measure the arrangement sizes the headline with (the page's by default; see arrange()). */
+import { arrange, pageMeasure } from './arrange';
 import { clone, PRESETS, type Composition, type PresetId, type Slot, type UiState } from './model';
 import { cropRatio, scrollAxis } from './render/units';
+import type { Measure } from './render/overlay-layout';
 
 /* ---------------- one composition, another canvas ---------------- */
 
@@ -11,18 +13,19 @@ const visibleOrder = (d: Composition) => d.order.filter((i) => i < d.count).join
 
 /**
  * The composition on another preset's canvas. Same layouts, crops, scroll positions, frame and
- * background, placed by arrange() for the new shape. The layer order is kept when the user changed
- * it; an untouched one follows the new shape's own (a 3-up on square and landscape canvases puts the
- * hero in front). On its own preset the composition is returned as it is, positions included.
+ * background, placed by arrange() for the new shape (leaving room for a top or bottom headline,
+ * measured with `measure`). The layer order is kept when the user changed it; an untouched one
+ * follows the new shape's own (a 3-up on square and landscape canvases puts the hero in front). On
+ * its own preset the composition is returned as it is, positions included.
  */
-export function forPreset(doc: Composition, preset: Exclude<PresetId, 'custom'>): Composition {
+export function forPreset(doc: Composition, preset: Exclude<PresetId, 'custom'>, measure: Measure | null = pageMeasure()): Composition {
   const d = clone(doc);
   const { w, h } = PRESETS[preset];
   if (doc.preset === preset && doc.W === w && doc.H === h) return d;
   d.preset = preset;
   d.W = w;
   d.H = h;
-  arrange(d);
+  arrange(d, d.count, measure);
   const ref = clone(doc);
   arrange(ref);
   if (visibleOrder(doc) !== visibleOrder(ref)) d.order = [...doc.order];
@@ -41,8 +44,8 @@ export interface SizeItem {
   scale: 1 | 2;
 }
 
-export function allSizes(doc: Composition): SizeItem[] {
-  return ALL_SIZES.map((p) => ({ key: p, label: PRESETS[p].label, doc: forPreset(doc, p), scale: PRESETS[p].scale }));
+export function allSizes(doc: Composition, measure: Measure | null = pageMeasure()): SizeItem[] {
+  return ALL_SIZES.map((p) => ({ key: p, label: PRESETS[p].label, doc: forPreset(doc, p, measure), scale: PRESETS[p].scale }));
 }
 
 /* ---------------- Etsy listing set ---------------- */
@@ -157,8 +160,8 @@ export type SetItem =
  * 5. desktop + phone, when the canvas has both;
  * 6. a palette card of the main layout's colors.
  */
-export function etsySet(doc: Composition): SetItem[] {
-  const items: SetItem[] = [{ kind: 'composition', key: 'hero', label: 'Hero', doc: forPreset(doc, SET_PRESET) }];
+export function etsySet(doc: Composition, measure: Measure | null = pageMeasure()): SetItem[] {
+  const items: SetItem[] = [{ kind: 'composition', key: 'hero', label: 'Hero', doc: forPreset(doc, SET_PRESET, measure) }];
   const m = mainSlot(doc);
   const main = doc.slots[m];
   const stops = sectionStops(main);

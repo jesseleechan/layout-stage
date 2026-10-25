@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { arrange, canvasKind, defaultComposition } from '@/lib/arrange';
-import { STYLES, type Composition, type CropId } from '@/lib/model';
-import { cropRatio, rectOf } from '@/lib/render/units';
+import { arrange, canvasKind, defaultComposition, HEADLINE_GAP, layoutRoom, MIN_ROOM, pageMeasure } from '@/lib/arrange';
+import { clone, STYLES, type Composition, type CropId, type PresetId } from '@/lib/model';
+import type { Headline } from '@/lib/overlays';
+import { layoutOverlays, REF_PX, type Measure } from '@/lib/render/overlay-layout';
+import { cropRatio, rectOf, unit, type Rect } from '@/lib/render/units';
 
 /* Starting spots copied from reference/layout-stage.html: [cx fraction, cy fraction, width fraction]. */
 const SPOTS = {
@@ -127,5 +129,164 @@ describe('defaultComposition', () => {
     expect(defaultComposition().slots[0].cx).toBe(400);
     expect(defaultComposition().frame.shadow.blur).toBe(80);
     expect(STYLES[0].frame.shadow.blur).toBe(80);
+  });
+});
+
+/* ---------------- room for the headline ---------------- */
+
+/** Stands in for the canvas's text measure (node has none): every character is 0.55 em wide. */
+const measure: Measure = (text) => text.length * 0.55 * REF_PX;
+const PRESET_OF: Record<keyof typeof CANVASES, PresetId> = { port: 'pin', sq: 'etsy11', land: 'etsy43' };
+
+/** A canvas of the kind's preset with the headline switched on. */
+function headed(kind: keyof typeof CANVASES, patch: Partial<Headline> = {}, crops?: CropId[]): Composition {
+  const [W, H] = CANVASES[kind];
+  const d = docOf(W, H, crops);
+  d.preset = PRESET_OF[kind];
+  Object.assign(d.overlays!.headline, { enabled: true, ...patch });
+  return d;
+}
+function plainOf(kind: keyof typeof CANVASES, n: 1 | 2 | 3, crops?: CropId[]): Composition {
+  const d = headed(kind, {}, crops);
+  d.overlays!.headline.enabled = false;
+  arrange(d, n);
+  return d;
+}
+const visible = (d: Composition, n: number) => d.slots.slice(0, n).map((s) => rectOf(s));
+const headlineBox = (d: Composition): Rect => layoutOverlays(d, measure).headline!.box;
+const spots = (d: Composition) => d.slots.map((s) => [s.cx, s.cy, s.w]);
+function bounds(rs: Rect[]) {
+  const t = Math.min(...rs.map((r) => r.t)), b = Math.max(...rs.map((r) => r.t + r.h));
+  const l = Math.min(...rs.map((r) => r.l)), r = Math.max(...rs.map((q) => q.l + q.w));
+  return { t, b, h: b - t, cx: (l + r) / 2 };
+}
+
+describe('arrange with a headline', () => {
+  it('places exactly as without one when the headline is off, in the middle, or there is no measure', () => {
+    for (const kind of ['port', 'sq', 'land'] as const) {
+      for (const n of [1, 2, 3] as const) {
+        const plain = plainOf(kind, n);
+        const off = headed(kind);
+        off.overlays!.headline.enabled = false;
+        const middle = headed(kind, { place: 'middle' });
+        const unmeasured = headed(kind, { place: 'top' });
+        arrange(off, n, measure);
+        arrange(middle, n, measure);
+        arrange(unmeasured, n);
+        for (const d of [off, middle, unmeasured]) {
+          expect(spots(d)).toEqual(spots(plain));
+          expect(d.order).toEqual(plain.order);
+        }
+      }
+    }
+  });
+
+  it('outside a browser the app has no measure, so the headline is ignored there', () => {
+    expect(pageMeasure()).toBeNull();
+  });
+
+  for (const kind of ['port', 'sq', 'land'] as const) {
+    for (const n of [1, 2, 3] as const) {
+      it(`fits ${n} below a top headline and above a bottom one on a ${kind} canvas`, () => {
+        for (const crops of [['16:10', '16:10', '16:10'], ['9:16', '4:5', 'full']] as CropId[][]) {
+          const top = headed(kind, { place: 'top' }, crops);
+          arrange(top, n, measure);
+          const tb = headlineBox(top), gap = HEADLINE_GAP * unit(top.W, top.H);
+          expect(layoutRoom(top, measure)).toEqual({ t: tb.t + tb.h + gap, b: top.H });
+          for (const r of visible(top, n)) {
+            expect(r.t).toBeGreaterThanOrEqual(tb.t + tb.h + gap - 1);
+            expect(r.t + r.h).toBeLessThanOrEqual(top.H + 1);
+            expect(r.l).toBeGreaterThanOrEqual(-1);
+            expect(r.l + r.w).toBeLessThanOrEqual(top.W + 1);
+          }
+          const bottom = headed(kind, { place: 'bottom' }, crops);
+          arrange(bottom, n, measure);
+          const bb = headlineBox(bottom);
+          expect(layoutRoom(bottom, measure)).toEqual({ t: 0, b: bb.t - gap });
+          for (const r of visible(bottom, n)) {
+            expect(r.t).toBeGreaterThanOrEqual(-1);
+            expect(r.t + r.h).toBeLessThanOrEqual(bb.t - gap + 1);
+          }
+        }
+      });
+    }
+  }
+
+  it('keeps the arrangement: one scale for every layout, the same offsets between them, the same layer order', () => {
+    const crops: CropId[] = ['9:16', '16:10', '4:5'];
+    for (const kind of ['port', 'sq', 'land'] as const) {
+      for (const n of [2, 3] as const) {
+        for (const place of ['top', 'bottom'] as const) {
+          const plain = plainOf(kind, n, crops);
+          const d = headed(kind, { place }, crops);
+          arrange(d, n, measure);
+          expect(d.order).toEqual(plain.order);
+          const sum = (x: Composition) => x.slots.slice(0, n).reduce((a, s) => a + s.w, 0);
+          const k = sum(d) / sum(plain);
+          expect(k).toBeLessThanOrEqual(1);
+          for (let i = 1; i < n; i++) {
+            expect(Math.abs(d.slots[i].w - plain.slots[i].w * k)).toBeLessThan(2);
+            expect(Math.abs(d.slots[i].cx - d.slots[0].cx - (plain.slots[i].cx - plain.slots[0].cx) * k)).toBeLessThan(2);
+            expect(Math.abs(d.slots[i].cy - d.slots[0].cy - (plain.slots[i].cy - plain.slots[0].cy) * k)).toBeLessThan(2);
+          }
+          // Scaled about the canvas's vertical center line, so the group stays as centered as it was.
+          expect(Math.abs(bounds(visible(d, n)).cx - d.W / 2 - (bounds(visible(plain, n)).cx - d.W / 2) * k)).toBeLessThan(2);
+        }
+      }
+    }
+  });
+
+  it('moves a group that fits without scaling it, centered in the room it has', () => {
+    // The default pin: two 16:10 samples, 878 px tall together, under the default headline.
+    const d = headed('port', { place: 'top' });
+    arrange(d, 2, measure);
+    expect(d.slots.slice(0, 2).map((s) => s.w)).toEqual([780, 780]);
+    expect(d.slots[1].cx - d.slots[0].cx).toBe(200);
+    expect(d.slots[1].cy - d.slots[0].cy).toBe(390);
+    const room = layoutRoom(d, measure), g = bounds(visible(d, 2));
+    expect(Math.abs(g.t - room.t - (room.b - g.b))).toBeLessThan(2);
+    expect(g.t).toBeGreaterThan(room.t + 50);
+  });
+
+  it('scales a group down only as far as it has to', () => {
+    // 16:10 3-up on the pin: 82% of the canvas tall, so it shrinks to fill 86% of the room.
+    const wide = headed('port', { place: 'top' });
+    arrange(wide, 3, measure);
+    const room = layoutRoom(wide, measure);
+    expect(Math.abs(bounds(visible(wide, 3)).h - 0.86 * (room.b - room.t))).toBeLessThan(1.5);
+    // A 9:16 3-up fills the pin from top to bottom, so it fills the room the same way.
+    const tall = headed('port', { place: 'top' }, ['9:16', '9:16', '9:16']);
+    arrange(tall, 3, measure);
+    const g = bounds(visible(tall, 3));
+    expect(Math.abs(g.t - room.t)).toBeLessThan(1.5);
+    expect(Math.abs(g.b - room.b)).toBeLessThan(1.5);
+    expect(Math.abs(tall.slots[0].w - 405 * ((room.b - room.t) / 1500))).toBeLessThanOrEqual(0.5);
+  });
+
+  it('measures the headline as it is drawn: its text, size, fill and offset move the room', () => {
+    const roomTop = (patch: Partial<Headline>) => layoutRoom(headed('port', { place: 'top', ...patch }), measure).t;
+    const base = roomTop({});
+    expect(roomTop({ text: 'Calm' })).toBeLessThan(base); // one line
+    expect(roomTop({ text: 'Calm theme', size: 120 })).toBeGreaterThan(roomTop({ text: 'Calm' }));
+    expect(roomTop({ fill: 'pill' })).toBeGreaterThan(base);
+    expect(roomTop({ fill: 'band' })).toBeGreaterThan(base);
+    expect(roomTop({ dy: 60 })).toBeCloseTo(base + 60, 6); // pin: 1 unit = 1 px
+    // Nothing to draw, nothing to leave room for.
+    expect(roomTop({ text: '  ' })).toBe(0);
+  });
+
+  it('keeps at least a quarter of the canvas for the layouts', () => {
+    // Custom 2000 × 1000: a two-line pill headline at the largest size is taller than three quarters.
+    const top = docOf(2000, 1000);
+    top.preset = 'custom';
+    Object.assign(top.overlays!.headline, { enabled: true, place: 'top', text: 'Hi\nYo', size: 220, fill: 'pill' });
+    const box = headlineBox(top);
+    expect(box.t + box.h + HEADLINE_GAP).toBeGreaterThan(750);
+    expect(layoutRoom(top, measure)).toEqual({ t: 1000 * (1 - MIN_ROOM), b: 1000 });
+    arrange(top, 2, measure);
+    for (const r of visible(top, 2)) expect(r.t).toBeGreaterThanOrEqual(749);
+    const bottom = clone(top);
+    bottom.overlays!.headline.place = 'bottom';
+    expect(layoutRoom(bottom, measure)).toEqual({ t: 0, b: 1000 * MIN_ROOM });
   });
 });

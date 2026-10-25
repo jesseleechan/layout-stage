@@ -1,7 +1,8 @@
 /* Derived compositions: Export all sizes and the Etsy listing set. */
 import { describe, expect, it } from 'vitest';
-import { arrange, defaultComposition } from '@/lib/arrange';
+import { arrange, defaultComposition, layoutRoom } from '@/lib/arrange';
 import { clone, DEFAULT_CAPTURE, PRESETS, type Composition, type Slot } from '@/lib/model';
+import { REF_PX, type Measure } from '@/lib/render/overlay-layout';
 import { cropRatio, groupBounds, rectOf } from '@/lib/render/units';
 import {
   allSizes, closeUp, desktopAndPhone, etsySet, forPreset, isPhone, isWide, mainSlot, sectionStops, setFileName,
@@ -66,6 +67,51 @@ describe('forPreset', () => {
     const src = threeUp();
     src.slots[0].cx += 33;
     expect(forPreset(src, 'pin')).toEqual(src);
+  });
+});
+
+describe('a headline on the new canvas', () => {
+  /** Stands in for the canvas's text measure (node has none): every character is 0.55 em wide. */
+  const measure: Measure = (text) => text.length * 0.55 * REF_PX;
+  const headed = (place: 'top' | 'bottom') => {
+    const d = threeUp();
+    Object.assign(d.overlays!.headline, { enabled: true, place });
+    return d;
+  };
+
+  it('forPreset leaves room for a top or bottom headline, laid out on the new canvas', () => {
+    for (const place of ['top', 'bottom'] as const) {
+      for (const p of ['etsy43', 'etsy11'] as const) {
+        const src = headed(place);
+        const d = forPreset(src, p, measure);
+        const ref = clone(src);
+        Object.assign(ref, { preset: p, W: PRESETS[p].w, H: PRESETS[p].h });
+        arrange(ref, 3, measure);
+        expect(d.slots).toEqual(ref.slots);
+        const room = layoutRoom(d, measure);
+        expect(room.b - room.t).toBeLessThan(d.H * 0.9);
+        for (let i = 0; i < 3; i++) {
+          const r = rectOf(d.slots[i]);
+          expect(r.t).toBeGreaterThanOrEqual(room.t - 1);
+          expect(r.t + r.h).toBeLessThanOrEqual(room.b + 1);
+        }
+        inside(d);
+      }
+    }
+  });
+
+  it('Export all sizes and the Etsy set arrange with the measure they are given', () => {
+    const src = headed('top');
+    const sizes = allSizes(src, measure);
+    expect(sizes[0].doc).toEqual(src); // its own canvas: as it is
+    expect(sizes[1].doc).toEqual(forPreset(src, 'etsy43', measure));
+    expect(sizes[2].doc).toEqual(forPreset(src, 'etsy11', measure));
+    expect(etsySet(src, measure)[0].doc).toEqual(forPreset(src, 'etsy43', measure));
+    // Without a measure (node has no canvas) the headline gets no room: the arrangement is today's.
+    const unmeasured = forPreset(src, 'etsy43');
+    src.overlays!.headline.enabled = false;
+    expect(unmeasured.slots).toEqual(forPreset(src, 'etsy43').slots);
+    expect(forPreset(src, 'etsy43', measure).slots).toEqual(unmeasured.slots);
   });
 });
 

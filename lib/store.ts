@@ -12,7 +12,7 @@ import {
   type Background, type BackgroundType, type Composition, type CropId, type Frame, type PresetId,
   type Shadow, type ShadowPreset, type SlotSource, type Style, type UiState,
 } from './model';
-import { arrange, defaultComposition } from './arrange';
+import { arrange, defaultComposition, pageMeasure } from './arrange';
 import { History } from './history';
 import { capHeight, autoCrop, groupBounds, scrollAxis } from './render/units';
 import { ingestImage, loadImage, pruneImages, releaseImage } from './images';
@@ -274,7 +274,7 @@ export const useEditor = create<EditorState>()((set, get) => {
       put(d, idx);
       if (added) {
         d.count = (idx + 1) as 1 | 2 | 3;
-        arrange(d);
+        arrange(d, d.count, pageMeasure());
       }
     });
     setUi({ selected: idx });
@@ -356,7 +356,7 @@ export const useEditor = create<EditorState>()((set, get) => {
       change((d) => {
         d.preset = p;
         if (p !== 'custom') { d.W = PRESETS[p].w; d.H = PRESETS[p].h; }
-        arrange(d);
+        arrange(d, d.count, pageMeasure());
       });
       // Etsy crops listing thumbnails to 5:4, so its canvases open with that crop shown.
       setUi({ exportScale: PRESETS[p].scale, showSafeArea: PRESETS[p].safe === 'etsy' });
@@ -366,20 +366,20 @@ export const useEditor = create<EditorState>()((set, get) => {
       change((d) => {
         d.W = clamp(W);
         d.H = clamp(H);
-        arrange(d);
+        arrange(d, d.count, pageMeasure());
       });
     },
     setCount(n) {
       if (n === get().doc.count) return;
       change((d) => {
         d.count = n;
-        arrange(d, n);
+        arrange(d, n, pageMeasure());
       });
       const sel = get().ui.selected;
       if (sel != null && sel >= n) setUi({ selected: n - 1 });
     },
     rearrange() {
-      change((d) => arrange(d));
+      change((d) => arrange(d, d.count, pageMeasure()));
     },
     centerSelected(axis) {
       const i = get().ui.selected;
@@ -536,7 +536,7 @@ export const useEditor = create<EditorState>()((set, get) => {
         step((d) => {
           puts.forEach((put, k) => put?.(d, k));
           d.count = imgs.length as 1 | 2 | 3;
-          arrange(d);
+          arrange(d, d.count, pageMeasure());
         });
         setUi({ selected: 0 });
         toast(`Placed ${imgs.length} layouts.`);
@@ -619,7 +619,7 @@ export const useEditor = create<EditorState>()((set, get) => {
         if (keep) Object.assign(d.slots[i], reframe(prev, d.slots[i], d.H));
         if (added) {
           d.count = (i + 1) as 1 | 2 | 3;
-          arrange(d);
+          arrange(d, d.count, pageMeasure());
         }
       });
       if (!keep) setUi({ selected: i });
