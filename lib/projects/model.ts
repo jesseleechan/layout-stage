@@ -156,12 +156,13 @@ export function mergeImages(a: RemoteImage[] = [], b: RemoteImage[] = []): Remot
 }
 
 /** Every image id a canvas refers to: every layout slot (hidden ones come back with more layouts or
- *  undo), the background photo and the logo. */
+ *  undo), the background photo, the logo and the media gallery. */
 export function referencedImageIds(d: Composition): string[] {
   const ids = new Set(d.slots.map((s) => s.imageId));
   if (d.background.imageId) ids.add(d.background.imageId);
   const wm = d.overlays?.watermark;
   if (wm?.imageId) ids.add(wm.imageId);
+  for (const m of d.media ?? []) ids.add(m.imageId);
   return [...ids];
 }
 

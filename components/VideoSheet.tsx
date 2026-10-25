@@ -152,7 +152,7 @@ export default function VideoBody({ onClose, notify, onWide }: { onClose: () => 
     );
   }
 
-  const none = !visible.some(canScroll);
+  const none = !visible.some((s) => canScroll(s, doc.H));
   return (
     <>
       <p className="fine">One layout scrolls through its page while everything else stays still. Pinterest takes it as a video pin, Etsy as a listing video.</p>
@@ -164,8 +164,8 @@ export default function VideoBody({ onClose, notify, onWide }: { onClose: () => 
           <div className="seg" id="vidSlot" role="group" aria-labelledby="vidSlotLbl">
             {visible.map((s, i) => (
               <button
-                key={i} type="button" aria-pressed={slot === i} disabled={!canScroll(s)} onClick={() => setSlot(i)}
-                title={canScroll(s) ? s.name : 'Shows its whole page'}
+                key={i} type="button" aria-pressed={slot === i} disabled={!canScroll(s, doc.H)} onClick={() => setSlot(i)}
+                title={canScroll(s, doc.H) ? s.name : 'Shows its whole page'}
               >
                 Layout {i + 1}
               </button>
@@ -173,8 +173,8 @@ export default function VideoBody({ onClose, notify, onWide }: { onClose: () => 
           </div>
           <p className="fine vid-hint" id="vidSlotHint">
             {none
-              ? 'Every layout shows its whole page. Give one a crop such as 16:10, then come back.'
-              : chosen ? `${chosen.name} · ${axis === 'x' ? 'pans left to right' : 'scrolls top to bottom'}` : ''}
+              ? 'Every layout shows its whole page on the canvas. Give one a crop such as 16:10, or let a long page run off the bottom, then come back.'
+              : chosen ? `${chosen.name} · ${axis === 'x' ? 'pans left to right' : axis ? 'scrolls top to bottom' : 'slides up through the canvas'}` : ''}
           </p>
         </div>
         <div className="row">

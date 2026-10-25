@@ -41,12 +41,18 @@ interface RangeProps {
   format?: Fmt;
 }
 
+/** A pill slider: the whole pill is the track, filled up to the value, with the label inside on the
+ *  left and the value on the right. */
 export function RangeRow({ id, label, min, max, step = 1, value, onInput, out, format = 'num' }: RangeProps) {
   const ref = useCommitOnChange<HTMLInputElement>();
+  const p = max > min ? Math.max(0, Math.min(100, ((value - min) / (max - min)) * 100)) : 0;
   return (
-    <div className="row">
+    <div className="prow">
+      <input
+        ref={ref} id={id} type="range" min={min} max={max} step={step} value={value}
+        style={{ '--p': `${p}%` } as CSSProperties} onChange={(e) => onInput(+e.target.value)}
+      />
       <label htmlFor={id}>{label}</label>
-      <input ref={ref} id={id} type="range" min={min} max={max} step={step} value={value} onChange={(e) => onInput(+e.target.value)} />
       <output htmlFor={id}>{out ?? fmt(value, format)}</output>
     </div>
   );
@@ -67,7 +73,7 @@ export function ColorInput({ id, value, onInput, 'aria-label': ariaLabel }: Colo
 
 export function ColorRow({ id, label, value, onInput }: { id: string; label: ReactNode; value: string; onInput: (v: string) => void }) {
   return (
-    <div className="row color">
+    <div className="crow">
       <label htmlFor={id}>{label}</label>
       <span className="swatch-field">
         <ColorInput id={id} value={value} onInput={onInput} />
@@ -123,3 +129,33 @@ export function Chips<T extends string>({ label, options, value, onPick, id }: {
 
 /** `--cols` for .swatches. */
 export const cols = (n: number) => ({ '--cols': n }) as CSSProperties;
+
+export interface TileOption<T> {
+  value: T;
+  label: string;
+  /** What the tile shows above its caption (an icon, a drawing, a thumbnail). */
+  face: ReactNode;
+}
+
+/** Visual choices with a caption under each (Shots-style tiles): one pressed (or none). */
+export function Tiles<T extends string | number>({ label, options, value, onPick, columns = 3, ratio = 1.25, id }: {
+  label: string;
+  options: TileOption<T>[];
+  value: T | null;
+  onPick: (v: T) => void;
+  columns?: number;
+  /** Width / height of each tile's face. */
+  ratio?: number;
+  id?: string;
+}) {
+  return (
+    <div className="tiles" id={id} role="group" aria-label={label} style={{ '--cols': columns, '--ar': ratio } as CSSProperties}>
+      {options.map((o) => (
+        <button key={String(o.value)} className="tile" type="button" aria-pressed={o.value === value} aria-label={o.label} onClick={() => onPick(o.value)}>
+          <span className="tile-face" aria-hidden="true">{o.face}</span>
+          <span className="tile-cap" aria-hidden="true">{o.label}</span>
+        </button>
+      ))}
+    </div>
+  );
+}

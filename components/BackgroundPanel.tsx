@@ -4,15 +4,26 @@ import { useShallow } from 'zustand/react/shallow';
 import { GRADS, MESHES, SOLIDS, type Background, type BackgroundType } from '@/lib/model';
 import { useEditor } from '@/lib/store';
 import { useThumbUrl } from '@/lib/images';
-import { ColorInput, ColorRow, RangeRow, Seg, cols, type Option } from './controls';
+import { ColorInput, ColorRow, RangeRow, Tiles, cols, type TileOption } from './controls';
 import { getMeshThumbs } from './thumbs';
 
-const TYPE_OPTIONS: Option<BackgroundType>[] = [
-  { value: 'solid', label: 'Solid' },
-  { value: 'gradient', label: 'Gradient' },
-  { value: 'mesh', label: 'Mesh' },
-  { value: 'image', label: 'Image' },
-];
+/** Background types as tiles, each face a small preview of that kind. */
+function typeOptions(b: { solid: string; ga: string; gb: string; angle: number }, meshThumb: string): TileOption<BackgroundType>[] {
+  const face = (style: React.CSSProperties) => <span style={{ position: 'absolute', inset: 0, ...style }} />;
+  return [
+    { value: 'solid', label: 'Solid', face: face({ background: b.solid }) },
+    { value: 'gradient', label: 'Gradient', face: face({ background: `linear-gradient(${b.angle}deg, ${b.ga}, ${b.gb})` }) },
+    { value: 'mesh', label: 'Mesh', face: face({ backgroundImage: `url(${meshThumb})`, backgroundSize: 'cover' }) },
+    {
+      value: 'image', label: 'Image',
+      face: (
+        <svg width="22" height="22" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round">
+          <rect x="2" y="3" width="12" height="10" rx="2" /><circle cx="6" cy="6.5" r="1.2" /><path d="m2.5 12 3.5-3.5 2.5 2.5 2-2 3 3" />
+        </svg>
+      ),
+    },
+  ];
+}
 const MESH_LABELS: [string, string][] = [
   ['Base', 'Mesh base color'],
   ['Glow 1', 'Mesh glow 1'],
@@ -29,7 +40,7 @@ export default function BackgroundPanel() {
       return {
         type: bg.type, solid: bg.solid, ga: bg.grad.a, gb: bg.grad.b, angle: bg.grad.angle,
         m0: bg.mesh[0], m1: bg.mesh[1], m2: bg.mesh[2], m3: bg.mesh[3],
-        imageId: bg.imageId, imageName: bg.imageName, blur: bg.blur, dim: bg.dim, grain: bg.grain,
+        imageId: bg.imageId, imageName: bg.imageName, blur: bg.blur, dim: bg.dim, grain: bg.grain, texture: bg.texture,
         blurOf: (sel != null && sel < s.doc.count ? sel : 0) + 1,
       };
     }),
@@ -52,7 +63,7 @@ export default function BackgroundPanel() {
       <div className="group-head">
         <h2>Background</h2>
       </div>
-      <Seg label="Background type" options={TYPE_OPTIONS} value={b.type} onPick={setBackgroundType} />
+      <Tiles label="Background type" options={typeOptions(b, meshThumbs[0])} value={b.type} columns={4} ratio={1} onPick={setBackgroundType} />
       <MatchSiteColors layout={b.blurOf} />
 
       {b.type === 'solid' && (
@@ -148,7 +159,9 @@ export default function BackgroundPanel() {
         </div>
       )}
 
+      <div className="sub">Finish</div>
       <RangeRow id="bgGrain" label="Grain" min={0} max={40} value={b.grain} onInput={(v) => editBackground({ grain: v })} />
+      <RangeRow id="bgTexture" label="Texture" min={0} max={100} value={b.texture} onInput={(v) => editBackground({ texture: v })} />
       <input
         ref={fileRef}
         type="file"
@@ -182,11 +195,14 @@ function MatchSiteColors({ layout }: { layout: number }) {
     }
   };
   return (
-    <button className="btn sm wide" id="matchSiteBtn" type="button" aria-busy={working} title={`Uses layout ${layout}’s colors`} onClick={() => void run()}>
-      <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.4" aria-hidden="true">
+    <button className="magic" id="matchSiteBtn" type="button" aria-busy={working} aria-label="Match site colors" onClick={() => void run()}>
+      <span className="magic-text">
+        <strong>Match site colors</strong>
+        <span>{`A background from layout ${layout}’s colors; click again for the next one`}</span>
+      </span>
+      <svg className="magic-icon" width="22" height="22" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.2" aria-hidden="true">
         <circle cx="4.5" cy="5" r="2.6" /><circle cx="9.5" cy="5" r="2.6" /><circle cx="7" cy="9.4" r="2.6" />
       </svg>
-      Match site colors
     </button>
   );
 }

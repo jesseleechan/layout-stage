@@ -1,51 +1,13 @@
 'use client';
 import { useRef, useState, type DragEvent } from 'react';
 import { captureJobSlot, useEditor, type CaptureJob } from '@/lib/store';
+import { canContinuePage, pageMeasure } from '@/lib/arrange';
 import { useThumbUrl } from '@/lib/images';
+import { MEDIA_DRAG } from '@/lib/media';
 import { recapture, recaptureAll } from '@/lib/capture/jobs';
 import { hostOf, recapturable } from '@/lib/capture/recapture';
-import { Seg, type Option } from './controls';
 import ReplaceMenu, { type MenuItem } from './ReplaceMenu';
 import './panels.css';
-
-const COUNT_OPTIONS: Option<1 | 2 | 3>[] = [
-  {
-    value: 1,
-    label: (
-      <>
-        <svg width="30" height="18" viewBox="0 0 30 18" fill="none" stroke="currentColor" strokeWidth="1.4" aria-hidden="true">
-          <rect x="7" y="3" width="16" height="12" rx="2" fill="currentColor" fillOpacity=".14" />
-        </svg>
-        1
-      </>
-    ),
-  },
-  {
-    value: 2,
-    label: (
-      <>
-        <svg width="30" height="18" viewBox="0 0 30 18" fill="none" stroke="currentColor" strokeWidth="1.4" aria-hidden="true">
-          <rect x="4" y="2" width="14" height="10" rx="2" />
-          <rect x="12" y="6.5" width="14" height="10" rx="2" fill="currentColor" fillOpacity=".14" />
-        </svg>
-        2
-      </>
-    ),
-  },
-  {
-    value: 3,
-    label: (
-      <>
-        <svg width="30" height="18" viewBox="0 0 30 18" fill="none" stroke="currentColor" strokeWidth="1.4" aria-hidden="true">
-          <rect x="2.5" y="1" width="12" height="8.5" rx="1.8" />
-          <rect x="9" y="4.8" width="12" height="8.5" rx="1.8" />
-          <rect x="15.5" y="8.5" width="12" height="8.5" rx="1.8" fill="currentColor" fillOpacity=".14" />
-        </svg>
-        3
-      </>
-    ),
-  },
-];
 
 const ReplaceIcon = () => (
   <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
@@ -70,6 +32,7 @@ const RecaptureIcon = () => (
 );
 
 const hasFiles = (e: DragEvent) => !!e.dataTransfer && Array.from(e.dataTransfer.types || []).includes('Files');
+const hasMedia = (e: DragEvent) => !!e.dataTransfer && Array.from(e.dataTransfer.types || []).includes(MEDIA_DRAG);
 
 function SlotRow({ i, count, on, busy, onReplace }: { i: number; count: number; on: boolean; busy: boolean; onReplace: (i: number) => void }) {
   const imageId = useEditor((s) => s.doc.slots[i].imageId);
@@ -78,13 +41,15 @@ function SlotRow({ i, count, on, busy, onReplace }: { i: number; count: number; 
   const nh = useEditor((s) => s.doc.slots[i].nh);
   const kind = useEditor((s) => s.doc.slots[i].source.kind);
   const pageUrl = useEditor((s) => { const src = s.doc.slots[i].source; return src.kind === 'url' ? src.url : null; });
+  // The second of two showcase columns can continue a long page in the first one.
+  const canContinue = useEditor((s) => i === 1 && s.doc.slots[1].imageId !== s.doc.slots[0].imageId && canContinuePage(s.doc, pageMeasure()));
   const url = useThumbUrl(imageId);
   const [over, setOver] = useState(false);
   const n = i + 1;
   const meta = busy ? 'Capturing…' : `${nw}×${nh}${kind === 'sample' ? ' · sample' : kind === 'url' ? ' · from URL' : ''}`;
 
   const onDragOver = (e: DragEvent<HTMLLIElement>) => {
-    if (!hasFiles(e)) return;
+    if (!hasFiles(e) && !hasMedia(e)) return;
     e.preventDefault();
     e.dataTransfer.dropEffect = 'copy';
     setOver(true);
@@ -93,6 +58,13 @@ function SlotRow({ i, count, on, busy, onReplace }: { i: number; count: number; 
     if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setOver(false);
   };
   const onDrop = (e: DragEvent<HTMLLIElement>) => {
+    if (hasMedia(e)) {
+      e.preventDefault();
+      setOver(false);
+      const id = e.dataTransfer.getData(MEDIA_DRAG);
+      if (id) useEditor.getState().placeMedia(id, i);
+      return;
+    }
     if (!hasFiles(e)) return;
     e.preventDefault();
     e.stopPropagation();
@@ -128,7 +100,7 @@ function SlotRow({ i, count, on, busy, onReplace }: { i: number; count: number; 
         </span>
       </button>
       <div className="slot-actions">
-        <ReplaceMenu label={`Replace layout ${n}`} title="Replace image" icon={<ReplaceIcon />} items={replaceItems(i, pageUrl, busy, onReplace)} />
+        <ReplaceMenu label={`Replace layout ${n}`} title="Replace image" icon={<ReplaceIcon />} items={replaceItems(i, pageUrl, busy, onReplace, canContinue)} />
         <button
           type="button"
           className="icon-btn xs"
@@ -145,13 +117,22 @@ function SlotRow({ i, count, on, busy, onReplace }: { i: number; count: number; 
   );
 }
 
-/** Replace menu: a file, a URL, or (for a layout captured from a URL) the same page again. */
-function replaceItems(i: number, pageUrl: string | null, busy: boolean, onReplace: (i: number) => void): MenuItem[] {
+const ContinueIcon = () => (
+  <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <path d="M2.5 1.5h4v13h-4M9.5 14.5h4v-13h-4" />
+    <path d="M6.5 11 9.5 5" />
+  </svg>
+);
+
+/** Replace menu: a file, a URL, (for a layout captured from a URL) the same page again, or (for the
+ *  second showcase column) the rest of layout 1's page. */
+function replaceItems(i: number, pageUrl: string | null, busy: boolean, onReplace: (i: number) => void, canContinue: boolean): MenuItem[] {
   const items: MenuItem[] = [
     { key: 'replace-file', label: 'Upload a file…', icon: <ReplaceIcon />, onSelect: () => onReplace(i) },
     { key: 'replace-url', label: 'Capture from URL…', icon: <GlobeIcon />, onSelect: () => useEditor.getState().openCapture(i) },
   ];
   if (pageUrl) items.push({ key: 'recapture', label: `Re-capture ${hostOf(pageUrl)}`, icon: <RecaptureIcon />, disabled: busy, onSelect: () => void recapture(i) });
+  if (canContinue) items.push({ key: 'continue', label: 'Continue layout 1’s page', icon: <ContinueIcon />, onSelect: () => useEditor.getState().continuePage(i) });
   return items;
 }
 
@@ -178,7 +159,6 @@ export default function LayoutsPanel() {
   // Where each capture will land now ("" = the drop-elsewhere rule); a string so drags don't re-render.
   const jobSlots = useEditor((s) => s.captureJobs.map((j) => captureJobSlot(s.doc, j) ?? '').join(','));
   const slotOf = (k: number) => jobSlots.split(',')[k];
-  const setCount = useEditor((s) => s.setCount);
   const openCapture = useEditor((s) => s.openCapture);
   // Layouts captured from a URL, and how many of them aren't capturing now (for Re-capture all).
   const fromUrl = useEditor((s) => recapturable(s.doc).length);
@@ -195,10 +175,9 @@ export default function LayoutsPanel() {
   return (
     <section className="group">
       <div className="group-head">
-        <h2>Layouts</h2>
-        <span className="note">1 to 3 images</span>
+        <h2>Screenshots</h2>
+        <span className="note">1 to 3</span>
       </div>
-      <Seg className="count" label="Number of layouts" options={COUNT_OPTIONS} value={count} onPick={setCount} />
       <ol className="slots" id="slots">
         {Array.from({ length: count }, (_, i) => (
           <SlotRow key={i} i={i} count={count} on={selected === i} busy={jobs.some((_, k) => slotOf(k) === String(i))} onReplace={replace} />
@@ -223,7 +202,7 @@ export default function LayoutsPanel() {
           From URL…
         </button>
       </div>
-      <p className="fine">Or drop up to three files on the canvas, or paste one with Ctrl/⌘&nbsp;V.</p>
+      <p className="fine">Or drop files on the canvas, or paste one with Ctrl/⌘&nbsp;V. Past three, the rest wait in Media.</p>
       <input
         ref={manyRef}
         type="file"

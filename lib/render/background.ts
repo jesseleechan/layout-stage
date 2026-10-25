@@ -56,6 +56,67 @@ export function getNoise(): HTMLCanvasElement {
   return c;
 }
 
+/* Texture: a 256 px tile of seeded fractal value noise, drawn stretched over the whole canvas with
+   soft-light, so it reads as soft lighter and darker clouds (plaster, concrete, paper) at any output
+   size. The values are pure (textureValues) so they can be tested without a canvas. */
+export const TEXTURE_SIZE = 256;
+/** Lattice cell size in tile px per octave. */
+export const TEXTURE_CELLS = [64, 32, 16, 8, 4];
+/** Each octave's amplitude relative to the one before. */
+export const TEXTURE_PERSISTENCE = 0.75;
+const TEXTURE_SEED = 256;
+
+const smoothstep = (t: number) => t * t * (3 - 2 * t);
+
+/** Grey values (0–255, one per pixel, row by row) of the texture tile: value noise over TEXTURE_CELLS
+ *  octaves, smoothstep-interpolated, centered on 128 (soft-light's no-change grey) and stretched so
+ *  the farthest value reaches 1 or 255. Deterministic. */
+export function textureValues(seed: number = TEXTURE_SEED): Uint8ClampedArray {
+  const N = TEXTURE_SIZE;
+  const rnd = xorshift(seed);
+  const sum = new Float64Array(N * N);
+  let amp = 1;
+  for (const cell of TEXTURE_CELLS) {
+    const n = N / cell + 1; // lattice points per side
+    const lat = Float64Array.from({ length: n * n }, () => rnd());
+    for (let y = 0; y < N; y++) {
+      const gy = y / cell, iy = Math.floor(gy), ty = smoothstep(gy - iy);
+      for (let x = 0; x < N; x++) {
+        const gx = x / cell, ix = Math.floor(gx), tx = smoothstep(gx - ix);
+        const i = iy * n + ix;
+        const top = lat[i] + (lat[i + 1] - lat[i]) * tx;
+        const bottom = lat[i + n] + (lat[i + n + 1] - lat[i + n]) * tx;
+        sum[y * N + x] += amp * (top + (bottom - top) * ty);
+      }
+    }
+    amp *= TEXTURE_PERSISTENCE;
+  }
+  let mean = 0;
+  for (const v of sum) mean += v;
+  mean /= sum.length;
+  let dev = 0;
+  for (const v of sum) dev = Math.max(dev, Math.abs(v - mean));
+  const out = new Uint8ClampedArray(N * N);
+  for (let i = 0; i < sum.length; i++) out[i] = Math.round(128 + ((sum[i] - mean) / (dev || 1)) * 127);
+  return out;
+}
+
+let textureTile: HTMLCanvasElement | null = null;
+export function getTexture(): HTMLCanvasElement {
+  if (textureTile) return textureTile;
+  const N = TEXTURE_SIZE;
+  const [c, x] = makeCanvas(N, N);
+  const d = x.createImageData(N, N);
+  const v = textureValues();
+  for (let i = 0; i < v.length; i++) {
+    d.data[i * 4] = d.data[i * 4 + 1] = d.data[i * 4 + 2] = v[i];
+    d.data[i * 4 + 3] = 255;
+  }
+  x.putImageData(d, 0, 0);
+  textureTile = c;
+  return c;
+}
+
 let filterSupport: boolean | null = null;
 /** Feature-detects ctx.filter (Safari historically ignores it). */
 export function canvasFilterOK(): boolean {
@@ -138,6 +199,17 @@ export function drawBackground(x: CanvasRenderingContext2D, bg: Background, W: n
   } else {
     x.fillStyle = bg.solid;
     x.fillRect(0, 0, cw, ch);
+  }
+  if (bg.texture > 0) {
+    // After the base (and the photo's dim), before grain: a square covering the canvas, centered.
+    const side = Math.max(cw, ch);
+    x.imageSmoothingEnabled = true;
+    x.imageSmoothingQuality = 'high';
+    x.globalAlpha = Math.min(1, bg.texture / 100);
+    x.globalCompositeOperation = 'soft-light';
+    x.drawImage(getTexture(), (cw - side) / 2, (ch - side) / 2, side, side);
+    x.globalAlpha = 1;
+    x.globalCompositeOperation = 'source-over';
   }
   if (bg.grain > 0) {
     const p = x.createPattern(getNoise(), 'repeat');

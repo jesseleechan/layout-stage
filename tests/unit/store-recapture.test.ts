@@ -1,9 +1,10 @@
 /* store.landCapture: where a captured image lands, keeping a re-captured layout's framing, as one
    undo step that leaves an edit in progress out. The image store (IndexedDB, <img>) is mocked. */
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { arrange, defaultComposition } from '@/lib/arrange';
+import { arrange } from '@/lib/arrange';
 import { clone, DEFAULT_CAPTURE, defaultUi, type Composition, type SlotSource } from '@/lib/model';
 import { useEditor } from '@/lib/store';
+import { classicComposition } from './helpers';
 
 const images = vi.hoisted(() => ({ seq: 0, next: [1440, 4000] as [number, number], sizes: new Map<string, [number, number]>() }));
 vi.mock('@/lib/images', () => ({
@@ -33,7 +34,7 @@ const src = (url: string): SlotSource => ({ kind: 'url', url, capturedAt: '2026-
 
 /** Two layouts; layout 2 is a framed capture of a 1440 × 4000 page. */
 function framed(): Composition {
-  const d = defaultComposition();
+  const d = classicComposition();
   d.count = 2;
   arrange(d);
   images.sizes.set('img:page', [1440, 4000]);

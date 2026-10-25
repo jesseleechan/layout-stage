@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { gradientLine, meshPoints, xorshift } from '@/lib/render/background';
+import { gradientLine, meshPoints, TEXTURE_CELLS, TEXTURE_SIZE, textureValues, xorshift } from '@/lib/render/background';
 
 /** The prototype's meshPoints, copied verbatim from reference/layout-stage.html, as the oracle. */
 function prototypeMeshPoints(seed: number): number[][] {
@@ -109,5 +109,56 @@ describe('gradientLine (CSS angle convention)', () => {
     for (const [W, H] of [[1000, 1500], [3000, 2250], [2000, 2000], [1080, 1350], [96, 72]]) {
       for (const angle of [125, 135, 145, 150, 155, 160, 165, 180, 270, 315, -30]) check(angle, W, H);
     }
+  });
+});
+
+describe('textureValues (the texture tile)', () => {
+  const N = TEXTURE_SIZE;
+  const tile = textureValues();
+  const at = (x: number, y: number) => tile[y * N + x];
+
+  it('is a 256 × 256 grey tile, the same every time', () => {
+    expect(N).toBe(256);
+    expect(tile).toHaveLength(N * N);
+    expect(textureValues()).toEqual(tile);
+    expect(textureValues(1)).not.toEqual(tile); // the seed matters, so the fixed one is what keeps it stable
+  });
+
+  it('is centered on 128 (soft-light leaves the background unchanged on average) and spans the range', () => {
+    let sum = 0, min = 255, max = 0;
+    for (const v of tile) { sum += v; min = Math.min(min, v); max = Math.max(max, v); }
+    const mean = sum / tile.length;
+    expect(Math.abs(mean - 128)).toBeLessThan(0.5);
+    expect(Math.min(min, 255 - max)).toBeLessThanOrEqual(1); // the farthest value reaches an end
+    expect(min).toBeLessThan(40);
+    expect(max).toBeGreaterThan(215);
+  });
+
+  it('is smooth: neighbors differ little (clouds, not per-pixel noise)', () => {
+    let worst = 0, total = 0, n = 0;
+    for (let y = 0; y < N; y++) {
+      for (let x = 0; x < N - 1; x++) {
+        const d = Math.abs(at(x + 1, y) - at(x, y));
+        worst = Math.max(worst, d);
+        total += d;
+        n++;
+      }
+    }
+    expect(total / n).toBeLessThan(4);
+    expect(worst).toBeLessThan(25);
+  });
+
+  it('has low-frequency structure: halves of the tile differ more than neighboring pixels', () => {
+    // mean of 32 × 32 blocks varies well beyond rounding
+    const blocks: number[] = [];
+    for (let by = 0; by < N; by += 32) {
+      for (let bx = 0; bx < N; bx += 32) {
+        let s = 0;
+        for (let y = by; y < by + 32; y++) for (let x = bx; x < bx + 32; x++) s += at(x, y);
+        blocks.push(s / 1024);
+      }
+    }
+    expect(Math.max(...blocks) - Math.min(...blocks)).toBeGreaterThan(40);
+    expect(TEXTURE_CELLS).toEqual([64, 32, 16, 8, 4]);
   });
 });

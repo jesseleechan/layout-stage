@@ -1,22 +1,23 @@
 /* The editor store in node: no DOM, no IndexedDB. The store only touches storage after init() has
    hydrated it, and images only when a blob is placed, so the actions below run as pure state. */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { arrange, defaultComposition } from '@/lib/arrange';
+import { arrange } from '@/lib/arrange';
 import { clone, GRADS, MESHES, PRESETS, SHADOWS, STYLES, defaultUi, type Composition } from '@/lib/model';
 import { capHeight, cropRatio, groupBounds, rectOf } from '@/lib/render/units';
 import { captureJobSlot, useEditor } from '@/lib/store';
+import { classicComposition } from './helpers';
 
 const S = () => useEditor.getState();
 const doc = () => S().doc;
 
-function load(d: Composition = defaultComposition(), selected: number | null = null) {
+function load(d: Composition = classicComposition(), selected: number | null = null) {
   S().loadComposition(d);
   useEditor.setState({ ui: { ...defaultUi(), selected }, toast: null });
 }
 
 /** A default pin with three samples where slot 0 has been dragged off its starting spot. */
 function moved(): Composition {
-  const d = defaultComposition();
+  const d = classicComposition();
   d.count = 3;
   arrange(d);
   d.slots[0].cx += 37;
@@ -33,7 +34,7 @@ afterEach(() => {
 describe('store basics', () => {
   it('imports in node and starts unhydrated with the default composition', () => {
     expect(S().hydrated).toBe(false);
-    expect(doc()).toEqual(defaultComposition());
+    expect(doc()).toEqual(classicComposition());
     expect([S().canUndo, S().canRedo]).toEqual([false, false]);
   });
 
@@ -88,7 +89,7 @@ describe('live edits and commit', () => {
     expect(doc().background.grain).toBe(33);
     S().commit();
     S().undo();
-    expect(doc()).toEqual(defaultComposition());
+    expect(doc()).toEqual(classicComposition());
   });
 
   it('setScroll moves fy on a scrolling crop and fx on a panning one', () => {
@@ -101,7 +102,7 @@ describe('live edits and commit', () => {
 
   it('nudge saves one step after 350 ms idle', () => {
     vi.useFakeTimers();
-    load(defaultComposition(), 0);
+    load(classicComposition(), 0);
     S().nudge(1, 0);
     S().nudge(10, 0);
     S().nudge(0, -1);
@@ -117,10 +118,10 @@ describe('live edits and commit', () => {
 
   it('nudge does nothing without a visible selection', () => {
     vi.useFakeTimers();
-    load(defaultComposition(), 2); // count is 2
+    load(classicComposition(), 2); // count is 2
     S().nudge(5, 5);
     vi.advanceTimersByTime(1000);
-    expect(doc()).toEqual(defaultComposition());
+    expect(doc()).toEqual(classicComposition());
     expect(S().canUndo).toBe(false);
   });
 });
@@ -155,15 +156,15 @@ describe('undo / redo', () => {
     S().setCount(3);
     S().edit((d) => { d.slots[0].cx = 1; });
     S().undo();
-    expect(doc()).toEqual(defaultComposition());
+    expect(doc()).toEqual(classicComposition());
   });
 });
 
 describe('canvas and layouts', () => {
   it('setCount re-arranges and clamps the selection', () => {
-    load(defaultComposition(), 1);
+    load(classicComposition(), 1);
     S().setCount(3);
-    const want = defaultComposition();
+    const want = classicComposition();
     want.count = 3;
     arrange(want, 3);
     expect(doc()).toEqual(want);
@@ -235,7 +236,7 @@ describe('canvas and layouts', () => {
   it('centerSelected does nothing without a visible selection', () => {
     load(moved(), null);
     S().centerSelected('h');
-    load(defaultComposition(), 2);
+    load(classicComposition(), 2);
     S().centerSelected('v');
     expect(S().canUndo).toBe(false);
   });
@@ -258,7 +259,7 @@ describe('canvas and layouts', () => {
   });
 
   it('layer swaps within the visible layouts and toasts at either end', () => {
-    load(defaultComposition(), 0); // order [0, 1, 2], count 2
+    load(classicComposition(), 0); // order [0, 1, 2], count 2
     S().layer(1);
     expect(doc().order).toEqual([1, 0, 2]);
     S().layer(1);
@@ -272,7 +273,7 @@ describe('canvas and layouts', () => {
   });
 
   it('layer keeps hidden layouts after the visible ones', () => {
-    const d = defaultComposition();
+    const d = classicComposition();
     d.order = [2, 1, 0]; // slot 2 is hidden (count 2)
     load(d, 1); // visible order is [1, 0]: slot 1 is at the back
     S().layer(-1);
@@ -283,7 +284,7 @@ describe('canvas and layouts', () => {
   });
 
   it('layer on a 3-up hero order', () => {
-    const d = defaultComposition();
+    const d = classicComposition();
     d.W = d.H = 2000;
     d.count = 3;
     arrange(d); // [1, 2, 0]
@@ -293,7 +294,7 @@ describe('canvas and layouts', () => {
   });
 
   it('removeSlot moves the layout to the end, lowers the count, fixes the order and clears the selection', () => {
-    const d = defaultComposition();
+    const d = classicComposition();
     d.W = d.H = 2000;
     d.count = 3;
     arrange(d); // order [1, 2, 0]
@@ -305,7 +306,7 @@ describe('canvas and layouts', () => {
     expect(doc().order).toEqual([0, 1, 2]); // old 1 → 0, old 2 → 1, removed → 2
     expect(S().ui.selected).toBeNull();
 
-    load(defaultComposition(), 1);
+    load(classicComposition(), 1);
     const [a, b, c] = clone(doc().slots);
     S().removeSlot(1);
     expect(doc().count).toBe(1);
@@ -315,7 +316,7 @@ describe('canvas and layouts', () => {
   });
 
   it('removeSlot keeps the last layout', () => {
-    const d = defaultComposition();
+    const d = classicComposition();
     d.count = 1;
     load(d, 0);
     S().removeSlot(0);
@@ -410,10 +411,10 @@ describe('background', () => {
   });
 
   it('backgroundFromLayout blurs the selected layout (or layout 1)', () => {
-    load(defaultComposition(), 1);
+    load(classicComposition(), 1);
     S().backgroundFromLayout();
     expect(doc().background).toMatchObject({ type: 'image', imageId: 'sample:northbeam', imageName: 'Layout 2, blurred', blur: 40, dim: 0.06 });
-    load(defaultComposition(), null);
+    load(classicComposition(), null);
     S().backgroundFromLayout();
     expect(doc().background).toMatchObject({ imageId: 'sample:juniper', imageName: 'Layout 1, blurred' });
   });
@@ -434,7 +435,7 @@ describe('each discrete action is exactly one undo step', () => {
     ['centerSelected h', () => S().centerSelected('h'), () => load(moved(), 0)],
     ['centerSelected v', () => S().centerSelected('v'), () => load(moved(), 0)],
     ['centerGroup', () => S().centerGroup(), () => load(moved())],
-    ['layer', () => S().layer(1), () => load(defaultComposition(), 0)],
+    ['layer', () => S().layer(1), () => load(classicComposition(), 0)],
     ['removeSlot', () => S().removeSlot(0), () => load(moved(), 0)],
     ['setCrop', () => S().setCrop(1, '1:1')],
     ['setShadowPreset', () => S().setShadowPreset('hard')],
@@ -444,7 +445,7 @@ describe('each discrete action is exactly one undo step', () => {
     ['pickMesh', () => S().pickMesh(2)],
     ['shuffleMesh', () => { vi.spyOn(Math, 'random').mockReturnValue(0.5); S().shuffleMesh(); }],
     ['applyStyle', () => S().applyStyle(STYLES[5])],
-    ['backgroundFromLayout', () => S().backgroundFromLayout(), () => load(defaultComposition(), 1)],
+    ['backgroundFromLayout', () => S().backgroundFromLayout(), () => load(classicComposition(), 1)],
   ];
 
   for (const [name, act, setup] of cases) {
@@ -468,7 +469,7 @@ describe('each discrete action is exactly one undo step', () => {
 
 describe('helpers the store relies on', () => {
   it('capHeight matches the prototype rule used by setCrop', () => {
-    const s = clone(defaultComposition().slots[0]);
+    const s = clone(classicComposition().slots[0]);
     s.crop = '4:5';
     s.w = 1400;
     capHeight(s, 1500);

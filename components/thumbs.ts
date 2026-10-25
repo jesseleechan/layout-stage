@@ -29,7 +29,7 @@ function thumbBackground(st: Style, current: Background): Background {
 /** Only the fields drawBackground reads for this type. */
 function drawKey(bg: Background): unknown {
   const t = bg.type;
-  return [t, t === 'gradient' ? bg.grad : t === 'mesh' ? [bg.mesh, bg.meshSeed] : bg.solid, bg.grain];
+  return [t, t === 'gradient' ? bg.grad : t === 'mesh' ? [bg.mesh, bg.meshSeed] : bg.solid, bg.grain, bg.texture];
 }
 
 const styleCache = new Map<string, string>();
