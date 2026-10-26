@@ -1,9 +1,10 @@
 /* Projects: the pure rules (lib/projects/model.ts): what a sync does, names, upload rules, status. */
+import { createHash } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
 import { defaultComposition } from '@/lib/arrange';
 import {
   copyName, deviceCopyName, editedAgo, fileType, imageFileName, imageIdOf, mergeImages, planSync, projectImageIds, referencedImageIds,
-  sanitizeRemote, syncStatus, thumbDue, THUMB_UPLOAD_GAP, untitledName, uploadRule, type LocalProject, type RemoteProject,
+  revisionOf, sanitizeRemote, syncStatus, thumbDue, THUMB_UPLOAD_GAP, untitledName, uploadRule, type LocalProject, type RemoteProject,
 } from '@/lib/projects/model';
 
 const P = 'prj_00000000-aaaa';
@@ -68,6 +69,18 @@ describe('planSync', () => {
     expect(planSync([local(P, { thumbAt: 400, thumbRev: '400' })], [r])).toEqual([{ kind: 'thumb', id: P, remote: r }]);
     expect(planSync([local(P, { thumbAt: 600, thumbRev: '400' })], [r])).toEqual([]);
     expect(planSync([local(P, { thumbAt: 400, dirty: true })], [r])).toEqual([{ kind: 'push', id: P }]);
+  });
+});
+
+describe('revisions', () => {
+  it('the same on every device and the server, and the same as the revisions already in stores', async () => {
+    const doc = defaultComposition();
+    // How the server computed them before (node:crypto), so stored revisions still compare.
+    const before = (name: string, d: unknown) => createHash('sha256').update(name).update('\n').update(JSON.stringify(d)).digest('base64url').slice(0, 22);
+    for (const name of ['Pin', 'Café menu ✦ 2', '']) expect(await revisionOf(name, doc)).toBe(before(name, doc));
+    expect(await revisionOf('Pin', structuredClone(doc))).toBe(await revisionOf('Pin', doc));
+    expect(await revisionOf('Pin ', doc)).not.toBe(await revisionOf('Pin', doc));
+    expect(await revisionOf('Pin', { ...doc, W: doc.W + 1 })).not.toBe(await revisionOf('Pin', doc));
   });
 });
 

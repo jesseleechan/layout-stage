@@ -302,6 +302,44 @@ test('a store that keeps refusing a project: the editor tries again less and les
   await sync(page);
   expect(puts).toBe(before + 1);
   await expect(page.locator('.proj-status-text')).toHaveText('Synced');
-  expect((await current(page)).dirty).toBe(false);
+  const { id, dirty } = await current(page);
+  expect(dirty).toBe(false);
+  expect((await page.request.delete(`/api/projects/${id}`)).ok()).toBe(true);
   await context.close();
+});
+
+test('the same edit on two devices: they agree, no device copy', async ({ browser, baseURL }) => {
+  test.setTimeout(90_000);
+  const name = `E2E same ${Date.now().toString(36)}`;
+  const A = await device(browser, baseURL);
+  const B = await device(browser, baseURL);
+  const { id } = await current(A);
+  await A.evaluate(([i, n]) => window.__layoutProjects!.getState().rename(i, n), [id, name]);
+  await sync(A);
+  await sync(B);
+  expect(await B.evaluate((i) => window.__layoutProjects!.getState().open(i), id)).toBe(true);
+  await expect(B.locator('#projectName')).toHaveText(name);
+
+  // Both make the same change; A's reaches the store first. B can't push for now, so its sync
+  // finds the store's copy changed while its own changed too: the same canvas, so nothing to keep.
+  await pick(A, '#2A6F4E');
+  await pick(B, '#2A6F4E');
+  await sync(A);
+  await B.context().route(/\/api\/projects\/prj_[^/]+$/, (route) =>
+    route.request().method() === 'PUT' ? route.fulfill({ status: 502, json: { code: 'store_error', message: 'Not now.' } }) : route.continue());
+  await sync(B);
+  const remote = (await (await B.request.get('/api/projects')).json()).projects.find((p: { id: string }) => p.id === id);
+  expect(await names(B)).not.toContain(`${name} (this device)`);
+  expect(await B.evaluate((i) => window.__layoutProjects!.getState().items.find((p) => p.id === i), id)).toMatchObject({ rev: remote.rev, dirty: false });
+  expect(await solid(B)).toBe('#2A6F4E');
+
+  // A different change still keeps both.
+  await pick(A, '#AA0000');
+  await pick(B, '#0000BB');
+  await sync(A);
+  await sync(B);
+  expect(await names(B)).toContain(`${name} (this device)`);
+  expect((await A.request.delete(`/api/projects/${id}`)).ok()).toBe(true);
+  await A.context().close();
+  await B.context().close();
 });

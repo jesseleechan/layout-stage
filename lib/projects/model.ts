@@ -11,7 +11,8 @@
 
    Sync is last writer wins per project, decided by revisions: `rev` is a hash of the name and canvas
    that the server computes on every write, and each device remembers the rev its copy is based on.
-   Only one side changed: that side wins. Both changed: both are kept (planSync's 'fork'). */
+   Only one side changed: that side wins. Both changed: both are kept (planSync's 'fork'), unless both
+   changed to the same name and canvas (the same revision): then there's one. */
 import type { Composition } from '../model';
 
 /* ---------------- ids and file names ---------------- */
@@ -204,6 +205,16 @@ export function copyName(name: string, names: string[]): string {
 export function deviceCopyName(name: string, names: string[]): string {
   const base = cleanName(`${name} (this device)`);
   return unique(base, names, (k) => cleanName(`${name} (this device ${k})`));
+}
+
+/* ---------------- revisions ---------------- */
+
+/** The revision of a name and canvas: a hash, so identical content gets the same revision on every
+ *  device and in the store (a repeated or identical write never counts as a conflict). The server
+ *  stamps every write with it; a device checks its own copy against the store's with it. */
+export async function revisionOf(name: string, doc: unknown): Promise<string> {
+  const hash = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(`${name}\n${JSON.stringify(doc)}`));
+  return btoa(String.fromCharCode(...new Uint8Array(hash))).replace(/\+/g, '-').replace(/\//g, '_').slice(0, 22);
 }
 
 /* ---------------- planning a sync ---------------- */

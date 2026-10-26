@@ -6,9 +6,8 @@
    and 10,000 simple ones (uncached reads) a month, and stops working until the month is over when
    they run out. So: a project write is two uploads (project.json, index.json) and two reads; the list
    is one read; nothing here lists the store except a delete and rebuilding a lost index. */
-import { createHash } from 'node:crypto';
 import {
-  cleanName, INDEX_PATH, metaOf, mergeImages, PROJECT_ID_RE, projectPath, projectPrefix, sanitizeImages, sanitizeRemote,
+  cleanName, INDEX_PATH, metaOf, mergeImages, PROJECT_ID_RE, projectPath, projectPrefix, revisionOf, sanitizeImages, sanitizeRemote,
   type ProjectFile, type RemoteImage, type RemoteProject,
 } from '../model';
 import { PreconditionFailed, type ProjectStore } from './store';
@@ -99,19 +98,13 @@ export function parseWrite(raw: unknown): ProjectWrite {
   return { baseRev: r.baseRev, name, createdAt: r.createdAt!, updatedAt: r.updatedAt!, thumbRev: r.thumbRev ?? null, images: sanitizeImages(r.images), doc };
 }
 
-/** The revision of a name and canvas: identical content gets the same revision, so a repeated or
- *  identical write never counts as a conflict. */
-export function revisionOf(name: string, doc: unknown): string {
-  return createHash('sha256').update(name).update('\n').update(JSON.stringify(doc)).digest('base64url').slice(0, 22);
-}
-
 export type WriteResult = { ok: true; project: RemoteProject } | { ok: false; remote: RemoteProject | null };
 
 /** Saves a project unless the store's copy changed since the device's base revision (then the
  *  store's copy is returned, or null when it was deleted). */
 export async function writeProject(store: ProjectStore, id: string, w: ProjectWrite): Promise<WriteResult> {
   if (!PROJECT_ID_RE.test(id)) throw new BadRequest('Bad project id.');
-  const rev = revisionOf(w.name, w.doc);
+  const rev = await revisionOf(w.name, w.doc);
   for (let attempt = 0; ; attempt++) {
     const cur = await store.readJson<ProjectFile>(projectPath(id));
     const curMeta = cur && sanitizeRemote(cur.data);
