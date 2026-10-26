@@ -20,7 +20,7 @@ import * as api from './api';
 import * as L from './local';
 import {
   cleanName, copyName, deviceCopyName, imageFileName, imageIdOf, megabytes, mergeImages, newProjectId, planSync, projectImageIds,
-  syncStatus, thumbDue, untitledName, type LocalProject, type RemoteImage, type RemoteProject, type StatusView, type SyncMode, type SyncPhase,
+  revisionOf, syncStatus, thumbDue, untitledName, type LocalProject, type RemoteImage, type RemoteProject, type StatusView, type SyncMode, type SyncPhase,
 } from './model';
 
 /** A pause in editing before changes are pushed. */
@@ -429,6 +429,21 @@ export const useProjects = create<ProjectsState>()((set, get) => {
     await pull(id, remote);
   };
 
+  /** Changed here and elsewhere, but to the same name and canvas (the same edit on two devices): no
+   *  copy to keep, this device's copy takes the store's revision. */
+  const sameAsStore = async (id: string, remote: RemoteProject): Promise<boolean> => {
+    const p = L.findLocal(id);
+    const doc = await L.readDoc(id);
+    if (!p || !doc || (await revisionOf(p.name, doc)) !== remote.rev) return false;
+    await L.updateLocal((s) => {
+      const x = s.items.find((y) => y.id === id);
+      if (!x) return;
+      x.rev = remote.rev;
+      if (x.updatedAt === p.updatedAt && x.name === p.name) x.dirty = false; // unless it changed meanwhile
+    });
+    return true;
+  };
+
   /** Removes a project deleted on another device. */
   const drop = async (id: string) => {
     const p = L.findLocal(id);
@@ -485,7 +500,7 @@ export const useProjects = create<ProjectsState>()((set, get) => {
               await pull(a.id, a.remote);
               break;
             case 'fork':
-              await fork(a.id, a.remote);
+              if (!(await sameAsStore(a.id, a.remote))) await fork(a.id, a.remote);
               break;
             case 'drop':
               await drop(a.id);

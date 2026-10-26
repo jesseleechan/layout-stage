@@ -6,7 +6,8 @@ import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { defaultComposition } from '@/lib/arrange';
 import { INDEX_PATH, projectPath } from '@/lib/projects/model';
-import { deleteProject, listProjects, parseWrite, readProject, revisionOf, writeProject, type ProjectWrite } from '@/lib/projects/server/api';
+import { deleteProject, listProjects, parseWrite, readProject, writeProject, type ProjectWrite } from '@/lib/projects/server/api';
+import { revisionOf } from '@/lib/projects/model';
 import { fsStore, OffsetMismatch, type FsStore } from '@/lib/projects/server/fs-store';
 import { PreconditionFailed } from '@/lib/projects/server/store';
 
@@ -33,7 +34,7 @@ describe('projects store API', () => {
     const r = await writeProject(store, P, write({ images: [{ name: 'img_aaaa-1111.png', size: 10 }] }));
     expect(r.ok).toBe(true);
     if (!r.ok) return;
-    expect(r.project).toEqual({ id: P, name: 'Pin', createdAt: 1000, updatedAt: 2000, rev: revisionOf('Pin', defaultComposition()), thumbRev: null });
+    expect(r.project).toEqual({ id: P, name: 'Pin', createdAt: 1000, updatedAt: 2000, rev: await revisionOf('Pin', defaultComposition()), thumbRev: null });
     expect(await listProjects(store)).toEqual([r.project]);
     const f = await readProject(store, P);
     expect(f).toMatchObject({ id: P, name: 'Pin', images: [{ name: 'img_aaaa-1111.png', size: 10 }] });
