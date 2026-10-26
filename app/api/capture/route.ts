@@ -8,6 +8,7 @@
 import { CaptureError, toCaptureError } from '@/lib/capture/errors';
 import { parseCaptureRequest } from '@/lib/capture/options';
 import { captureScreenshot, responseBudget } from '@/lib/capture/server';
+import { captureOn } from '@/lib/capture/switch';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -34,6 +35,7 @@ function fromEditor(request: Request): boolean {
 const bytes = (b: Buffer) => new Uint8Array(b.buffer as ArrayBuffer, b.byteOffset, b.byteLength);
 
 export async function POST(request: Request): Promise<Response> {
+  if (!captureOn()) return failure(new CaptureError('off'));
   if (!fromEditor(request)) return failure(new CaptureError('bad_request'));
   let body: unknown;
   try {

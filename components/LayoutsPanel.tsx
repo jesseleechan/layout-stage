@@ -6,6 +6,7 @@ import { useThumbUrl } from '@/lib/images';
 import { MEDIA_DRAG } from '@/lib/media';
 import { recapture, recaptureAll } from '@/lib/capture/jobs';
 import { hostOf, recapturable } from '@/lib/capture/recapture';
+import { captureOn } from '@/lib/capture/switch';
 import ReplaceMenu, { type MenuItem } from './ReplaceMenu';
 import './panels.css';
 
@@ -124,14 +125,12 @@ const ContinueIcon = () => (
   </svg>
 );
 
-/** Replace menu: a file, a URL, (for a layout captured from a URL) the same page again, or (for the
- *  second showcase column) the rest of layout 1's page. */
+/** Replace menu: a file; a URL and (for a layout captured from a URL) the same page again, while capture
+ *  is on; or (for the second showcase column) the rest of layout 1's page. */
 function replaceItems(i: number, pageUrl: string | null, busy: boolean, onReplace: (i: number) => void, canContinue: boolean): MenuItem[] {
-  const items: MenuItem[] = [
-    { key: 'replace-file', label: 'Upload a file…', icon: <ReplaceIcon />, onSelect: () => onReplace(i) },
-    { key: 'replace-url', label: 'Capture from URL…', icon: <GlobeIcon />, onSelect: () => useEditor.getState().openCapture(i) },
-  ];
-  if (pageUrl) items.push({ key: 'recapture', label: `Re-capture ${hostOf(pageUrl)}`, icon: <RecaptureIcon />, disabled: busy, onSelect: () => void recapture(i) });
+  const items: MenuItem[] = [{ key: 'replace-file', label: 'Upload a file…', icon: <ReplaceIcon />, onSelect: () => onReplace(i) }];
+  if (captureOn()) items.push({ key: 'replace-url', label: 'Capture from URL…', icon: <GlobeIcon />, onSelect: () => useEditor.getState().openCapture(i) });
+  if (pageUrl && captureOn()) items.push({ key: 'recapture', label: `Re-capture ${hostOf(pageUrl)}`, icon: <RecaptureIcon />, disabled: busy, onSelect: () => void recapture(i) });
   if (canContinue) items.push({ key: 'continue', label: 'Continue layout 1’s page', icon: <ContinueIcon />, onSelect: () => useEditor.getState().continuePage(i) });
   return items;
 }
@@ -190,19 +189,21 @@ export default function LayoutsPanel() {
             <PendingRow key={j.id} job={j} />
           ))}
       </ol>
-      {fromUrl >= 2 && (
+      {fromUrl >= 2 && captureOn() && (
         <button className="btn sm wide" id="recaptureAllBtn" type="button" disabled={!idle} onClick={() => void recaptureAll()}>
           <RecaptureIcon />
           Re-capture all
         </button>
       )}
-      <div className="btn-grid">
-        <button className="btn" id="uploadBtn" type="button" onClick={() => manyRef.current?.click()}>
+      <div className={captureOn() ? 'btn-grid' : undefined}>
+        <button className={captureOn() ? 'btn' : 'btn wide'} id="uploadBtn" type="button" onClick={() => manyRef.current?.click()}>
           Upload screenshots…
         </button>
-        <button className="btn" id="fromUrlBtn" type="button" onClick={() => openCapture(null)}>
-          From URL…
-        </button>
+        {captureOn() && (
+          <button className="btn" id="fromUrlBtn" type="button" onClick={() => openCapture(null)}>
+            From URL…
+          </button>
+        )}
       </div>
       <p className="fine">Or drop files on the canvas, or paste one with Ctrl/⌘&nbsp;V. Past three, the rest wait in Media.</p>
       <input

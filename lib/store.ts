@@ -28,6 +28,7 @@ import { setCropOf, setHeight as setSlotHeight } from './crop';
 import { addCallout } from './callout';
 import { addMedia, keepShownInMedia, MAX_MEDIA, mediaOf, putImage, removeMedia, replaceMedia, slotFor } from './media';
 import { PIN_LIMITS, type PinField } from './pin-text';
+import { captureOn } from './capture/switch';
 
 export interface Toast {
   id: number;
@@ -689,7 +690,7 @@ export const useEditor = create<EditorState>()((set, get) => {
     },
 
     openCapture(target) {
-      set({ captureDialog: { open: true, target } });
+      if (captureOn()) set({ captureDialog: { open: true, target } });
     },
     closeCapture() {
       set({ captureDialog: { ...get().captureDialog, open: false } });
@@ -741,7 +742,7 @@ export const useEditor = create<EditorState>()((set, get) => {
 
     /* --- re-capture and desktop + phone captures (lib/capture/jobs.ts, lib/capture/recapture.ts) --- */
     openRecapture(i) {
-      set({ captureDialog: { open: true, target: i, recapture: true } });
+      if (captureOn()) set({ captureDialog: { open: true, target: i, recapture: true } });
     },
     async landCapture(img, { targetId, keepFraming = false, avoidId = null }) {
       const item = await ingest(img);

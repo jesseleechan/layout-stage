@@ -7,6 +7,7 @@ import { CaptureError, toCaptureError } from '@/lib/capture/errors';
 import { MAX_URL_LENGTH } from '@/lib/capture/options';
 import { sitePages } from '@/lib/capture/pages';
 import { findSitePages } from '@/lib/capture/server';
+import { captureOn } from '@/lib/capture/switch';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -29,6 +30,7 @@ function fromEditor(request: Request): boolean {
 }
 
 export async function POST(request: Request): Promise<Response> {
+  if (!captureOn()) return failure(new CaptureError('off'));
   if (!fromEditor(request)) return failure(new CaptureError('bad_request'));
   let body: Record<string, unknown>;
   try {

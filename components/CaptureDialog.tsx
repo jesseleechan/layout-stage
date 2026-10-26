@@ -9,6 +9,7 @@ import { CaptureError } from '@/lib/capture/errors';
 import { authProblem, splitUrlCredentials, type CaptureAuth } from '@/lib/capture/auth';
 import { parseSelectors, selectorsText } from '@/lib/capture/selectors';
 import { captureSite, errorMessage, runJobs, startJobs } from '@/lib/capture/jobs';
+import { captureOn } from '@/lib/capture/switch';
 import './capture.css';
 
 /* Capture from URL: a small sheet over the editor. The capture runs as a store job, so the sheet can
@@ -27,7 +28,7 @@ export default function CaptureDialog() {
   const open = useEditor((s) => s.captureDialog.open);
   const target = useEditor((s) => s.captureDialog.target);
   const recapture = useEditor((s) => !!s.captureDialog.recapture);
-  return open ? <CaptureSheet key={`${target ?? 'new'}${recapture ? 'r' : ''}`} target={target} recapture={recapture} /> : null;
+  return open && captureOn() ? <CaptureSheet key={`${target ?? 'new'}${recapture ? 'r' : ''}`} target={target} recapture={recapture} /> : null;
 }
 
 interface Form {

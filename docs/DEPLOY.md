@@ -38,6 +38,7 @@ scratch:
    | `ACCESS_PASSWORD` | A long random password, letters and digits only (a password manager's generator is fine) | Before the site is reachable without a Vercel login, for example once you add a custom domain or change Deployment Protection. Set it for Production, and for Preview too if you like. |
    | `CHROMIUM_PACK_URL` | Optional. The URL of `chromium-v153.0.0-pack.x64.tar` | Only if you want to host the Chromium pack yourself (for example on Vercel Blob). The default is the asset on GitHub's v153.0.0 release of Sparticuz/chromium. |
    | `CAPTURE_DEBUG` | `1` | Optional. Logs each capture's timings, memory and free `/tmp` space in the function logs. |
+   | `NEXT_PUBLIC_CAPTURE` | `off` | Optional. Switches URL capture off: the editor offers uploads only and the capture routes refuse, so no browser runs (it's the heaviest use of a function's CPU time). Delete it and redeploy to switch capture back on. |
    | `BLOB_READ_WRITE_TOKEN` | Set by Vercel when the Blob store is connected to the project | Connect the `layout-stage-projects` store for Production **and** Preview (Storage → the store → Projects). |
 
    Environment variable changes take effect on the next deployment.
