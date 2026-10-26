@@ -2,7 +2,7 @@
    `doc.media`, up to MAX_MEDIA, so it can go into any layout again without adding it again (Shots'
    media picker). The gallery is part of the canvas: it autosaves, syncs with the project and undoes
    with everything else. Pure: the store calls these inside its recipes. */
-import { arrangementOf, showcaseCrop } from './arrange';
+import { arrangementOf, fillCell, insetCrop, runsOff, showcaseCrop } from './arrange';
 import { setCropOf } from './crop';
 import { clone, isSampleId, type Composition, type MediaItem, type Slot } from './model';
 import { autoCrop, capHeight, cropRatio } from './render/units';
@@ -91,16 +91,27 @@ export function slotFor(d: Composition, target: number | null): { i: number; add
   return d.count < 3 ? { i: d.count, added: true } : { i: 0, added: false };
 }
 
-/** Puts an image in layout i. Showcase: the page whole, as wide as the layout it replaces and from the
- *  same top edge. Classic: the crop a new image gets, no taller than the canvas allows. */
+/** Puts an image in layout i. A page shown whole (showcase, columns, spotlight's lead): the page
+ *  whole, as wide as the layout it replaces and from the same top edge. Grid: the page fills the
+ *  same cell, from the top. Spotlight's layouts in front: their crop for the page, as wide as before
+ *  and on the same bottom edge. Classic: the crop a new image gets, no taller than the canvas allows. */
 export function putImage(d: Composition, i: number, item: MediaItem): void {
   const s = d.slots[i];
-  const top = s.cy - s.w / cropRatio(s) / 2;
+  const h = s.w / cropRatio(s);
+  const top = s.cy - h / 2;
+  const cell = { l: s.cx - s.w / 2, t: top, w: s.w, h };
   Object.assign(s, { imageId: item.imageId, name: item.name, source: clone(item.source), nw: item.nw, nh: item.nh, fx: 50, fy: 0 });
   delete s.zoom;
-  if (arrangementOf(d) === 'showcase') {
+  const a = arrangementOf(d);
+  if (runsOff(a, i)) {
     setCropOf(s, showcaseCrop);
     s.cy = top + s.w / cropRatio(s) / 2;
+  } else if (a === 'grid') {
+    const p = fillCell(s, cell);
+    Object.assign(s, { cx: p.cx, cy: p.cy, w: p.w });
+  } else if (a === 'spotlight') {
+    setCropOf(s, insetCrop(s));
+    s.cy = top + h - s.w / cropRatio(s) / 2;
   } else {
     setCropOf(s, autoCrop(item.nw, item.nh));
     capHeight(s, d.H);

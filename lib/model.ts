@@ -74,13 +74,20 @@ export interface Background {
 
 /** How arrange() starts the layouts (lib/arrange.ts). 'showcase': the pin looks, whole pages running
  *  off the canvas (1: one long page; 2: two columns; 3: a hero window in front of two others).
- *  'classic': the prototype's cascades. */
-export type Arrangement = 'showcase' | 'classic';
+ *  'columns': showcase, with three as three columns. 'grid': the pages cropped to the cells of an
+ *  even grid. 'spotlight': the first page whole and big, the others smaller in front of it.
+ *  'classic': the prototype's cascades, no longer offered; kept for canvases saved with them. */
+export type Arrangement = 'showcase' | 'columns' | 'grid' | 'spotlight' | 'classic';
+export const ARRANGEMENTS: readonly Arrangement[] = ['showcase', 'columns', 'grid', 'spotlight', 'classic'];
+export const isArrangement = (a: unknown): a is Arrangement => ARRANGEMENTS.includes(a as Arrangement);
 
 export interface Placement {
   cx: number;
   cy: number;
   w: number;
+  /** In grid, the crop too: its cells take the canvas's shape. */
+  crop?: CropId;
+  ar?: number;
 }
 
 /** Where the layouts were on one canvas size (lib/canvas-size.ts). */

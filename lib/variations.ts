@@ -1,10 +1,10 @@
 /* Pin variations: several takes on the canvas from the same pages, so one template can go out as
    several fresh pins. Each takes the canvas (size, frame, everything else) and changes three things:
-   the layout (Scroll, Columns, Editorial, one long page across two columns, the classic cascades),
+   the layout (Scroll, Columns, Editorial, one long page across two columns, Inset, Bento),
    which page leads (the pages in Media, rotated), and the background (the canvas's own, or one made
    from the site's colors as Match site colors makes them). Pure: the export renders them, and any one
    can be put on the canvas. */
-import { applyArrangement, arrange, canContinuePage, showFirstPage } from './arrange';
+import { applyArrangement, arrange, ARRANGEMENT_NAMES, canContinuePage, showFirstPage } from './arrange';
 import { mediaItemOf, mediaOf, putImage } from './media';
 import { clone, type Arrangement, type Background, type Composition } from './model';
 import { variantPatch, type SiteBackgrounds } from './palette';
@@ -28,14 +28,9 @@ const RECIPES: Recipe[] = [
   { count: 1, arrangement: 'showcase', lead: 1, bg: 'mesh' },
   { count: 3, arrangement: 'showcase', lead: 2, bg: 'gradient' },
   { count: 2, arrangement: 'showcase', lead: 0, bg: 'solid', continued: 2 },
-  { count: 2, arrangement: 'classic', lead: 3, bg: 'moved' },
-  { count: 3, arrangement: 'classic', lead: 4, bg: 'current' },
+  { count: 2, arrangement: 'spotlight', lead: 3, bg: 'moved' },
+  { count: 3, arrangement: 'grid', lead: 4, bg: 'current' },
 ];
-
-const NAMES: Record<Arrangement, Record<1 | 2 | 3, string>> = {
-  showcase: { 1: 'Scroll', 2: 'Columns', 3: 'Editorial' },
-  classic: { 1: 'Centered', 2: 'Cascade', 3: 'Cascade' },
-};
 
 export interface Variation {
   key: string;
@@ -75,7 +70,7 @@ export function pinVariations(src: Composition, site: SiteBackgrounds | null, me
       return d;
     };
     let d = take(r.lead);
-    let name = NAMES[r.arrangement][n];
+    let name = ARRANGEMENT_NAMES[r.arrangement][n];
     if (r.continued != null) {
       if (canContinuePage(d, measure)) {
         showFirstPage(d, 1);

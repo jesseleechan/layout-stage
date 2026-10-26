@@ -12,7 +12,7 @@ import {
   type Arrangement, type Background, type BackgroundType, type Composition, type CropId, type Frame, type MediaItem,
   type PresetId, type Shadow, type ShadowPreset, type Slot, type SlotSource, type Style, type UiState,
 } from './model';
-import { applyArrangement, arrange, arrangementOf, defaultComposition, pageMeasure, showcaseCrop, showFirstPage } from './arrange';
+import { applyArrangement, arrange, arrangementOf, defaultComposition, pageMeasure, runsOff, showFirstPage, showsWholePages, startCrop } from './arrange';
 import { isArranged, resizeCanvas } from './canvas-size';
 import { History } from './history';
 import { capHeight, cropRatio, groupBounds, scrollAxis } from './render/units';
@@ -308,8 +308,9 @@ export const useEditor = create<EditorState>()((set, get) => {
     }
     return { imageId: got.id, name: img.name || 'Pasted image', source: img.source, nw: got.nw, nh: got.nh };
   };
-  /** Showcase layouts still where arrange() put them are placed again after an image changes size. */
-  const freshShowcase = (d: Composition) => arrangementOf(d) === 'showcase' && isArranged(d, pageMeasure());
+  /** Layouts still where arrange() put them are placed again after an image changes (classic ones
+   *  stay put, as they always have). */
+  const freshlyArranged = (d: Composition) => arrangementOf(d) !== 'classic' && isArranged(d, pageMeasure());
 
   /** The single-image rule (slotFor): target slot, else the first sample slot, else add a layout,
    *  else layout 1, picked from the layouts as they are now. One step (async: through step());
@@ -318,7 +319,7 @@ export const useEditor = create<EditorState>()((set, get) => {
     const doc = get().doc;
     const { i, added } = slotFor(doc, target);
     const old = doc.slots[i].imageId;
-    const fresh = freshShowcase(doc);
+    const fresh = freshlyArranged(doc);
     let dropped = 0;
     step((d) => {
       putImage(d, i, item);
@@ -426,8 +427,9 @@ export const useEditor = create<EditorState>()((set, get) => {
     setCount(n) {
       if (n === get().doc.count) return;
       change((d) => {
-        // Layouts coming into view take the showcase crop.
-        if (arrangementOf(d) === 'showcase') d.slots.forEach((s, i) => { if (i >= d.count && i < n) setCropOf(s, showcaseCrop); });
+        // Layouts coming into view take the arrangement's crop (classic ones keep theirs).
+        const a = arrangementOf(d);
+        if (a !== 'classic') d.slots.forEach((s, i) => { if (i >= d.count && i < n) setCropOf(s, startCrop(a, i, s)); });
         d.count = n;
         arrange(d, n, pageMeasure());
         keepShownInMedia(d);
@@ -446,12 +448,12 @@ export const useEditor = create<EditorState>()((set, get) => {
       const doc = get().doc;
       if (i < 1 || i >= doc.count) return;
       const old = doc.slots[i].imageId;
-      const fresh = freshShowcase(doc);
+      const fresh = freshlyArranged(doc);
       change((d) => {
         const s = d.slots[i];
         const top = topOf(s);
         showFirstPage(d, i);
-        if (fresh || arrangementOf(d) !== 'showcase') arrange(d, d.count, pageMeasure());
+        if (fresh || !showsWholePages(arrangementOf(d))) arrange(d, d.count, pageMeasure());
         else keepTop(s, top);
       });
       releaseUnused([old]);
@@ -506,8 +508,8 @@ export const useEditor = create<EditorState>()((set, get) => {
         const s = d.slots[i];
         const top = topOf(s);
         setCropOf(s, crop);
-        // Showcase pages may run off the canvas: the layout keeps its width and top edge.
-        if (arrangementOf(d) === 'showcase') keepTop(s, top);
+        // Pages shown whole may run off the canvas: the layout keeps its width and top edge.
+        if (runsOff(arrangementOf(d), i)) keepTop(s, top);
         else capHeight(s, d.H);
       });
     },
@@ -675,7 +677,7 @@ export const useEditor = create<EditorState>()((set, get) => {
       const { i, added } = slotFor(doc, target);
       if (!added && doc.slots[i].imageId === id) { setUi({ selected: i }); return; }
       const old = doc.slots[i].imageId;
-      const fresh = freshShowcase(doc);
+      const fresh = freshlyArranged(doc);
       change((d) => {
         putImage(d, i, item);
         if (added) d.count = (i + 1) as 1 | 2 | 3;
@@ -753,7 +755,7 @@ export const useEditor = create<EditorState>()((set, get) => {
       const keep = keepFraming && target >= 0;
       const { i, added } = target >= 0 ? { i: target, added: false } : dropSlot(doc, visible(avoidId));
       const old = doc.slots[i].imageId;
-      const fresh = !keep && freshShowcase(doc);
+      const fresh = !keep && freshlyArranged(doc);
       let dropped = 0;
       step((d) => {
         const prev = clone(d.slots[i]);

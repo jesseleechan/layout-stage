@@ -1,13 +1,21 @@
 /* Starting positions for 1–3 images. These are starting points, not fixed layouts: everything stays
-   freely draggable. Two families (Composition.arrangement):
+   freely draggable. The families (Composition.arrangement):
    - showcase, the pin looks: 1 = one page, wide, running off the bottom ("Scroll"); 2 = two page
      columns, staggered, or one long page continued from the first column into the second
      ("Columns"); 3 = a hero window in front of two lower ones reaching out to the sides
      ("Editorial"). Pages are shown whole (crop 'full'), so long pages run off the canvas.
-   - classic, the prototype's cascades.
+   - columns: showcase, but three are three columns, the middle one higher ("Columns").
+   - grid: the pages cropped to fill the cells of an even grid, from the top, all inside the canvas:
+     1 = one cell inside an even margin ("Framed"); 2 = two cells, stacked on portrait canvases and
+     side by side on the others ("Split"); 3 = one big cell and two small ones ("Bento").
+   - spotlight: the first page whole and big, the others smaller in front of it, cropped to a screen
+     (a phone's for phone pages): 1 = the page a little wider than the canvas, running off its sides
+     and bottom ("Close-up"); 2 = the page and one in front of its lower right edge ("Inset"); 3 = the
+     page centered, one in front of each edge, the left one higher ("Spotlight").
+   - classic, the prototype's cascades: no longer offered, kept for canvases saved with them.
    With the headline on at the top or bottom, the layouts start in the part of the canvas it leaves,
    measured with the overlay layout the renderer draws. */
-import { applyStyleTo, defaultBackground, sampleSlot, STYLES, clone, type Arrangement, type Composition, type Slot } from './model';
+import { applyStyleTo, defaultBackground, sampleSlot, STYLES, clone, type Arrangement, type Composition, type CropId, type Slot } from './model';
 import { autoCrop, cropRatio, unit } from './render/units';
 import { defaultOverlays, overlaysOf } from './overlays';
 import { layoutOverlays, type Measure } from './render/overlay-layout';
@@ -44,6 +52,32 @@ const EDITORIAL: Record<Kind, { w: number; top: number; sideW: number; side: num
   land: { w: 0.38, top: 0.14, sideW: 0.3, side: 0.08, drop: 0.08 },
 };
 
+/** Columns, three: side margin and gap; the middle column's top, and how much lower the others start. */
+const COLUMNS3: Record<Kind, { m: number; g: number; top: number; drop: number }> = {
+  port: { m: 0.06, g: 0.035, top: 0.08, drop: 0.07 },
+  sq: { m: 0.07, g: 0.035, top: 0.09, drop: 0.08 },
+  land: { m: 0.12, g: 0.03, top: 0.1, drop: 0.09 },
+};
+/** Grid: the margin around the cells and the gap between them, as shares of the canvas's short side,
+ *  and the big cell's share of the room (Bento). */
+const GRID = { m: 0.08, g: 0.035, big: 0.56 };
+/** Spotlight: the lead page's top; its width and left edge with one layout in front, its width
+ *  (centered) with two; the layouts in front: their width (phone pages: phoneW; with two in front,
+ *  `three` times that), least distance from the canvas's side and bottom edges, and how much higher
+ *  the left one of two sits (a fraction of the canvas height). */
+const SPOTLIGHT: Record<Kind, { top: number; leadW: number; leadL: number; lead3W: number; w: number; phoneW: number; three: number; side: number; bottom: number; lift: number }> = {
+  port: { top: 0.07, leadW: 0.76, leadL: 0.07, lead3W: 0.68, w: 0.44, phoneW: 0.3, three: 0.82, side: 0.06, bottom: 0.07, lift: 0.16 },
+  sq: { top: 0.09, leadW: 0.64, leadL: 0.08, lead3W: 0.56, w: 0.38, phoneW: 0.24, three: 0.82, side: 0.07, bottom: 0.09, lift: 0.16 },
+  land: { top: 0.09, leadW: 0.52, leadL: 0.1, lead3W: 0.46, w: 0.3, phoneW: 0.17, three: 0.86, side: 0.09, bottom: 0.09, lift: 0.16 },
+};
+/** The close-up page's width: past both sides of the canvas by about a site's usual side padding. */
+const CLOSE_W = 1.1;
+/** The share of a layout in front's width that lies over the lead page, at least. */
+const OVERLAP = 0.4;
+/** A close-up page this short (it ends above the room's bottom) isn't a long page: it is shown at
+ *  this width at most, centered, rather than past the canvas's sides. */
+const CLOSE_FIT = 0.88;
+
 /** Gap between a top or bottom headline's block and the layouts, in units. */
 export const HEADLINE_GAP = 40;
 /** The layouts keep at least this share of the canvas height: a headline taller than the rest
@@ -62,6 +96,43 @@ export const arrangementOf = (doc: Pick<Composition, 'arrangement'>): Arrangemen
 
 /** The crop a page gets in an arrangement: showcase shows pages whole. */
 export const showcaseCrop = 'full' as const;
+
+/** The layout presets offered for n layouts, in order ('classic' no longer is), and their names.
+ *  'columns' differs from showcase only with three, so it is only offered then. */
+export const presetArrangements = (n: 1 | 2 | 3): Arrangement[] => (n === 3 ? ['showcase', 'columns', 'grid', 'spotlight'] : ['showcase', 'grid', 'spotlight']);
+export const ARRANGEMENT_NAMES: Record<Arrangement, Record<1 | 2 | 3, string>> = {
+  showcase: { 1: 'Scroll', 2: 'Columns', 3: 'Editorial' },
+  columns: { 1: 'Scroll', 2: 'Columns', 3: 'Columns' },
+  grid: { 1: 'Framed', 2: 'Split', 3: 'Bento' },
+  spotlight: { 1: 'Close-up', 2: 'Inset', 3: 'Spotlight' },
+  classic: { 1: 'Centered', 2: 'Cascade', 3: 'Cascade' },
+};
+/** The preset an arrangement shows as with n layouts: below three, columns is showcase. */
+export const presetOf = (a: Arrangement, n: 1 | 2 | 3): Arrangement => (a === 'columns' && n < 3 ? 'showcase' : a);
+
+/** Shows whole pages that run off the canvas (crop 'full'): showcase and columns. */
+export const showsWholePages = (a: Arrangement) => a === 'showcase' || a === 'columns';
+/** Layout i shows its page whole, keeping its top edge when its crop changes: in showcase and
+ *  columns, and spotlight's lead page. */
+export const runsOff = (a: Arrangement, i: number) => showsWholePages(a) || (a === 'spotlight' && i === 0);
+
+const isPhoneCapture = (s: Slot) => s.source.kind === 'url' && s.source.options.width === 390;
+/** Phone pages: captured at phone width, or narrow screenshots. */
+const isPhonePage = (s: Slot) => isPhoneCapture(s) || (s.nw < 1100 && s.nw / s.nh < 0.75);
+
+/** The crop of a layout in front in spotlight: a phone's screen for phone pages, 4:5 for others, or
+ *  the image whole when it's wider than that. */
+export function insetCrop(s: Slot): CropId {
+  if (s.nw / s.nh >= 0.8) return 'full';
+  return isPhonePage(s) ? '9:16' : '4:5';
+}
+
+/** The crop layout i starts with in arrangement a (picking it, or the layout coming into view);
+ *  grid's are its cells, which arrange() sets. */
+export function startCrop(a: Arrangement, i: number, s: Slot): CropId {
+  if (runsOff(a, i)) return showcaseCrop;
+  return a === 'spotlight' ? insetCrop(s) : autoCrop(s.nw, s.nh);
+}
 
 /** The text measure the app arranges with: the canvas's in a browser; none elsewhere (the server,
  *  unit tests), where the headline gets no room. The overlay fonts are in by then: the preview loads
@@ -121,8 +192,6 @@ function classicSpots(doc: Composition, n: 1 | 2 | 3, room: Room): Placed[] {
   return spots;
 }
 
-const isPhoneCapture = (s: Slot) => s.source.kind === 'url' && s.source.options.width === 390;
-
 /** A layout of width w whose top edge is at `top`. */
 const fromTop = (s: Slot, cx: number, top: number, w: number): Placed => {
   const h = w / cropRatio(s);
@@ -144,7 +213,7 @@ function columnWidth(W: number, H: number): number {
 /** Whether the second of two showcase columns would continue the first one's page if it showed it:
  *  the page shown whole, longer than the first column's room, and no top headline above them. */
 export function canContinuePage(doc: Composition, measure?: Measure | null): boolean {
-  if (arrangementOf(doc) !== 'showcase' || doc.count !== 2) return false;
+  if (!showsWholePages(arrangementOf(doc)) || doc.count !== 2) return false;
   const a = doc.slots[0];
   if (a.crop !== showcaseCrop) return false;
   const room = layoutRoom(doc, measure);
@@ -175,6 +244,15 @@ function showcaseSpots(doc: Composition, n: 1 | 2 | 3, room: Room): Placed[] {
     } else {
       spots = [fromTop(a, xa, top, w), fromTop(b, xb, top + P.stagger * H, w)];
     }
+  } else if (arrangementOf(doc) === 'columns') {
+    const P = COLUMNS3[kind];
+    const w = (W * (1 - 2 * P.m) - 2 * P.g * W) / 3;
+    const top = Math.max(P.top * H, room.t);
+    spots = [
+      fromTop(a, W / 2, top, w),
+      fromTop(b, W * P.m + w / 2, top + P.drop * H, w),
+      fromTop(c, W - W * P.m - w / 2, top + P.drop * H, w),
+    ];
   } else {
     const P = EDITORIAL[kind];
     const top = Math.max(P.top * H, room.t);
@@ -185,30 +263,114 @@ function showcaseSpots(doc: Composition, n: 1 | 2 | 3, room: Room): Placed[] {
       fromTop(c, W - P.side * W - sw / 2, top + P.drop * H, sw),
     ];
   }
-  // Pages too short to run off the canvas are centered in the room, scaled down (about the canvas's
-  // vertical center line) if they would end behind a bottom headline.
+  return centerShort(spots, room, W, H);
+}
+
+/** Pages too short to run off the canvas are centered in the room, scaled down (about the canvas's
+ *  vertical center line) if they would end behind a bottom headline. */
+function centerShort(spots: Placed[], room: Room, W: number, H: number): Placed[] {
   const top = Math.min(...spots.map((p) => p.cy - p.h / 2));
   const bottom = Math.max(...spots.map((p) => p.cy + p.h / 2));
-  if (bottom <= H && top >= 0) {
-    const g = bottom - top, space = room.b - room.t;
-    const k = Math.min(1, space / g);
-    const y = room.t + (space - g * k) / 2;
-    spots = spots.map((p) => ({ cx: W / 2 + (p.cx - W / 2) * k, cy: y + (p.cy - top) * k, w: p.w * k, h: p.h * k }));
+  if (bottom > H || top < 0) return spots;
+  const g = bottom - top, space = room.b - room.t;
+  const k = Math.min(1, space / g);
+  const y = room.t + (space - g * k) / 2;
+  return spots.map((p) => ({ cx: W / 2 + (p.cx - W / 2) * k, cy: y + (p.cy - top) * k, w: p.w * k, h: p.h * k }));
+}
+
+interface Cell {
+  l: number;
+  t: number;
+  w: number;
+  h: number;
+}
+
+/** Puts layout s in a cell: its page cropped to fill the cell (from where it's scrolled to), or,
+ *  when the image is wider than the cell, whole and centered in it. Sets the crop. Mutates `s`. */
+export function fillCell(s: Slot, c: Cell): Placed {
+  const ar = c.w / c.h, nr = s.nw / s.nh;
+  const center = { cx: c.l + c.w / 2, cy: c.t + c.h / 2 };
+  if (nr >= ar) {
+    s.crop = 'full';
+    delete s.ar;
+    const w = Math.min(c.w, c.h * nr);
+    return { ...center, w, h: w / nr };
   }
-  return spots;
+  s.crop = 'custom';
+  s.ar = ar;
+  return { ...center, w: c.w, h: c.h };
+}
+
+/** The grid's cells in the room, inside the margin. */
+function gridCells(W: number, H: number, n: 1 | 2 | 3, room: Room): Cell[] {
+  const S = Math.min(W, H);
+  const m = GRID.m * S, g = GRID.g * S;
+  const l = m, t = Math.max(m, room.t), w = W - 2 * m, h = Math.max(1, Math.min(H - m, room.b) - t);
+  if (n === 1) return [{ l, t, w, h }];
+  const rows = canvasKind(W, H) === 'port';
+  if (n === 2) {
+    if (rows) {
+      const ch = (h - g) / 2;
+      return [{ l, t, w, h: ch }, { l, t: t + ch + g, w, h: ch }];
+    }
+    const cw = (w - g) / 2;
+    return [{ l, t, w: cw, h }, { l: l + cw + g, t, w: cw, h }];
+  }
+  if (rows) {
+    const bh = (h - g) * GRID.big, sh = h - g - bh, cw = (w - g) / 2;
+    return [{ l, t, w, h: bh }, { l, t: t + bh + g, w: cw, h: sh }, { l: l + cw + g, t: t + bh + g, w: cw, h: sh }];
+  }
+  const bw = (w - g) * GRID.big, sw = w - g - bw, ch = (h - g) / 2;
+  return [{ l, t, w: bw, h }, { l: l + bw + g, t, w: sw, h: ch }, { l: l + bw + g, t: t + ch + g, w: sw, h: ch }];
+}
+
+function spotlightSpots(doc: Composition, n: 1 | 2 | 3, room: Room): Placed[] {
+  const { W, H } = doc;
+  const P = SPOTLIGHT[canvasKind(W, H)];
+  const [a, b, c] = doc.slots;
+  const top = Math.max(P.top * H, room.t);
+  if (n === 1) {
+    let w = CLOSE_W * W;
+    if (w / cropRatio(a) < room.b - top) w = Math.min(w, CLOSE_FIT * W);
+    return centerShort([fromTop(a, W / 2, top, w)], room, W, H);
+  }
+  const lead = n === 2 ? fromTop(a, P.leadL * W + (P.leadW * W) / 2, top, P.leadW * W) : fromTop(a, W / 2, top, P.lead3W * W);
+  const bottom = Math.min(room.b, H * (1 - P.bottom));
+  /** A layout in front of the lead's right or left edge, its bottom at `bot`: OVERLAP of it over the
+   *  lead, or more where that would take it closer than `side` to the canvas edge. Below a top
+   *  headline it is made smaller rather than reach up behind it. */
+  const inFront = (s: Slot, right: boolean, bot: number): Placed => {
+    const r = cropRatio(s);
+    const h = Math.min(((isPhonePage(s) ? P.phoneW : P.w) * (n === 3 ? P.three : 1) * W) / r, bot - room.t), w = h * r;
+    const cx = right
+      ? Math.min(lead.cx + lead.w / 2 - OVERLAP * w, W - P.side * W - w) + w / 2
+      : Math.max(lead.cx - lead.w / 2 + OVERLAP * w - w, P.side * W) + w / 2;
+    return { cx, cy: bot - h / 2, w, h };
+  };
+  // The left one higher, by at most a quarter of the room a top headline leaves.
+  if (n === 3) return [lead, inFront(b, false, bottom - Math.min(P.lift * H, (bottom - room.t) / 4)), inFront(c, true, bottom)];
+  // The pair centered across the canvas (a narrow phone page leaves the lead off center otherwise).
+  const spots = [lead, inFront(b, true, bottom)];
+  const l = Math.min(...spots.map((p) => p.cx - p.w / 2)), r = Math.max(...spots.map((p) => p.cx + p.w / 2));
+  return spots.map((p) => ({ ...p, cx: p.cx + (W - l - r) / 2 }));
 }
 
 /**
  * Places the first n slots at their starting positions for the composition's arrangement and resets
- * the z-order. Mutates `doc` (positions and order only: crops are the caller's). Given a text measure
+ * the z-order. Mutates `doc` (positions and order; crops are the caller's, except in grid, where they
+ * are the cells). Given a text measure
  * (pageMeasure() in the app) and the headline on at the top or bottom, the layouts start in the part
  * of the canvas the headline leaves (layoutRoom); otherwise anywhere on the canvas.
  */
 export function arrange(doc: Composition, n: 1 | 2 | 3 = doc.count, measure?: Measure | null): void {
   const { W, H } = doc;
   const room = layoutRoom(doc, measure);
-  const showcase = arrangementOf(doc) === 'showcase';
-  const spots = showcase ? showcaseSpots(doc, n, room) : classicSpots(doc, n, room);
+  const a = arrangementOf(doc);
+  const spots =
+    a === 'grid' ? gridCells(W, H, n, room).map((c, i) => fillCell(doc.slots[i], c))
+    : a === 'spotlight' ? spotlightSpots(doc, n, room)
+    : a === 'classic' ? classicSpots(doc, n, room)
+    : showcaseSpots(doc, n, room);
   spots.forEach((p, i) => {
     const s = doc.slots[i];
     s.w = Math.round(p.w);
@@ -217,19 +379,17 @@ export function arrange(doc: Composition, n: 1 | 2 | 3 = doc.count, measure?: Me
   });
   // The editorial 3-up, and the classic one on square and landscape canvases, put the hero (layout 1
   // in showcase, layout 2 in classic) in front of the other two.
-  const vis = showcase
-    ? n === 3 ? [1, 2, 0] : Array.from({ length: n }, (_, i) => i)
-    : canvasKind(W, H) !== 'port' && n === 3 ? [1, 2, 0] : Array.from({ length: n }, (_, i) => i);
+  const front = n === 3 && (a === 'showcase' || (a === 'classic' && canvasKind(W, H) !== 'port'));
+  const vis = front ? [1, 2, 0] : Array.from({ length: n }, (_, i) => i);
   doc.order = [...vis, ...[0, 1, 2].filter((i) => !vis.includes(i))];
 }
 
-/** Starts the layouts over in arrangement `a`, with its crops: showcase shows pages whole; classic
- *  gives each page the crop a new image gets. Mutates `doc`. */
+/** Starts the layouts over in arrangement `a`, with its crops (startCrop; grid's cells). Mutates `doc`. */
 export function applyArrangement(doc: Composition, a: Arrangement, measure?: Measure | null): void {
   doc.arrangement = a;
   for (let i = 0; i < doc.count; i++) {
     const s = doc.slots[i];
-    s.crop = a === 'showcase' ? showcaseCrop : autoCrop(s.nw, s.nh);
+    s.crop = startCrop(a, i, s);
     delete s.ar;
   }
   arrange(doc, doc.count, measure);

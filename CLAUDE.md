@@ -35,8 +35,11 @@ npx playwright install chromium          # once per machine, for URL capture and
 - `lib/overlays.ts` headline / badge / watermark model, fonts and sanitizer; `lib/render/overlay-layout.ts`
   (pure, scale-free text layout), `lib/render/overlays.ts` (`drawOverlays`, the one drawing function for
   the preview's overlay canvas and the export), `lib/render/overlay-fonts.ts` (FontFace loading, measure)
-- `lib/arrange.ts` (starting positions: `showcase` Scroll / Columns / Editorial, whole pages running off the
-  canvas, the default; `classic` cascades; leaves room for a top/bottom headline via `layoutRoom`),
+- `lib/arrange.ts` (starting positions, the layout presets: `showcase` Scroll / Columns / Editorial, whole
+  pages running off the canvas, the default; `columns` three columns; `grid` Framed / Split / Bento, pages
+  cropped to cells; `spotlight` Close-up / Inset / Spotlight, one page big and the others in front;
+  `classic` cascades, no longer offered but kept for saved canvases; leaves room for a top/bottom
+  headline via `layoutRoom`),
   `lib/canvas-size.ts` (switching canvas sizes keeps the work: per-size placements, re-arrange when fresh,
   else scale as one piece), `lib/media.ts` (the media gallery, `doc.media`: every image added, up to 12,
   oldest unused ones make room; `putImage` / `slotFor` place any image in a layout), `lib/crop.ts`
