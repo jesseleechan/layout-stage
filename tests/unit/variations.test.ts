@@ -22,9 +22,11 @@ describe('pinVariations', () => {
       'Scroll · site mesh',
       'Editorial · site gradient',
       'Columns · site color',
-      'Cascade · site mesh, moved',
-      'Cascade · your background',
+      'Inset · site mesh, moved',
+      'Bento · your background',
     ]);
+    // No cascades: the last two are the spotlight and grid arrangements.
+    expect(v.map((x) => x.doc.arrangement)).toEqual(['showcase', 'showcase', 'showcase', 'showcase', 'spotlight', 'grid']);
     expect(v.map((x) => shown(x.doc))).toEqual([
       ['img_0', 'img_1'], ['img_1'], ['img_2', 'img_3', 'img_4'], ['img_2', 'img_3'], ['img_3', 'img_4'], ['img_4', 'img_0', 'img_1'],
     ]);

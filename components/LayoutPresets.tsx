@@ -1,6 +1,8 @@
 'use client';
 import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
-import { applyArrangement, arrange, arrangementOf, canContinuePage, canvasKind, pageMeasure, showFirstPage } from '@/lib/arrange';
+import {
+  applyArrangement, arrange, ARRANGEMENT_NAMES, arrangementOf, canContinuePage, canvasKind, pageMeasure, presetArrangements, presetOf, showFirstPage,
+} from '@/lib/arrange';
 import { clone, type Arrangement, type Composition } from '@/lib/model';
 import { renderComposition } from '@/lib/render/export';
 import { useEditor } from '@/lib/store';
@@ -40,11 +42,6 @@ const COUNT_OPTIONS: Option<1 | 2 | 3>[] = ([1, 2, 3] as const).map((n) => ({
   'aria-label': n === 1 ? '1 layout' : `${n} layouts`,
 }));
 
-const ARRANGEMENT_NAMES: Record<Arrangement, Record<1 | 2 | 3, string>> = {
-  showcase: { 1: 'Scroll', 2: 'Columns', 3: 'Editorial' },
-  classic: { 1: 'Centered', 2: 'Cascade', 3: 'Cascade' },
-};
-
 type PresetKey = Arrangement | 'continue';
 interface Preset {
   key: PresetKey;
@@ -53,17 +50,17 @@ interface Preset {
   doc: (d: Composition) => Composition;
 }
 
-/** The presets for the canvas now: showcase and classic, and, for two columns showing two pages,
+/** The presets for the canvas now (presetArrangements), and, for two columns showing two pages,
  *  one long page continued across both. */
 function presetsFor(doc: Composition): Preset[] {
   const n = doc.count;
-  const now = arrangementOf(doc);
+  const now = presetOf(arrangementOf(doc), n);
   const as = (a: Arrangement) => (d: Composition) => {
     const c = clone(d);
     if (a !== now) applyArrangement(c, a, pageMeasure());
     return c;
   };
-  const list: Preset[] = (['showcase', 'classic'] as const).map((a) => ({ key: a, name: ARRANGEMENT_NAMES[a][n], doc: as(a) }));
+  const list: Preset[] = presetArrangements(n).map((a) => ({ key: a, name: ARRANGEMENT_NAMES[a][n], doc: as(a) }));
   if (n === 2 && now === 'showcase' && doc.slots[1].imageId !== doc.slots[0].imageId && canContinuePage(doc, pageMeasure())) {
     list.splice(1, 0, {
       key: 'continue',
@@ -117,7 +114,7 @@ export default function LayoutPresets() {
   const { setCount, setArrangement, rearrange, continuePage } = useEditor.getState();
   const presets = presetsFor(doc);
   const urls = useThumbnails(doc, hydrated ? presets : []);
-  const now = arrangementOf(doc);
+  const now = presetOf(arrangementOf(doc), doc.count);
   const wide = canvasKind(doc.W, doc.H) === 'land';
 
   const pick = (k: PresetKey) => {

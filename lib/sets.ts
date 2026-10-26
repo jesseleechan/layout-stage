@@ -2,7 +2,7 @@
    ordinary Composition (or, for the palette card, the canvas it's drawn on), rendered later through
    lib/render like any export. Nothing here touches the store or the DOM, apart from the text
    measure the arrangement sizes the headline with (the page's by default; see arrange()). */
-import { applyArrangement, arrange, arrangementOf, layoutRoom, pageMeasure } from './arrange';
+import { applyArrangement, arrange, arrangementOf, layoutRoom, pageMeasure, runsOff } from './arrange';
 import { mediaOf, putImage } from './media';
 import { applyPlacement, recall } from './canvas-size';
 import { clone, PRESETS, type Composition, type MediaItem, type PresetId, type Slot, type UiState } from './model';
@@ -166,13 +166,14 @@ export type SetItem =
   /** Every page in Media in a grid on `doc`'s canvas, background and frame (lib/pages-grid.ts). */
   | { kind: 'pages'; key: string; label: string; doc: Composition; pages: MediaItem[] };
 
-/** The layouts as the set reads them. Showcase shows pages whole, which says nothing about their
- *  shape, so its whole pages are read through the crop a new image would get (autoCrop): desktop
- *  pages at 16:10, phone pages at 9:16. */
+/** The layouts as the set reads them. A page shown whole (runsOff) says nothing about its shape, so
+ *  those are read through the crop a new image would get (autoCrop): desktop pages at 16:10, phone
+ *  pages at 9:16. */
 function setView(doc: Composition): Composition {
-  if (arrangementOf(doc) !== 'showcase') return doc;
+  const a = arrangementOf(doc);
+  if (a === 'classic') return doc;
   const d = clone(doc);
-  for (const s of d.slots) if (s.crop === 'full') s.crop = autoCrop(s.nw, s.nh);
+  d.slots.forEach((s, i) => { if (runsOff(a, i) && s.crop === 'full') s.crop = autoCrop(s.nw, s.nh); });
   return d;
 }
 
@@ -181,7 +182,7 @@ function setView(doc: Composition): Composition {
  * 1. hero: the current layouts on the set's canvas (forPreset);
  *    then, with two or more pages in Media, all of them in a grid (lib/pages-grid.ts);
  * 2–4. section close-ups of the main layout at up to three scroll points (none when its crop shows
- *      the whole image; see setView for showcase pages);
+ *      the whole image; see setView for whole pages);
  * 5. desktop + phone, when the canvas has both;
  * then each other page in Media on its own (one page, from the top, in the Scroll layout);
  * last, a palette card of the main layout's colors. At most ETSY_MAX_PHOTOS in all.

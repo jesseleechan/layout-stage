@@ -50,7 +50,7 @@ async function arrangeWithHeadline(page: Page, preset: PresetId, place: 'top' | 
 }
 
 test.describe('starting arrangement with a headline', () => {
-  for (const arrangement of ['classic', 'showcase'] as const) {
+  for (const arrangement of ['classic', 'showcase', 'grid', 'spotlight'] as const) {
     for (const preset of ['pin', 'etsy43', 'etsy11'] as const) {
       test(`${arrangement}, ${preset}: layouts start below a top headline and above a bottom one`, async ({ page }) => {
         await openEditor(page);
@@ -60,17 +60,20 @@ test.describe('starting arrangement with a headline', () => {
             const { doc, ink } = await arrangeWithHeadline(page, preset, place, n, n === 2);
             const gap = HEADLINE_GAP * unit(doc.W, doc.H);
             const what = `${arrangement}, ${preset}, headline ${place}, ${n} layout(s)`;
+            // The cascades and the grid stay on the canvas; whole pages may run off it.
+            const contained = arrangement === 'classic' || arrangement === 'grid';
             expect(ink.t, what).toBeGreaterThan(0);
             expect(doc.count).toBe(n);
             for (let i = 0; i < n; i++) {
               const r = rectOf(doc.slots[i]);
-              // Showcase pages may run on behind a bottom headline (give it a band) and off the canvas;
-              // the classic cascades stay on the canvas and above the headline.
+              // Whole pages may run on behind a bottom headline (give it a band) and off the canvas;
+              // the cascades, the grid and spotlight's layouts in front stay on the canvas and above it.
+              const kept = contained || (arrangement === 'spotlight' && i > 0);
               if (place === 'top') {
                 expect(r.t, what).toBeGreaterThanOrEqual(ink.b + gap - 2);
-                if (arrangement === 'classic') expect(r.t + r.h, what).toBeLessThanOrEqual(doc.H + 1);
+                if (kept) expect(r.t + r.h, what).toBeLessThanOrEqual(doc.H + 1);
               } else {
-                if (arrangement === 'classic') expect(r.t + r.h, what).toBeLessThanOrEqual(ink.t - gap + 2);
+                if (kept) expect(r.t + r.h, what).toBeLessThanOrEqual(ink.t - gap + 2);
                 expect(r.t, what).toBeGreaterThanOrEqual(-1);
                 expect(r.t, what).toBeLessThan(ink.t - gap);
               }

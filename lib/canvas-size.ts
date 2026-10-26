@@ -5,7 +5,8 @@
    - otherwise your arrangement, scaled as one piece to fit the new canvas: edges that ran off the
      canvas still do, the others keep their share of the margins. Pure; mutates the doc it's given. */
 import { arrange, arrangementOf } from './arrange';
-import type { Composition, Placement, PresetId, SizePlacement } from './model';
+import { setCropOf } from './crop';
+import { CROPS, isArrangement, type Composition, type Placement, type PresetId, type SizePlacement } from './model';
 import { rectOf } from './render/units';
 import type { Measure } from './render/overlay-layout';
 
@@ -16,11 +17,16 @@ export const sizeKey = (W: number, H: number) => `${Math.round(W)}x${Math.round(
 
 const visibleOrder = (d: Pick<Composition, 'order' | 'count'>) => d.order.filter((i) => i < d.count).join();
 
+/** A layout's placement; in grid, with its crop (the cells take the canvas's shape). */
+const placementOf = ({ cx, cy, w, crop, ar }: Placement, grid: boolean): Placement =>
+  grid ? { cx, cy, w, crop, ...(crop === 'custom' && ar ? { ar } : {}) } : { cx, cy, w };
+
 export function snapshot(doc: Composition): SizePlacement {
+  const arrangement = arrangementOf(doc);
   return {
     count: doc.count,
-    arrangement: arrangementOf(doc),
-    slots: doc.slots.map(({ cx, cy, w }) => ({ cx, cy, w })) as SizePlacement['slots'],
+    arrangement,
+    slots: doc.slots.map((s) => placementOf(s, arrangement === 'grid')) as SizePlacement['slots'],
     order: [...doc.order],
   };
 }
@@ -39,12 +45,15 @@ export function remember(doc: Composition): void {
 const finite = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v);
 const validPlacement = (p: unknown): p is Placement => {
   const q = p as Placement | null;
-  return !!q && finite(q.cx) && finite(q.cy) && finite(q.w) && q.w > 0;
+  return (
+    !!q && finite(q.cx) && finite(q.cy) && finite(q.w) && q.w > 0 &&
+    (q.crop === undefined || CROPS.some((c) => c.id === q.crop) || (q.crop === 'custom' && finite(q.ar) && q.ar > 0))
+  );
 };
 function validSizePlacement(p: unknown): p is SizePlacement {
   const q = p as SizePlacement | null;
   return (
-    !!q && (q.count === 1 || q.count === 2 || q.count === 3) && (q.arrangement === 'showcase' || q.arrangement === 'classic') &&
+    !!q && (q.count === 1 || q.count === 2 || q.count === 3) && isArrangement(q.arrangement) &&
     Array.isArray(q.slots) && q.slots.length === 3 && q.slots.every(validPlacement) &&
     Array.isArray(q.order) && q.order.length === 3 && [0, 1, 2].every((i) => q.order.includes(i))
   );
@@ -56,7 +65,7 @@ export function sanitizePlacements(raw: unknown): Record<string, SizePlacement> 
   const out: Record<string, SizePlacement> = {};
   for (const [k, v] of Object.entries(raw).slice(-MAX_REMEMBERED)) {
     if (/^\d+x\d+$/.test(k) && validSizePlacement(v)) {
-      out[k] = { count: v.count, arrangement: v.arrangement, slots: v.slots.map(({ cx, cy, w }) => ({ cx, cy, w })) as SizePlacement['slots'], order: [...v.order] };
+      out[k] = { count: v.count, arrangement: v.arrangement, slots: v.slots.map((p) => placementOf(p, v.arrangement === 'grid')) as SizePlacement['slots'], order: [...v.order] };
     }
   }
   return Object.keys(out).length ? out : undefined;
@@ -70,7 +79,11 @@ export function recall(doc: Composition, W: number, H: number): SizePlacement | 
 }
 
 export function applyPlacement(doc: Composition, p: SizePlacement): void {
-  p.slots.forEach(({ cx, cy, w }, i) => Object.assign(doc.slots[i], { cx, cy, w }));
+  p.slots.forEach(({ cx, cy, w, crop, ar }, i) => {
+    const s = doc.slots[i];
+    Object.assign(s, { cx, cy, w });
+    if (crop) setCropOf(s, crop, ar);
+  });
   doc.order = [...p.order];
 }
 

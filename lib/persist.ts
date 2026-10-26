@@ -1,6 +1,6 @@
 /* Autosave and saved styles, in IndexedDB. Browser only. */
 import { createStore, del, get, set, type UseStore } from 'idb-keyval';
-import { clone, PRESETS, type Composition, type Style } from './model';
+import { clone, isArrangement, PRESETS, type Composition, type Style } from './model';
 import { defaultComposition } from './arrange';
 import { cleanSelectors } from './capture/selectors';
 import { sanitizePlacements } from './canvas-size';
@@ -69,7 +69,7 @@ export function sanitizeComposition(raw: unknown): Composition | null {
     preset: r.preset && r.preset in PRESETS ? r.preset : 'custom',
     count: r.count === 1 || r.count === 2 || r.count === 3 ? r.count : d.count,
     // Saved before arrangements existed: arranged the classic way.
-    arrangement: r.arrangement === 'showcase' ? 'showcase' : 'classic',
+    arrangement: isArrangement(r.arrangement) ? r.arrangement : 'classic',
     order: Array.isArray(r.order) && r.order.length === 3 && [0, 1, 2].every((i) => r.order!.includes(i)) ? [...r.order] : [0, 1, 2],
     frame: { ...d.frame, ...clone(r.frame), shadow: { ...d.frame.shadow, ...clone(r.frame?.shadow) } },
     background: { ...d.background, ...clone(r.background) },

@@ -1,6 +1,6 @@
 /* Layouts through the UI: switching canvas sizes keeps a layout you dragged (and coming back restores
-   it), the Arrangement picker starts the layouts over in showcase or classic, and the second showcase
-   column can continue the first one's page. */
+   it), the layout presets start the layouts over in their arrangement, and the second showcase column
+   can continue the first one's page. */
 import type { Page } from '@playwright/test';
 import type { Composition } from '../../lib/model';
 import { expect, test } from './local';
@@ -39,23 +39,33 @@ test.describe('layouts', () => {
     expect((await getDoc(page)).W).toBe(3000);
   });
 
-  test('the Arrangement picker starts the layouts over in classic or showcase', async ({ page }) => {
+  test('the layout presets start the layouts over in their arrangement', async ({ page }) => {
     await openEditor(page);
     const group = page.getByRole('group', { name: 'Arrangement' });
+    const count = (n: string) => page.getByRole('group', { name: 'Number of layouts' }).getByRole('button', { name: n }).click();
+    const names = () => group.getByRole('button').evaluateAll((els) => els.map((e) => e.getAttribute('aria-label')));
     await expect(group.getByRole('button', { name: 'Columns' })).toHaveAttribute('aria-pressed', 'true');
-    await group.getByRole('button', { name: 'Cascade' }).click();
+    expect(await names()).toEqual(['Columns', 'Split', 'Inset']);
+    await group.getByRole('button', { name: 'Split' }).click();
     let d = await getDoc(page);
-    expect(d.arrangement).toBe('classic');
-    expect(d.slots.slice(0, 2).map((s) => s.crop)).toEqual(['16:10', '16:10']);
-    await page.getByRole('group', { name: 'Number of layouts' }).getByRole('button', { name: '3' }).click();
-    await expect(group.getByRole('button', { name: 'Cascade' })).toHaveAttribute('aria-pressed', 'true');
+    expect([d.arrangement, ...d.slots.slice(0, 2).map((s) => s.crop)]).toEqual(['grid', 'custom', 'custom']);
+    await group.getByRole('button', { name: 'Inset' }).click();
+    d = await getDoc(page);
+    expect([d.arrangement, ...d.slots.slice(0, 2).map((s) => s.crop)]).toEqual(['spotlight', 'full', '4:5']);
+    await count('3');
+    await expect(group.getByRole('button', { name: 'Spotlight' })).toHaveAttribute('aria-pressed', 'true');
+    expect(await names()).toEqual(['Editorial', 'Columns', 'Bento', 'Spotlight']);
+    await group.getByRole('button', { name: 'Columns' }).click();
+    d = await getDoc(page);
+    expect([d.arrangement, ...d.slots.map((s) => s.crop)]).toEqual(['columns', 'full', 'full', 'full']);
     await group.getByRole('button', { name: 'Editorial' }).click();
     d = await getDoc(page);
     expect(d.arrangement).toBe('showcase');
     expect(d.slots.map((s) => s.crop)).toEqual(['full', 'full', 'full']);
     expect(d.order).toEqual([1, 2, 0]);
-    await page.getByRole('group', { name: 'Number of layouts' }).getByRole('button', { name: '1' }).click();
+    await count('1');
     await expect(group.getByRole('button', { name: 'Scroll' })).toHaveAttribute('aria-pressed', 'true');
+    expect(await names()).toEqual(['Scroll', 'Framed', 'Close-up']);
   });
 
   test('the second column can continue the first one’s page', async ({ page }) => {
@@ -89,7 +99,7 @@ test.describe('layouts', () => {
     await openEditor(page);
     const group = page.getByRole('group', { name: 'Arrangement' });
     // Each preset draws the canvas in its arrangement (a JPEG of the canvas's shape).
-    await expect.poll(() => group.locator('img').evaluateAll((els) => els.map((e) => (e as HTMLImageElement).naturalWidth > 0 && (e as HTMLImageElement).src.startsWith('data:image/jpeg')))).toEqual([true, true]);
+    await expect.poll(() => group.locator('img').evaluateAll((els) => els.map((e) => (e as HTMLImageElement).naturalWidth > 0 && (e as HTMLImageElement).src.startsWith('data:image/jpeg')))).toEqual([true, true, true]);
     // Dragged, then Columns again: back to its starting positions.
     await page.evaluate(() => { const S = window.__layoutStage!.store.getState(); S.edit((d) => { d.slots[0].cx += 50; }); S.commit(); });
     await group.getByRole('button', { name: 'Columns' }).click();
