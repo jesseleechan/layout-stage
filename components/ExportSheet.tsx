@@ -9,6 +9,7 @@ import { renderPaletteCard } from '@/lib/render/palette-card';
 import { exportScale } from '@/lib/render/units';
 import { loadImage } from '@/lib/images';
 import { paletteOf, siteBackgrounds } from '@/lib/palette';
+import { captureOn } from '@/lib/capture/switch';
 import { allSizes, ALL_SIZES_ZIP, etsySet, ETSY_SET_ZIP, pagesImages, PAGES_ZIP, setFileName, VARIATIONS_ZIP, type SetItem } from '@/lib/sets';
 import { hasPages } from '@/lib/pages-grid';
 import { pinVariations, variationPages } from '@/lib/variations';
@@ -247,7 +248,7 @@ export const useExport = create<ExportState>()((set, get) => {
     async runPagesGrid(returnTo = 'exportBtn') {
       const { doc, ui, showToast } = useEditor.getState();
       if (!hasPages(doc)) {
-        showToast('Add two or more pages to Media first: upload them, or capture a whole site.');
+        showToast(captureOn() ? 'Add two or more pages to Media first: upload them, or capture a whole site.' : 'Add two or more pages to Media first: upload them.');
         return;
       }
       const format = ui.exportFormat;

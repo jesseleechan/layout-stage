@@ -16,6 +16,7 @@ export type CaptureErrorCode =
   | 'bad_auth' // a username / password that can't be sent
   | 'bad_selectors' // "Hide elements" isn't a list of CSS selectors
   | 'failed' // anything else on the server
+  | 'off' // capture is switched off on this deployment (lib/capture/switch.ts)
   | 'network' // browser side: the capture route couldn't be reached
   | 'aborted'; // browser side: the caller cancelled
 
@@ -34,6 +35,7 @@ export const CAPTURE_MESSAGES: Record<CaptureErrorCode, string> = {
   bad_auth: 'That username or password can’t be used. Check it and try again.',
   bad_selectors: 'Hide elements takes CSS selectors separated by commas or new lines, like #chat-widget, .promo-bar.',
   failed: 'That page couldn’t be captured. Try again, or take a screenshot and drop it in instead.',
+  off: 'Capturing from a URL is switched off on this site. Upload a screenshot instead.',
   network: 'Couldn’t reach the capture server. Check that Layout Stage is still running, then try again.',
   aborted: 'Capture cancelled.',
 };
@@ -58,6 +60,7 @@ const HTTP_STATUS: Record<CaptureErrorCode, number> = {
   bad_auth: 400,
   bad_selectors: 400,
   failed: 500,
+  off: 403,
   network: 502,
   aborted: 499,
 };

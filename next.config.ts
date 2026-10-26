@@ -6,9 +6,11 @@ const nextConfig: NextConfig = {
   // project (local use) and chromium-min downloads its build at run time (Vercel).
   serverExternalPackages: ['playwright', 'playwright-core', '@sparticuz/chromium-min'],
   // The capture route reads the banner selectors from disk at run time, and Playwright reads files the
-  // tracer can't see (e.g. playwright-core/browsers.json), so ship both packages whole (~11 MB).
+  // tracer can't see (e.g. playwright-core/browsers.json), so both routes that drive the browser ship
+  // both packages whole (~11 MB); without them the route fails to load on Vercel.
   outputFileTracingIncludes: {
     '/api/capture': ['./lib/capture/banners.css', './node_modules/playwright/**/*', './node_modules/playwright-core/**/*'],
+    '/api/pages': ['./node_modules/playwright/**/*', './node_modules/playwright-core/**/*'],
   },
   // The dev badge sits over the Frame panel's shadow chips.
   devIndicators: false,

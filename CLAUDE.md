@@ -63,7 +63,9 @@ npx playwright install chromium          # once per machine, for URL capture and
   read at run time), `options.ts` + `selectors.ts` (option and hide-selector validation), `auth.ts`
   (basic-auth credentials: per request, origin-bound, never stored), `recapture.ts` + `jobs.ts`
   (re-capture keeping framing, desktop + phone), `client.ts`; route in `app/api/capture/route.ts`.
-  `CAPTURE_DEBUG=1` logs timings, memory and free `/tmp` space (`memory.ts`).
+  `CAPTURE_DEBUG=1` logs timings, memory and free `/tmp` space (`memory.ts`). `NEXT_PUBLIC_CAPTURE=off`
+  switches capture off for a deployment (`switch.ts`, read at build time): the editor hides every way in,
+  the routes refuse.
 - `lib/projects/` projects library and sync: `model.ts` pure rules (store layout, `planSync`, names,
   upload rules), `local.ts` projects in IndexedDB (the autosave is the open project's canvas; migrates
   the old single autosave), `library.ts` `useProjects` (list, actions, background sync), `api.ts`
