@@ -2,7 +2,7 @@
 import { useEffect, useId, useRef, useState, type KeyboardEvent } from 'react';
 import { statusOf, useProjects } from '@/lib/projects/library';
 import { readThumb } from '@/lib/projects/local';
-import { editedAgo, megabytes, type LocalProject } from '@/lib/projects/model';
+import { editedAgo, listedProjects, megabytes, type LocalProject } from '@/lib/projects/model';
 import { NameInput } from './ProjectsControl';
 
 /* The projects list: a sheet over the editor with a card per project (thumbnail, name, last edited)
@@ -31,6 +31,7 @@ function Sheet() {
   const uid = useId();
   const status = statusOf({ ...useProjects.getState(), items, mode, phase, transfer, pendingDeletes });
   const openingName = opening ? items.find((p) => p.id === opening)?.name : null;
+  const shown = listedProjects(items, mode);
 
   // Focus the open project's card; give focus back to whatever opened the sheet.
   useEffect(() => {
@@ -118,7 +119,7 @@ function Sheet() {
           {status.detail}
         </p>
         <ul className="proj-grid" ref={listRef} aria-label="Your projects">
-          {items.map((p, i) => (
+          {shown.map((p, i) => (
             <Card key={p.id} p={p} current={p.id === currentId} now={now} syncOn={mode === 'blob' || mode === 'local'} busy={!!opening} opening={opening === p.id} onDeleted={() => focusAfter(i)} />
           ))}
         </ul>
