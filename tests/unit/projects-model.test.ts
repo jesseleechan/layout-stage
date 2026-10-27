@@ -4,7 +4,7 @@ import { describe, expect, it } from 'vitest';
 import { defaultComposition } from '@/lib/arrange';
 import {
   copyName, deviceCopyName, editedAgo, fileType, imageFileName, imageIdOf, mergeImages, planSync, projectImageIds, referencedImageIds,
-  revisionOf, sanitizeRemote, syncStatus, thumbDue, THUMB_UPLOAD_GAP, untitledName, uploadRule, type LocalProject, type RemoteProject,
+  listedProjects, revisionOf, sanitizeRemote, syncStatus, thumbDue, THUMB_UPLOAD_GAP, untitledName, uploadRule, type LocalProject, type RemoteProject,
 } from '@/lib/projects/model';
 
 const P = 'prj_00000000-aaaa';
@@ -148,9 +148,17 @@ describe('thumbnails', () => {
   });
 });
 
+describe('the projects list', () => {
+  it('leaves out projects on another device while sync is off, and only then', () => {
+    const items = [{ id: 'a' }, { id: 'b', stub: true }, { id: 'c', stub: false }];
+    expect(listedProjects(items, 'off').map((p) => p.id)).toEqual(['a', 'c']);
+    for (const mode of ['blob', 'local', null] as const) expect(listedProjects(items, mode)).toEqual(items);
+  });
+});
+
 describe('status', () => {
   it('says what the user needs to know', () => {
-    expect(syncStatus('off', 'idle', true).label).toBe('Sync off');
+    expect(syncStatus('off', 'idle', true).label).toBe('Saved in this browser');
     expect(syncStatus('blob', 'offline', false).label).toBe('Offline');
     expect(syncStatus('blob', 'syncing', false).label).toBe('Syncing…');
     expect(syncStatus('blob', 'idle', true).label).toBe('Saved on this device');

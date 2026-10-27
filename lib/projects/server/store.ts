@@ -1,7 +1,8 @@
 /* The project store behind /api/projects: a private Vercel Blob store when the deployment has
    BLOB_READ_WRITE_TOKEN (blob-store.ts, the only code that talks to Vercel Blob), else files on disk
-   for development and tests (fs-store.ts, PROJECTS_STORE_DIR, default .data/sync). On Vercel without
-   a token, or with PROJECTS_STORE_DIR=off, there is no store: projects stay in each browser. Server only. */
+   for development and tests (fs-store.ts, PROJECTS_STORE_DIR, default .data/sync). With
+   PROJECTS_SYNC=off (even with a Blob store connected), on Vercel without a token, or with
+   PROJECTS_STORE_DIR=off, there is no store: projects stay in each browser. Server only. */
 
 export type StoreKind = 'blob' | 'local';
 
@@ -44,6 +45,7 @@ export interface ProjectStore {
 let pending: Promise<ProjectStore | null> | null = null;
 
 export function storeKind(): StoreKind | null {
+  if (process.env.PROJECTS_SYNC === 'off') return null;
   if (process.env.BLOB_READ_WRITE_TOKEN) return 'blob';
   if (process.env.VERCEL || process.env.PROJECTS_STORE_DIR === 'off') return null;
   return 'local';

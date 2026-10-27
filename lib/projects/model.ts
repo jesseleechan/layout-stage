@@ -304,9 +304,14 @@ export interface StatusView {
   detail: string;
 }
 
+/** The projects the list shows. With sync off, ones only listed from another device (stubs) can't be
+ *  opened here, so they're left out; they stay stored and come back if sync is switched on again. */
+export const listedProjects = <P extends Pick<LocalProject, 'stub'>>(items: P[], mode: SyncMode | null): P[] =>
+  mode === 'off' ? items.filter((p) => !p.stub) : items;
+
 /** What the projects control says about sync. */
 export function syncStatus(mode: SyncMode | null, phase: SyncPhase, pending: boolean): StatusView {
-  if (mode === 'off') return { key: 'off', label: 'Sync off', detail: 'Sync is off on this server, so projects are saved in this browser only.' };
+  if (mode === 'off') return { key: 'off', label: 'Saved in this browser', detail: 'Projects are saved in this browser only: sync is off on this site.' };
   if (phase === 'offline') return { key: 'offline', label: 'Offline', detail: 'Saved on this device. Changes sync when you’re back online.' };
   if (phase === 'syncing') return { key: 'syncing', label: 'Syncing…', detail: 'Syncing your projects with your other devices.' };
   if (phase === 'error') return { key: 'local', label: 'Saved on this device', detail: 'Saved on this device. Couldn’t sync just now, trying again soon.' };

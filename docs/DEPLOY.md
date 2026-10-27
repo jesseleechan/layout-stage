@@ -13,7 +13,7 @@ URL capture is one serverless function, `/api/capture`, that drives a real Chrom
 | Capture size | Always PNG | PNG up to 4 MB; bigger captures come back as WebP slices that the editor joins into one PNG (Vercel caps a function's response at 4.5 MB) |
 | WebGL | On | Off (software WebGL on one vCPU stalls for minutes on animated 3D pages) |
 | Password gate | Off unless `ACCESS_PASSWORD` is set | On when `ACCESS_PASSWORD` is set |
-| Projects sync | Files under `.data/sync` (`PROJECTS_STORE_DIR`; `off` turns it off) | Private Blob store `layout-stage-projects` via `BLOB_READ_WRITE_TOKEN`; without it the editor shows "Sync off" |
+| Projects sync | Files under `.data/sync` (`PROJECTS_STORE_DIR`; `off` turns it off) | Private Blob store `layout-stage-projects` via `BLOB_READ_WRITE_TOKEN`; without it, or with `PROJECTS_SYNC=off`, projects stay in each browser ("Saved in this browser") |
 
 The switch is automatic: `lib/capture/server.ts` uses the serverless Chromium whenever `VERCEL` (set by
 Vercel) or `CHROMIUM_PACK_URL` is present. Every connection the capture browser makes still goes
@@ -40,6 +40,7 @@ scratch:
    | `CAPTURE_DEBUG` | `1` | Optional. Logs each capture's timings, memory and free `/tmp` space in the function logs. |
    | `NEXT_PUBLIC_CAPTURE` | `off` | Optional. Switches URL capture off: the editor offers uploads only and the capture routes refuse, so no browser runs (it's the heaviest use of a function's CPU time). Delete it and redeploy to switch capture back on. |
    | `BLOB_READ_WRITE_TOKEN` | Set by Vercel when the Blob store is connected to the project | Connect the `layout-stage-projects` store for Production **and** Preview (Storage → the store → Projects). |
+   | `PROJECTS_SYNC` | `off` | Optional. Switches projects sync off: projects stay in each browser and the Blob store goes unused (it stays connected, nothing in it is deleted). Delete it and redeploy to sync again. |
 
    Environment variable changes take effect on the next deployment.
 4. Deploy: push to `main` (or use **Redeploy** in the dashboard).
