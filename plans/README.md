@@ -16,6 +16,9 @@ Each plan is self-contained: an executor needs only the plan file and the repo.
 | [004](004-site-pages-malformed-links.md) | One badly escaped link no longer breaks whole-site capture | P2 | S | — | TODO |
 | [005](005-storage-failure-warning.md) | The editor says so when the browser can't save | P2 | S | — (apply after 001 and 002) | TODO |
 | [006](006-ci-hardening.md) | CI can't go green with the browser tests skipped; the goldens job keeps its token to itself | P2 | S | — (apply after 004) | TODO |
+| [007](007-pin-text-in-exports.md) | Feature: the export zips carry the pin text for each image | P2 | S | — | TODO |
+| [008](008-stack-layout-preset.md) | Feature: a new layout preset, "Stack" (one page in front, the others behind it) | P2 | M | — (owner reviews the look before merging) | TODO |
+| [009](009-project-file-download-open.md) | Feature: download a project as a file, and open one | P2 | M | 002 (apply after 001 and 002) | TODO |
 
 Status values: TODO | IN PROGRESS | DONE | BLOCKED (with one-line reason) | REJECTED (with one-line rationale — finding fixed independently or approach abandoned)
 
@@ -28,6 +31,11 @@ Status values: TODO | IN PROGRESS | DONE | BLOCKED (with one-line reason) | REJE
 - 003 changes what production does: it needs the operator to set an environment variable in Vercel
   first, or the site answers 503 after the merge.
 - 003, 004 and 006 are independent of the rest and can run in parallel with 001.
+- 007 and 008 are independent of everything else. 007 changes two e2e expectations and 008 two more;
+  CI confirms those.
+- 009 needs 002's non-throwing sanitizer and edits `lib/projects/library.ts` after 001 and 002.
+- Plans 001–006 are fixes (written against `9e6961d`); 007–009 are features (written against
+  `0cab4ee`, which differs from `9e6961d` only by this `plans/` directory).
 
 ## How this was audited
 
@@ -69,22 +77,27 @@ Ask the advisor for a plan (`plan <description>`) when one of these is wanted.
 | Small leaks on error paths (ImageBitmaps, export canvases) | bug | S | `lib/capture/client.ts:137`; `components/ExportSheet.tsx:145-149` | |
 | Update goldens shows only a file list, not the changed images | dx | S | `.github/workflows/update-goldens.yml:60` | |
 
-## Direction (options for the maintainer, not ranked against the above)
+## Feature suggestions
 
-- **Batch Etsy listing sets across projects.** `docs/HANDOFF.md:346` calls batch export "likely the
-  biggest time-saver after v1"; `etsySet` (`lib/sets.ts:190-218`), the ZIP writer and the projects
-  library exist, but nothing loops over projects. Rendering many 3000 × 2250 images in one tab is the
-  memory risk. M–L; start with a spike in the Projects sheet.
-- **Decide the fate of the hidden overlays and saved styles.** The headline/badge/watermark model,
-  renderer and goldens are kept and tested, and `saveStyle`/`applyStyle` (`lib/store.ts:603-631`) have
-  no caller in `components/`. Either bring back a small "Brand" section (logo watermark plus a saved
-  look) or delete the code and its goldens. The panels were removed on purpose, so this is a choice.
-- **Export and import a project as a file.** With sync off or suspended, projects live in one browser
-  only (`docs/DEPLOY.md:16`, `:95`); `lib/zip.ts` writes but nothing reads. A project ZIP
-  (`composition.json` plus images) through the existing sanitizer would be a backup and a hand-off. M.
-- **Put the suggested pin text in the export ZIP.** `lib/pin-text.ts` already produces title,
-  description, alt text and link; today they are copied by hand per pin. A `.txt` beside each image
-  is an S.
+Planned (see the table above): pin text in the export zips (007), the Stack layout preset (008),
+project files (009).
+
+Not planned yet. Each needs a decision from the owner first; ask the advisor for a plan
+(`plan <description>`) once decided.
+
+| Suggestion | What it is | Evidence in the repo | Effort | What has to be decided |
+|---|---|---|---|---|
+| Looks: one-click styles | A row of the nine built-in looks (Blush mesh, Gallery white, Midnight, Sage paper, Poster, Dusk, Slate, Concrete, Editorial), plus "save this look" | `STYLES` in `lib/model.ts:195-244`; `applyStyle` / `saveStyle` / `deleteStyle` in `lib/store.ts:603-631` have no caller in `components/` | S | The Styles panel was removed on purpose in PR #5. Bring it back as a compact row in the Canvas tab, or delete the unused looks and saved-style code |
+| Text and logo: headline, badge, watermark | A small "Brand" section: logo watermark on/off and corner, headline text | The overlay model, renderer and goldens are kept and tested (`lib/overlays.ts`, `lib/render/overlays.ts`, `tests/e2e/golden-overlays.spec.ts`); PR #5 says they "can come back in a later typography pass" | M | Which controls, and which fonts. This is the typography pass the code is waiting for |
+| Batch Etsy sets across projects | Pick projects in the Projects sheet, get one zip of listing photos per project | `docs/HANDOFF.md:346` ("likely the biggest time-saver after v1"); `etsySet` in `lib/sets.ts:190-218`; nothing loops over projects | M–L | One zip per project or folders in one zip; whether a shared look is applied. Many 3000 × 2250 renders in one tab is the memory risk |
+| A Stack take in Variations | One of the six variations uses the new Stack layout | `RECIPES` in `lib/variations.ts:26-33` | S | Which existing take it replaces. Do after 008 |
+| More canvas sizes | For example a 16:9 landscape (1920 × 1080) for site and blog images, next to pin, 9:16, Etsy 4:3, Etsy 1:1 and 4:5 | `PRESETS` in `lib/model.ts:149-156`; "Custom size…" already covers any size by hand | S | Which sizes are used often enough to deserve a preset |
+| Tilted layouts | The whole group rotated a few degrees, running off the canvas, a common template-mockup look | No rotation exists anywhere (`Slot` in `lib/model.ts:26-40`); preview and export would both need it (the core rule) | L | Whether the look is wanted enough: it touches dragging, snapping and both renderers |
+| Phone frame for phone pages | A thicker dark border and rounder corners on phone captures only | The frame is one setting for all layouts (`Composition.frame`); phone pages are already detected (`isPhonePage` in `lib/arrange.ts:119-121`) | M | Per-layout frames change the model and both renderers. A browser window bar was tried and dropped before (`lib/persist.ts:85-87`), so decide whether device chrome is wanted at all |
+
+Considered and not suggested: "One page" continued across three columns (at three-column width a
+typical page is about as tall as one column, so it would rarely apply); more grid shapes (Framed,
+Split and Bento already cover the cell layouts for three layouts).
 
 ## Findings considered and rejected
 
