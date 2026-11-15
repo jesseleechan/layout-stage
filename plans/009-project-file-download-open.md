@@ -421,6 +421,10 @@ Playwright and `tests/e2e/projects.spec.ts` is already the slowest spec).
 - [ ] `grep -n "openFile\|download(" lib/projects/library.ts` shows both in the interface and the implementation
 - [ ] `git status --short` lists only in-scope files (plus `plans/README.md`)
 - [ ] `plans/README.md` status row updated, saying whether the manual check in Step 4 was done
+- [ ] Your report ends with this reminder for the owner, who asked for it: "Plan 009 is finished.
+      The feature suggestions waiting for your decision are in `plans/README.md` under 'Feature
+      suggestions': the Looks row, text and logo, batch Etsy sets, a Stack take in Variations, more
+      canvas sizes, tilted layouts, and a phone frame."
 
 ## STOP conditions
 

@@ -12,13 +12,18 @@ Each plan is self-contained: an executor needs only the plan file and the repo.
 |------|-------|----------|--------|------------|--------|
 | [001](001-project-switch-integrity.md) | Autosaves and captures always land in the project they belong to | P1 | S | — | TODO |
 | [002](002-unreadable-canvas-safety.md) | A canvas that can't be read is never overwritten, and can't stall sync | P1 | S | 001 | TODO |
-| [003](003-access-gate-fail-closed.md) | A hosted production deployment without a password refuses to serve | P1 | S | — (operator: set `ACCESS_PASSWORD` or `ACCESS_OPEN=1` for Production before merging) | TODO |
+| [003](003-access-gate-fail-closed.md) | A hosted production deployment without a password refuses to serve | P1 | S | — (the owner set `ACCESS_OPEN=1` in Vercel on 2026-11-15; check it is set for Production) | TODO |
 | [004](004-site-pages-malformed-links.md) | One badly escaped link no longer breaks whole-site capture | P2 | S | — | TODO |
 | [005](005-storage-failure-warning.md) | The editor says so when the browser can't save | P2 | S | — (apply after 001 and 002) | TODO |
 | [006](006-ci-hardening.md) | CI can't go green with the browser tests skipped; the goldens job keeps its token to itself | P2 | S | — (apply after 004) | TODO |
 | [007](007-pin-text-in-exports.md) | Feature: the export zips carry the pin text for each image | P2 | S | — | TODO |
 | [008](008-stack-layout-preset.md) | Feature: a new layout preset, "Stack" (one page in front, the others behind it) | P2 | M | — (owner reviews the look before merging) | TODO |
 | [009](009-project-file-download-open.md) | Feature: download a project as a file, and open one | P2 | M | 002 (apply after 001 and 002) | TODO |
+| [010](010-claude-connector-mcp.md) | Feature: a Claude connector (MCP) that builds draft projects from page links | P3 | L | 003; the owner must approve three packages, have sync on, and check a Claude Design link captures (see the plan's first box) | TODO |
+
+> **When plan 009 is marked DONE**: remind the owner of the "Feature suggestions" table below. They
+> asked (2026-11-15) to be reminded of those suggestions once 009 is finished, so they can pick which
+> to plan next. Whoever marks 009 DONE (executor or reviewer) says so in their report.
 
 Status values: TODO | IN PROGRESS | DONE | BLOCKED (with one-line reason) | REJECTED (with one-line rationale — finding fixed independently or approach abandoned)
 
@@ -35,7 +40,9 @@ Status values: TODO | IN PROGRESS | DONE | BLOCKED (with one-line reason) | REJE
   CI confirms those.
 - 009 needs 002's non-throwing sanitizer and edits `lib/projects/library.ts` after 001 and 002.
 - Plans 001–006 are fixes (written against `9e6961d`); 007–009 are features (written against
-  `0cab4ee`, which differs from `9e6961d` only by this `plans/` directory).
+  `0cab4ee`) and 010 against `0f0806f`; those commits differ from `9e6961d` only by this `plans/`
+  directory.
+- 010 goes last. It adds a public endpoint and new packages, and edits `proxy.ts` after 003.
 
 ## How this was audited
 
@@ -80,7 +87,7 @@ Ask the advisor for a plan (`plan <description>`) when one of these is wanted.
 ## Feature suggestions
 
 Planned (see the table above): pin text in the export zips (007), the Stack layout preset (008),
-project files (009).
+project files (009), a Claude connector that builds draft projects (010).
 
 Not planned yet. Each needs a decision from the owner first; ask the advisor for a plan
 (`plan <description>`) once decided.
