@@ -71,6 +71,19 @@ export function updateLocal(change: (s: LocalIndex) => void): Promise<boolean> {
   return run;
 }
 
+/** Makes another project the open one. `show` puts its canvas in the editor and runs in the same tick
+ *  as the id change, so an autosave never finds one project's id with another project's canvas. */
+export function switchOpenProject(id: string, show: () => void): Promise<boolean> {
+  if (!state) {
+    show();
+    return Promise.resolve(false);
+  }
+  return updateLocal((s) => {
+    s.currentId = id;
+    show();
+  });
+}
+
 let defaultJson = '';
 /** Whether a canvas is still the one a new project starts with. */
 export function isDefaultDoc(doc: Composition | null): boolean {

@@ -379,6 +379,8 @@ export const useProjects = create<ProjectsState>()((set, get) => {
     // Only the name changed (or nothing): the open canvas and its undo history stay as they are.
     const sameCanvas = JSON.stringify(doc) === JSON.stringify(await L.readDoc(id));
     const isOpen = index()?.currentId === id && !sameCanvas;
+    // A capture is on its way to this canvas: take the store's copy at the next check instead.
+    if (isOpen && useEditor.getState().captureJobs.length) return;
     if (isOpen) {
       const lost = await fetchImages(id, f.project.name, doc, f.files, f.project.images);
       if (lost) toast(`${lost === 1 ? 'An image' : `${lost} images`} from another device couldn’t be downloaded.`);
@@ -551,10 +553,7 @@ export const useProjects = create<ProjectsState>()((set, get) => {
 
   /** Shows a project that's on this device. */
   const show = async (id: string, doc: Composition) => {
-    await L.updateLocal((s) => {
-      s.currentId = id;
-    });
-    useEditor.getState().showProject(doc);
+    await L.switchOpenProject(id, () => useEditor.getState().showProject(doc));
     thumbStale = !L.findLocal(id)?.thumbAt;
     if (thumbStale) scheduleThumb();
   };
@@ -643,6 +642,10 @@ export const useProjects = create<ProjectsState>()((set, get) => {
 
     async create() {
       if (get().opening || !index()) return;
+      if (useEditor.getState().captureJobs.length) {
+        toast('Wait for the capture to finish, then switch projects.');
+        return;
+      }
       await leaveCurrent();
       await newProject();
       set({ sheetOpen: false });

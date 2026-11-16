@@ -836,6 +836,8 @@ export const useEditor = create<EditorState>()((set, get) => {
       set({
         doc: clone(doc),
         guides: { gx: null, gy: null },
+        // Captures in flight belong to the project being left: their images are dropped (lib/capture/jobs.ts).
+        captureJobs: [],
         ui: { ...get().ui, selected: null, exportScale: PRESETS[doc.preset].scale, showSafeArea: PRESETS[doc.preset].safe === 'etsy' },
       });
       syncHistory();

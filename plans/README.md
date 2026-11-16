@@ -10,7 +10,7 @@ Each plan is self-contained: an executor needs only the plan file and the repo.
 
 | Plan | Title | Priority | Effort | Depends on | Status |
 |------|-------|----------|--------|------------|--------|
-| [001](001-project-switch-integrity.md) | Autosaves and captures always land in the project they belong to | P1 | S | — | TODO |
+| [001](001-project-switch-integrity.md) | Autosaves and captures always land in the project they belong to | P1 | S | — | DONE |
 | [002](002-unreadable-canvas-safety.md) | A canvas that can't be read is never overwritten, and can't stall sync | P1 | S | 001 | TODO |
 | [003](003-access-gate-fail-closed.md) | A hosted production deployment without a password refuses to serve | P1 | S | — (the owner set `ACCESS_OPEN=1` in Vercel on 2026-11-15; check it is set for Production) | TODO |
 | [004](004-site-pages-malformed-links.md) | One badly escaped link no longer breaks whole-site capture | P2 | S | — | TODO |

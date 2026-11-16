@@ -35,6 +35,8 @@ export async function runJob(job: number, spec: CaptureSpec, how: { keepFraming?
     const st = S();
     // The target layout follows its image, in case layouts were removed or reordered meanwhile.
     const running = st.captureJobs.find((j) => j.id === job);
+    // Another project was opened meanwhile (store.showProject ends its jobs): this image isn't for it.
+    if (!running) return null;
     const targetId = running && captureJobSlot(st.doc, running) != null ? running.targetId : null;
     const source: SlotSource = {
       kind: 'url',
@@ -167,11 +169,16 @@ export async function captureSite(list: Pick<SitePage, 'url'>[], options: Captur
   for (const { url, job } of jobs) {
     const ctl = siteJobs.get(job)!;
     try {
-      if (ctl.signal.aborted) {
+      const live = () => S().captureJobs.some((j) => j.id === job);
+      if (ctl.signal.aborted || !live()) {
         stopped++;
         continue;
       }
       const { blob, trimmed, finalUrl } = await captureUrl(url, options, ctl.signal, auth);
+      if (!live()) {
+        stopped++;
+        continue;
+      }
       const source: SlotSource = { kind: 'url', url, capturedAt: new Date().toISOString(), options, ...(auth ? { needsPassword: true } : {}) };
       if (await S().landMedia({ blob, name: captureName(finalUrl), source })) {
         done++;
