@@ -12,6 +12,8 @@
      (a phone's for phone pages): 1 = the page a little wider than the canvas, running off its sides
      and bottom ("Close-up"); 2 = the page and one in front of its lower right edge ("Inset"); 3 = the
      page centered, one in front of each edge, the left one higher ("Spotlight").
+   - stack: the first page whole and in front, the others behind it, each narrower and starting a
+     little higher, so their tops show above it ("Stack"); one layout is the Scroll.
    - classic, the prototype's cascades: no longer offered, kept for canvases saved with them.
    With the headline on at the top or bottom, the layouts start in the part of the canvas it leaves,
    measured with the overlay layout the renderer draws. */
@@ -70,6 +72,14 @@ const SPOTLIGHT: Record<Kind, { top: number; leadW: number; leadL: number; lead3
   sq: { top: 0.09, leadW: 0.64, leadL: 0.08, lead3W: 0.56, w: 0.38, phoneW: 0.24, three: 0.82, side: 0.07, bottom: 0.09, lift: 0.16 },
   land: { top: 0.09, leadW: 0.52, leadL: 0.1, lead3W: 0.46, w: 0.3, phoneW: 0.17, three: 0.86, side: 0.09, bottom: 0.09, lift: 0.16 },
 };
+/** Stack: the front page's width (a phone capture's) and the top of the page furthest back; how much
+ *  lower each page in front of another starts (a fraction of the canvas height); and how much
+ *  narrower each page behind is (a fraction of the front page's width). */
+const STACK: Record<Kind, { w: number; phoneW: number; top: number; peek: number; shrink: number }> = {
+  port: { w: 0.78, phoneW: 0.46, top: 0.07, peek: 0.05, shrink: 0.1 },
+  sq: { w: 0.7, phoneW: 0.4, top: 0.08, peek: 0.055, shrink: 0.1 },
+  land: { w: 0.56, phoneW: 0.3, top: 0.08, peek: 0.06, shrink: 0.1 },
+};
 /** The close-up page's width: past both sides of the canvas by about a site's usual side padding. */
 const CLOSE_W = 1.1;
 /** The share of a layout in front's width that lies over the lead page, at least. */
@@ -98,23 +108,25 @@ export const arrangementOf = (doc: Pick<Composition, 'arrangement'>): Arrangemen
 export const showcaseCrop = 'full' as const;
 
 /** The layout presets offered for n layouts, in order ('classic' no longer is), and their names.
- *  'columns' differs from showcase only with three, so it is only offered then. */
-export const presetArrangements = (n: 1 | 2 | 3): Arrangement[] => (n === 3 ? ['showcase', 'columns', 'grid', 'spotlight'] : ['showcase', 'grid', 'spotlight']);
+ *  'columns' differs from showcase only with three; 'stack' needs a page behind, so it starts at two. */
+export const presetArrangements = (n: 1 | 2 | 3): Arrangement[] =>
+  n === 3 ? ['showcase', 'columns', 'stack', 'grid', 'spotlight'] : n === 2 ? ['showcase', 'stack', 'grid', 'spotlight'] : ['showcase', 'grid', 'spotlight'];
 export const ARRANGEMENT_NAMES: Record<Arrangement, Record<1 | 2 | 3, string>> = {
   showcase: { 1: 'Scroll', 2: 'Columns', 3: 'Editorial' },
   columns: { 1: 'Scroll', 2: 'Columns', 3: 'Columns' },
+  stack: { 1: 'Scroll', 2: 'Stack', 3: 'Stack' },
   grid: { 1: 'Framed', 2: 'Split', 3: 'Bento' },
   spotlight: { 1: 'Close-up', 2: 'Inset', 3: 'Spotlight' },
   classic: { 1: 'Centered', 2: 'Cascade', 3: 'Cascade' },
 };
-/** The preset an arrangement shows as with n layouts: below three, columns is showcase. */
-export const presetOf = (a: Arrangement, n: 1 | 2 | 3): Arrangement => (a === 'columns' && n < 3 ? 'showcase' : a);
+/** The preset an arrangement shows as with n layouts: below three, columns is showcase; below two, stack is showcase. */
+export const presetOf = (a: Arrangement, n: 1 | 2 | 3): Arrangement => ((a === 'columns' && n < 3) || (a === 'stack' && n < 2) ? 'showcase' : a);
 
 /** Shows whole pages that run off the canvas (crop 'full'): showcase and columns. */
 export const showsWholePages = (a: Arrangement) => a === 'showcase' || a === 'columns';
 /** Layout i shows its page whole, keeping its top edge when its crop changes: in showcase and
- *  columns, and spotlight's lead page. */
-export const runsOff = (a: Arrangement, i: number) => showsWholePages(a) || (a === 'spotlight' && i === 0);
+ *  columns, every page of a stack, and spotlight's lead page. */
+export const runsOff = (a: Arrangement, i: number) => showsWholePages(a) || a === 'stack' || (a === 'spotlight' && i === 0);
 
 const isPhoneCapture = (s: Slot) => s.source.kind === 'url' && s.source.options.width === 390;
 /** Phone pages: captured at phone width, or narrow screenshots. */
@@ -355,6 +367,17 @@ function spotlightSpots(doc: Composition, n: 1 | 2 | 3, room: Room): Placed[] {
   return spots.map((p) => ({ ...p, cx: p.cx + (W - l - r) / 2 }));
 }
 
+/** Stack: layout 1 in front; layout k + 1 is k pages behind it, narrower by `shrink` each and
+ *  starting `peek` higher each, all on the canvas's center line. */
+function stackSpots(doc: Composition, n: 2 | 3, room: Room): Placed[] {
+  const { W, H } = doc;
+  const P = STACK[canvasKind(W, H)];
+  const w = (isPhoneCapture(doc.slots[0]) ? P.phoneW : P.w) * W;
+  const top = Math.max(P.top * H, room.t);
+  const spots = doc.slots.slice(0, n).map((s, k) => fromTop(s, W / 2, top + (n - 1 - k) * P.peek * H, w * (1 - P.shrink * k)));
+  return centerShort(spots, room, W, H);
+}
+
 /**
  * Places the first n slots at their starting positions for the composition's arrangement and resets
  * the z-order. Mutates `doc` (positions and order; crops are the caller's, except in grid, where they
@@ -369,6 +392,7 @@ export function arrange(doc: Composition, n: 1 | 2 | 3 = doc.count, measure?: Me
   const spots =
     a === 'grid' ? gridCells(W, H, n, room).map((c, i) => fillCell(doc.slots[i], c))
     : a === 'spotlight' ? spotlightSpots(doc, n, room)
+    : a === 'stack' && n !== 1 ? stackSpots(doc, n, room)
     : a === 'classic' ? classicSpots(doc, n, room)
     : showcaseSpots(doc, n, room);
   spots.forEach((p, i) => {
@@ -378,9 +402,10 @@ export function arrange(doc: Composition, n: 1 | 2 | 3 = doc.count, measure?: Me
     s.cy = Math.round(p.cy);
   });
   // The editorial 3-up, and the classic one on square and landscape canvases, put the hero (layout 1
-  // in showcase, layout 2 in classic) in front of the other two.
+  // in showcase, layout 2 in classic) in front of the other two. A stack puts layout 1 in front and
+  // the last one at the back.
   const front = n === 3 && (a === 'showcase' || (a === 'classic' && canvasKind(W, H) !== 'port'));
-  const vis = front ? [1, 2, 0] : Array.from({ length: n }, (_, i) => i);
+  const vis = a === 'stack' ? Array.from({ length: n }, (_, i) => n - 1 - i) : front ? [1, 2, 0] : Array.from({ length: n }, (_, i) => i);
   doc.order = [...vis, ...[0, 1, 2].filter((i) => !vis.includes(i))];
 }
 

@@ -74,11 +74,12 @@ export interface Background {
 
 /** How arrange() starts the layouts (lib/arrange.ts). 'showcase': the pin looks, whole pages running
  *  off the canvas (1: one long page; 2: two columns; 3: a hero window in front of two others).
- *  'columns': showcase, with three as three columns. 'grid': the pages cropped to the cells of an
+ *  'columns': showcase, with three as three columns. 'stack': the first page whole and in front, the
+ *  others behind it, each narrower and starting higher. 'grid': the pages cropped to the cells of an
  *  even grid. 'spotlight': the first page whole and big, the others smaller in front of it.
  *  'classic': the prototype's cascades, no longer offered; kept for canvases saved with them. */
-export type Arrangement = 'showcase' | 'columns' | 'grid' | 'spotlight' | 'classic';
-export const ARRANGEMENTS: readonly Arrangement[] = ['showcase', 'columns', 'grid', 'spotlight', 'classic'];
+export type Arrangement = 'showcase' | 'columns' | 'stack' | 'grid' | 'spotlight' | 'classic';
+export const ARRANGEMENTS: readonly Arrangement[] = ['showcase', 'columns', 'stack', 'grid', 'spotlight', 'classic'];
 export const isArrangement = (a: unknown): a is Arrangement => ARRANGEMENTS.includes(a as Arrangement);
 
 export interface Placement {

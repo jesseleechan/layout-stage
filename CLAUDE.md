@@ -38,6 +38,7 @@ npx playwright install chromium          # once per machine, for URL capture and
 - `lib/arrange.ts` (starting positions, the layout presets: `showcase` Scroll / Columns / Editorial, whole
   pages running off the canvas, the default; `columns` three columns; `grid` Framed / Split / Bento, pages
   cropped to cells; `spotlight` Close-up / Inset / Spotlight, one page big and the others in front;
+  `stack` Stack, one page in front and the others behind it, each narrower and higher;
   `classic` cascades, no longer offered but kept for saved canvases; leaves room for a top/bottom
   headline via `layoutRoom`),
   `lib/canvas-size.ts` (switching canvas sizes keeps the work: per-size placements, re-arrange when fresh,

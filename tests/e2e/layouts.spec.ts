@@ -45,7 +45,7 @@ test.describe('layouts', () => {
     const count = (n: string) => page.getByRole('group', { name: 'Number of layouts' }).getByRole('button', { name: n }).click();
     const names = () => group.getByRole('button').evaluateAll((els) => els.map((e) => e.getAttribute('aria-label')));
     await expect(group.getByRole('button', { name: 'Columns' })).toHaveAttribute('aria-pressed', 'true');
-    expect(await names()).toEqual(['Columns', 'Split', 'Inset']);
+    expect(await names()).toEqual(['Columns', 'Stack', 'Split', 'Inset']);
     await group.getByRole('button', { name: 'Split' }).click();
     let d = await getDoc(page);
     expect([d.arrangement, ...d.slots.slice(0, 2).map((s) => s.crop)]).toEqual(['grid', 'custom', 'custom']);
@@ -54,7 +54,7 @@ test.describe('layouts', () => {
     expect([d.arrangement, ...d.slots.slice(0, 2).map((s) => s.crop)]).toEqual(['spotlight', 'full', '4:5']);
     await count('3');
     await expect(group.getByRole('button', { name: 'Spotlight' })).toHaveAttribute('aria-pressed', 'true');
-    expect(await names()).toEqual(['Editorial', 'Columns', 'Bento', 'Spotlight']);
+    expect(await names()).toEqual(['Editorial', 'Columns', 'Stack', 'Bento', 'Spotlight']);
     await group.getByRole('button', { name: 'Columns' }).click();
     d = await getDoc(page);
     expect([d.arrangement, ...d.slots.map((s) => s.crop)]).toEqual(['columns', 'full', 'full', 'full']);

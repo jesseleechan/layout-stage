@@ -49,11 +49,11 @@ const inside = (r: Rect, W: number, H: number, m = 0) => r.l >= m - 1 && r.t >= 
 const item = (id: string, nw = 1440, nh = 9000, source: Slot['source'] = { kind: 'file' }): MediaItem => ({ imageId: `img_${id}`, name: `${id}.png`, source, nw, nh });
 
 describe('the presets panel', () => {
-  it('offers no cascades: Scroll, Framed, Close-up; Columns, Split, Inset; Editorial, Columns, Bento, Spotlight', () => {
+  it('offers no cascades: Scroll, Framed, Close-up; Columns, Stack, Split, Inset; Editorial, Columns, Stack, Bento, Spotlight', () => {
     const names = (n: 1 | 2 | 3) => presetArrangements(n).map((a) => ARRANGEMENT_NAMES[a][n]);
     expect(names(1)).toEqual(['Scroll', 'Framed', 'Close-up']);
-    expect(names(2)).toEqual(['Columns', 'Split', 'Inset']);
-    expect(names(3)).toEqual(['Editorial', 'Columns', 'Bento', 'Spotlight']);
+    expect(names(2)).toEqual(['Columns', 'Stack', 'Split', 'Inset']);
+    expect(names(3)).toEqual(['Editorial', 'Columns', 'Stack', 'Bento', 'Spotlight']);
     for (const n of [1, 2, 3] as const) expect(presetArrangements(n)).not.toContain('classic');
   });
 
@@ -222,6 +222,84 @@ describe('spotlight', () => {
     expect(r.t + r.h).toBeCloseTo(before.t + before.h, 6);
     putImage(d, 0, item('lead', 1440, 3000));
     expect(d.slots[0].crop).toBe('full');
+  });
+});
+
+describe('stack', () => {
+  it('shows every layout whole, centered, with layout 1 in front and the last at the back', () => {
+    for (const kind of KINDS) {
+      const [W] = CANVASES[kind];
+      for (const n of [2, 3] as const) {
+        const d = pages(kind, 'stack', n);
+        for (const s of d.slots.slice(0, n)) {
+          expect(s.crop).toBe('full');
+          near(s.cx, W / 2);
+        }
+        const vis = d.order.filter((i) => i < n);
+        expect(vis[0]).toBe(n - 1);
+        expect(vis[vis.length - 1]).toBe(0);
+      }
+    }
+  });
+
+  it('makes each page behind narrower and higher, starting inside the canvas', () => {
+    for (const kind of KINDS) {
+      for (const n of [2, 3] as const) {
+        const rs = rects(pages(kind, 'stack', n));
+        expect(rs[n - 1].t).toBeGreaterThanOrEqual(0);
+        for (let k = 1; k < n; k++) {
+          expect(rs[k].w).toBeLessThan(rs[k - 1].w);
+          expect(rs[k].t).toBeLessThan(rs[k - 1].t);
+        }
+      }
+    }
+  });
+
+  it('spaces the tops evenly with three layouts', () => {
+    for (const kind of KINDS) {
+      const rs = rects(pages(kind, 'stack', 3));
+      expect(Math.abs((rs[0].t - rs[1].t) - (rs[1].t - rs[2].t))).toBeLessThanOrEqual(2);
+    }
+  });
+
+  it('lets long pages run off the bottom of the canvas', () => {
+    for (const kind of KINDS) {
+      const [, H] = CANVASES[kind];
+      const rs = rects(pages(kind, 'stack', 3));
+      expect(rs[0].t + rs[0].h).toBeGreaterThan(H);
+    }
+  });
+
+  it('falls back to Scroll with one layout', () => {
+    for (const kind of KINDS) {
+      expect(rects(pages(kind, 'stack', 1))).toEqual(rects(pages(kind, 'showcase', 1)));
+    }
+    expect(presetOf('stack', 1)).toBe('showcase');
+    expect(presetOf('stack', 2)).toBe('stack');
+  });
+
+  it('keeps stack when a saved canvas is sanitized', () => {
+    expect(sanitizeComposition(clone(pages('port', 'stack', 3)))?.arrangement).toBe('stack');
+  });
+
+  it('keeps a behind page top edge and width when its image is replaced', () => {
+    const d = pages('port', 'stack', 3);
+    const before = rectOf(d.slots[2]);
+    putImage(d, 2, item('x', 1440, 5000));
+    const after = rectOf(d.slots[2]);
+    near(after.t, before.t);
+    near(after.w, before.w);
+    expect(d.slots[2].crop).toBe('full');
+  });
+
+  it('re-arranges a fresh stack when switching canvas size', () => {
+    const d = pages('port', 'stack', 3);
+    expect(resizeCanvas(d, 2000, 2000, null)).toBe('arranged');
+    expect(isArranged(d, null)).toBe(true);
+  });
+
+  it('does not offer One page continuation for stack', () => {
+    expect(canContinuePage(pages('port', 'stack', 2), null)).toBe(false);
   });
 });
 
