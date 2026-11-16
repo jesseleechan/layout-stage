@@ -84,7 +84,8 @@ npx playwright install chromium          # once per machine, for URL capture and
   `RightPanel.tsx` (`LayoutPresets.tsx` live thumbnails drawn with `renderComposition`, then the selected
   layout), `Stage.tsx` (canvas + floating toolbar); `controls.tsx` holds the pill slider and `Tiles`
 - `proxy.ts` (Next 16's request interceptor, formerly `middleware.ts`): every request needs HTTP Basic
-  auth when `ACCESS_PASSWORD` is set (any user name)
+  auth when `ACCESS_PASSWORD` is set (any user name); a Vercel production deployment with neither
+  ACCESS_PASSWORD nor ACCESS_OPEN=1 answers 503
 
 ## Hosting
 

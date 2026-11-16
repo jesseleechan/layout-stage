@@ -6,7 +6,8 @@ next-env.d.ts
 test-results/
 playwright-report/
 .DS_Store
-.env*.local
+.env*
+!.env.example
 
 # local project store (lib/projects/server/fs-store.ts)
 .data/

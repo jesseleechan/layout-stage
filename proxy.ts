@@ -1,8 +1,8 @@
-/* Optional password gate for a hosted copy. A Vercel Hobby production domain is public, and
-   /api/capture would otherwise be an open screenshot service. When ACCESS_PASSWORD is set, every
-   request (pages, assets, /api/capture) needs HTTP Basic auth with that password and any user name;
-   the browser asks once and then sends it with every request to the site. Unset (local dev): no gate.
-   Next 16's request interceptor (formerly middleware); runs on Node. */
+/* Password gate for a hosted copy. Local dev and Vercel previews stay open when ACCESS_PASSWORD
+   is unset; a Vercel production deployment requires ACCESS_PASSWORD (or an explicit ACCESS_OPEN=1),
+   because without it both /api/capture and /api/projects (synced projects and their images) are open
+   to anyone with the URL. When ACCESS_PASSWORD is set, every request needs HTTP Basic auth with that
+   password and any user name. Next 16's request interceptor (formerly middleware); runs on Node. */
 import { createHash, timingSafeEqual } from 'node:crypto';
 
 export const ACCESS_REALM = 'Layout Stage';
@@ -21,9 +21,22 @@ export function basicAuthOk(header: string | null | undefined, password: string)
   return timingSafeEqual(sha256(decoded.slice(colon + 1)), sha256(password));
 }
 
+/** A production deployment on Vercel with no password and no explicit ACCESS_OPEN=1: it must not
+ *  serve, because without the gate the projects store and capture are open to anyone who has the URL. */
+export function gateMissing(env: Record<string, string | undefined> = process.env): boolean {
+  return env.VERCEL_ENV === 'production' && !env.ACCESS_PASSWORD && env.ACCESS_OPEN !== '1';
+}
+
+const NO_GATE =
+  'This deployment has no access password. Set ACCESS_PASSWORD in the Vercel project’s environment variables and redeploy (or ACCESS_OPEN=1 to run it without one).';
+
 export function proxy(request: Request): Response | undefined {
   const password = process.env.ACCESS_PASSWORD;
-  if (!password || basicAuthOk(request.headers.get('authorization'), password)) return undefined;
+  if (!password) {
+    if (!gateMissing()) return undefined;
+    return new Response(NO_GATE, { status: 503, headers: { 'Cache-Control': 'no-store', 'Content-Type': 'text/plain; charset=utf-8' } });
+  }
+  if (basicAuthOk(request.headers.get('authorization'), password)) return undefined;
   return new Response('Password required.', {
     status: 401,
     headers: {

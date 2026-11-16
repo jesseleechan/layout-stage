@@ -12,7 +12,7 @@ URL capture is one serverless function, `/api/capture`, that drives a real Chrom
 | Browser lifetime | One browser, reused, closed after 10 idle minutes | One browser per capture (it runs as a single process, which can't serve a second capture) |
 | Capture size | Always PNG | PNG up to 4 MB; bigger captures come back as WebP slices that the editor joins into one PNG (Vercel caps a function's response at 4.5 MB) |
 | WebGL | On | Off (software WebGL on one vCPU stalls for minutes on animated 3D pages) |
-| Password gate | Off unless `ACCESS_PASSWORD` is set | On when `ACCESS_PASSWORD` is set |
+| Password gate | Off unless `ACCESS_PASSWORD` is set | On when `ACCESS_PASSWORD` is set. Production refuses to serve (503) with neither `ACCESS_PASSWORD` nor `ACCESS_OPEN=1` |
 | Projects sync | Files under `.data/sync` (`PROJECTS_STORE_DIR`; `off` turns it off) | Private Blob store `layout-stage-projects` via `BLOB_READ_WRITE_TOKEN`; without it, or with `PROJECTS_SYNC=off`, projects stay in each browser ("Saved in this browser") |
 
 The switch is automatic: `lib/capture/server.ts` uses the serverless Chromium whenever `VERCEL` (set by
@@ -35,7 +35,8 @@ scratch:
 
    | Name | Value | When |
    | --- | --- | --- |
-   | `ACCESS_PASSWORD` | A long random password, letters and digits only (a password manager's generator is fine) | Before the site is reachable without a Vercel login, for example once you add a custom domain or change Deployment Protection. Set it for Production, and for Preview too if you like. |
+   | `ACCESS_PASSWORD` | A long random password, letters and digits only (a password manager's generator is fine) | **Required for Production** (set it before the first production deployment), unless you set `ACCESS_OPEN=1` below. Optional for Preview. |
+   | `ACCESS_OPEN` | `1` | Only if you want a production deployment with no password, relying on Vercel Authentication alone. Without it and without `ACCESS_PASSWORD`, production answers 503. |
    | `CHROMIUM_PACK_URL` | Optional. The URL of `chromium-v153.0.0-pack.x64.tar` | Only if you want to host the Chromium pack yourself (for example on Vercel Blob). The default is the asset on GitHub's v153.0.0 release of Sparticuz/chromium. |
    | `CAPTURE_DEBUG` | `1` | Optional. Logs each capture's timings, memory and free `/tmp` space in the function logs. |
    | `NEXT_PUBLIC_CAPTURE` | `off` | Optional. Switches URL capture off: the editor offers uploads only and the capture routes refuse, so no browser runs (it's the heaviest use of a function's CPU time). Delete it and redeploy to switch capture back on. |
@@ -48,13 +49,15 @@ scratch:
 ### The password gate
 
 `proxy.ts` (Next.js 16's request interceptor, formerly `middleware.ts`) checks every request: pages,
-scripts, images and `/api/capture`. When `ACCESS_PASSWORD` is set, the browser shows its own sign-in
-box. Enter any user name and the password, and the browser remembers it for the session. Without
-the right password the site answers `401`. While Vercel Authentication covers a deployment, you sign
-in to Vercel first and then enter the password.
+scripts, images, `/api/capture` and `/api/projects`. When `ACCESS_PASSWORD` is set, the browser shows
+its own sign-in box. Enter any user name and the password, and the browser remembers it for the
+session. Without the right password the site answers `401`. While Vercel Authentication covers a
+deployment, you sign in to Vercel first and then enter the password.
 
-Without a gate, a public deployment would let anyone use `/api/capture` as a free screenshot
-service on your account.
+A deployment reachable without the gate exposes two things: `/api/capture` as a free screenshot
+service on your account, and `/api/projects`, through which anyone could read, change and delete every
+synced project and fill the Blob store. That is why production now refuses to start serving without a
+password or an explicit `ACCESS_OPEN=1`.
 
 ## What to expect
 

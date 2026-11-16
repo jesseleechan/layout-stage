@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { ACCESS_REALM, basicAuthOk, proxy } from '@/proxy';
+import { ACCESS_REALM, basicAuthOk, gateMissing, proxy } from '@/proxy';
 
 const basic = (userPass: string) => `Basic ${Buffer.from(userPass, 'utf8').toString('base64')}`;
 
@@ -62,5 +62,43 @@ describe('proxy', () => {
   it('lets the request through with the right password', () => {
     vi.stubEnv('ACCESS_PASSWORD', 'hunter2');
     expect(proxy(req(basic('jesse:hunter2')))).toBeUndefined();
+  });
+  it('refuses to serve a Vercel production deployment that has no password', async () => {
+    vi.stubEnv('VERCEL_ENV', 'production');
+    vi.stubEnv('ACCESS_PASSWORD', '');
+    const res = proxy(req());
+    expect(res?.status).toBe(503);
+    expect(res?.headers.get('Cache-Control')).toBe('no-store');
+    expect(res?.headers.get('WWW-Authenticate')).toBeNull();
+    expect(await res?.text()).toContain('ACCESS_PASSWORD');
+  });
+  it('serves it open when ACCESS_OPEN is 1', () => {
+    vi.stubEnv('VERCEL_ENV', 'production');
+    vi.stubEnv('ACCESS_PASSWORD', '');
+    vi.stubEnv('ACCESS_OPEN', '1');
+    expect(proxy(req())).toBeUndefined();
+    vi.stubEnv('ACCESS_OPEN', 'true');
+    expect(proxy(req())?.status).toBe(503);
+    vi.stubEnv('ACCESS_OPEN', '0');
+    expect(proxy(req())?.status).toBe(503);
+  });
+  it('previews and local runs stay open without a password', () => {
+    vi.stubEnv('ACCESS_PASSWORD', '');
+    vi.stubEnv('VERCEL_ENV', 'preview');
+    expect(proxy(req())).toBeUndefined();
+    vi.stubEnv('VERCEL_ENV', undefined);
+    expect(proxy(req())).toBeUndefined();
+  });
+  it('with a password set, production asks for it as before', () => {
+    vi.stubEnv('VERCEL_ENV', 'production');
+    vi.stubEnv('ACCESS_PASSWORD', 'hunter2');
+    expect(proxy(req())?.status).toBe(401);
+    expect(proxy(req(basic('u:hunter2')))).toBeUndefined();
+  });
+  it('gateMissing checks production, password and ACCESS_OPEN', () => {
+    expect(gateMissing({ VERCEL_ENV: 'production' })).toBe(true);
+    expect(gateMissing({ VERCEL_ENV: 'production', ACCESS_PASSWORD: 'pw' })).toBe(false);
+    expect(gateMissing({ VERCEL_ENV: 'production', ACCESS_OPEN: '1' })).toBe(false);
+    expect(gateMissing({ VERCEL_ENV: 'preview' })).toBe(false);
   });
 });
