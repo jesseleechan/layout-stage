@@ -10,7 +10,7 @@
    copy of the list, and the last one to save it wins. */
 import { clone, type Composition } from '../model';
 import { defaultComposition } from '../arrange';
-import { deleteValue, getValue, loadComposition, sanitizeComposition, saveComposition, setValue } from '../persist';
+import { deleteValue, getValue, loadComposition, readValue, sanitizeComposition, saveComposition, setValue } from '../persist';
 import { newProjectId, referencedImageIds, untitledName, type LocalProject } from './model';
 
 const K_INDEX = 'projects';
@@ -95,6 +95,15 @@ export function isDefaultDoc(doc: Composition | null): boolean {
 export const findLocal = (id: string): LocalProject | undefined => state?.items.find((p) => p.id === id);
 
 export const readDoc = async (id: string): Promise<Composition | null> => sanitizeComposition(await getValue(K_DOC + id));
+/** A project's stored canvas, and why there is none: `missing` (never stored: a new blank project) or
+ *  `unreadable` (the read failed, or what is stored isn't a usable canvas). */
+export async function readStoredDoc(id: string): Promise<{ doc: Composition | null; state: 'ok' | 'missing' | 'unreadable' }> {
+  const r = await readValue(K_DOC + id);
+  if (!r.ok) return { doc: null, state: 'unreadable' };
+  if (r.value === undefined) return { doc: null, state: 'missing' };
+  const doc = sanitizeComposition(r.value);
+  return doc ? { doc, state: 'ok' } : { doc: null, state: 'unreadable' };
+}
 export const writeDoc = (id: string, doc: Composition): Promise<boolean> => setValue(K_DOC + id, clone(doc));
 export const readThumb = async (id: string): Promise<Blob | null> => {
   const v = await getValue<Blob>(K_THUMB + id);
@@ -121,7 +130,7 @@ export async function addLocalProject(p: Omit<LocalProject, 'createdAt' | 'updat
 /** Startup (the editor store's init): migrates the single autosave from before projects on first run,
  *  and returns the open project's canvas. `ok` is false when storage couldn't be read, so nothing
  *  stored is overwritten. */
-export async function openStartupProject(): Promise<{ ok: boolean; doc: Composition | null }> {
+export async function openStartupProject(): Promise<{ ok: boolean; doc: Composition | null; skipped?: string }> {
   const legacy = await loadComposition();
   if (!legacy.ok) return legacy;
   let idx = sanitizeIndex(await getValue(K_INDEX));
@@ -136,8 +145,15 @@ export async function openStartupProject(): Promise<{ ok: boolean; doc: Composit
   state = idx;
   let doc: Composition | null = null;
   const cur = idx.items.find((p) => p.id === idx!.currentId && !p.stub);
-  if (cur) doc = await readDoc(cur.id);
-  if (!cur || (!doc && !cur.dirty)) {
+  let broken = false;
+  if (cur) {
+    const r = await readStoredDoc(cur.id);
+    doc = r.doc;
+    broken = r.state === 'unreadable';
+  }
+  // The open project is gone, was never downloaded, or can't be read: open the latest one there is,
+  // else a new one. One that can't be read stays stored as it is.
+  if (!cur || (!doc && (!cur.dirty || broken))) {
     // The open project is gone or was never downloaded: open the latest one there is, else a new one.
     const recent = [...idx.items].filter((p) => !p.stub).sort((a, b) => b.updatedAt - a.updatedAt);
     let found: LocalProject | null = null;
@@ -156,7 +172,7 @@ export async function openStartupProject(): Promise<{ ok: boolean; doc: Composit
       s.currentId = found!.id;
     });
   }
-  return { ok: true, doc };
+  return { ok: true, doc, ...(broken && cur ? { skipped: cur.name } : {}) };
 }
 
 /** Autosave: every undo step of the open project. */

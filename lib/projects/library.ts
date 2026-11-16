@@ -489,45 +489,52 @@ export const useProjects = create<ProjectsState>()((set, get) => {
       const s = index()!;
       const plan = planSync(s.items, listing.projects, s.pendingDeletes);
       try {
+        let firstError: unknown = null;
         for (const a of plan) {
-          if (a.kind !== 'push' && a.kind !== 'adopt' && a.kind !== 'thumb' && a.kind !== 'refresh') setPhase('syncing');
-          switch (a.kind) {
-            case 'delete':
-              await api.deleteRemote(a.id);
-              await L.updateLocal((x) => {
-                x.pendingDeletes = x.pendingDeletes.filter((d) => d !== a.id);
-              });
-              break;
-            case 'pull':
-              await pull(a.id, a.remote);
-              break;
-            case 'fork':
-              if (!(await sameAsStore(a.id, a.remote))) await fork(a.id, a.remote);
-              break;
-            case 'drop':
-              await drop(a.id);
-              break;
-            case 'recreate':
-              await L.updateLocal((x) => {
-                const p = x.items.find((y) => y.id === a.id);
-                if (p) Object.assign(p, { rev: null, remoteImages: [], thumbRev: null });
-              });
-              break;
-            case 'adopt':
-              await adopt(a.remote);
-              break;
-            case 'refresh':
-              await L.updateLocal((x) => {
-                const p = x.items.find((y) => y.id === a.id);
-                if (p) Object.assign(p, { name: a.remote.name, updatedAt: a.remote.updatedAt, rev: a.remote.rev, createdAt: a.remote.createdAt });
-              });
-              if (a.remote.thumbRev !== L.findLocal(a.id)?.thumbRev) await fetchThumb(a.id, a.remote);
-              break;
-            case 'thumb':
-              await fetchThumb(a.id, a.remote);
-              break;
-            case 'push':
-              break; // pushes go through flush(), which spaces them out
+          try {
+            if (a.kind !== 'push' && a.kind !== 'adopt' && a.kind !== 'thumb' && a.kind !== 'refresh') setPhase('syncing');
+            switch (a.kind) {
+              case 'delete':
+                await api.deleteRemote(a.id);
+                await L.updateLocal((x) => {
+                  x.pendingDeletes = x.pendingDeletes.filter((d) => d !== a.id);
+                });
+                break;
+              case 'pull':
+                await pull(a.id, a.remote);
+                break;
+              case 'fork':
+                if (!(await sameAsStore(a.id, a.remote))) await fork(a.id, a.remote);
+                break;
+              case 'drop':
+                await drop(a.id);
+                break;
+              case 'recreate':
+                await L.updateLocal((x) => {
+                  const p = x.items.find((y) => y.id === a.id);
+                  if (p) Object.assign(p, { rev: null, remoteImages: [], thumbRev: null });
+                });
+                break;
+              case 'adopt':
+                await adopt(a.remote);
+                break;
+              case 'refresh':
+                await L.updateLocal((x) => {
+                  const p = x.items.find((y) => y.id === a.id);
+                  if (p) Object.assign(p, { name: a.remote.name, updatedAt: a.remote.updatedAt, rev: a.remote.rev, createdAt: a.remote.createdAt });
+                });
+                if (a.remote.thumbRev !== L.findLocal(a.id)?.thumbRev) await fetchThumb(a.id, a.remote);
+                break;
+              case 'thumb':
+                await fetchThumb(a.id, a.remote);
+                break;
+              case 'push':
+                break; // pushes go through flush(), which spaces them out
+            }
+          } catch (e) {
+            // Offline or cancelled: nothing else will work either. Anything else: go on with the rest.
+            if (e instanceof api.OfflineError || isBusyError(e)) throw e;
+            firstError ??= e;
           }
         }
         // Deleted here and already gone from the store.
@@ -537,7 +544,8 @@ export const useProjects = create<ProjectsState>()((set, get) => {
             x.pendingDeletes = x.pendingDeletes.filter((d) => live.has(d));
           });
         }
-        synced();
+        if (firstError) failed(firstError);
+        else synced();
       } catch (e) {
         failed(e);
       }

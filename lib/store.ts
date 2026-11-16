@@ -373,6 +373,7 @@ export const useEditor = create<EditorState>()((set, get) => {
         });
       } else history.reset(get().doc);
       set({ savedStyles: styles, hydrated: true });
+      if (loaded.skipped) toast(`“${loaded.skipped}” couldn’t be read in this browser, so another project is open. It hasn’t been changed.`);
       syncHistory();
       autosave = true;
       // A failed read isn't a first run: keep the stored canvas and images untouched.

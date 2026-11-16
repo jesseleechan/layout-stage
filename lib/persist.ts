@@ -1,6 +1,6 @@
 /* Autosave and saved styles, in IndexedDB. Browser only. */
 import { createStore, del, get, set, type UseStore } from 'idb-keyval';
-import { clone, isArrangement, PRESETS, type Composition, type Style } from './model';
+import { clone, isArrangement, PRESETS, type Composition, type SlotSource, type Style } from './model';
 import { defaultComposition } from './arrange';
 import { cleanSelectors } from './capture/selectors';
 import { sanitizePlacements } from './canvas-size';
@@ -33,6 +33,17 @@ export async function getValue<T>(key: string): Promise<T | undefined> {
     return undefined;
   }
 }
+/** Like getValue, but says whether the read worked: `ok` is false when storage is missing or the read
+ *  failed, so a caller doesn't mistake that for nothing being stored. */
+export async function readValue<T>(key: string): Promise<{ ok: boolean; value: T | undefined }> {
+  try {
+    const s = db();
+    if (!s) return { ok: false, value: undefined };
+    return { ok: true, value: (await get(key, s)) as T | undefined };
+  } catch {
+    return { ok: false, value: undefined };
+  }
+}
 export async function setValue(key: string, value: unknown): Promise<boolean> {
   try {
     const s = db();
@@ -55,8 +66,7 @@ export async function deleteValue(key: string): Promise<boolean> {
   }
 }
 
-/** Fills in anything missing from an older or partial save; rejects anything unusable. */
-export function sanitizeComposition(raw: unknown): Composition | null {
+function sanitize(raw: unknown): Composition | null {
   if (!raw || typeof raw !== 'object') return null;
   const r = raw as Partial<Composition>;
   if (!(typeof r.W === 'number' && typeof r.H === 'number' && r.W > 0 && r.H > 0)) return null;
@@ -80,6 +90,14 @@ export function sanitizeComposition(raw: unknown): Composition | null {
   } as Composition;
   if (!out.pin) delete out.pin;
   if (!out.placements) delete out.placements;
+  // A layout without a usable source (a hand-edited or damaged save) counts as an uploaded file.
+  for (const s of out.slots) {
+    const src = s.source as Partial<Extract<SlotSource, { kind: 'url' }>> | { kind?: unknown } | null | undefined;
+    const ok = !!src && typeof src === 'object' && (src.kind === 'sample' || src.kind === 'file' ||
+      (src.kind === 'url' && typeof (src as { url?: unknown }).url === 'string' && !!(src as { options?: unknown }).options && typeof (src as { options?: unknown }).options === 'object'));
+    if (!ok) s.source = { kind: 'file' };
+    if (typeof s.name !== 'string') s.name = '';
+  }
   // The gallery came later: the layouts' images join it (addMedia drops it when empty).
   keepShownInMedia(out);
   // Texture came later: none for anything saved before it, or anything unusable. (A window bar
@@ -103,6 +121,15 @@ export function sanitizeComposition(raw: unknown): Composition | null {
     if (o) Object.assign(o, { darkMode: o.darkMode === true, hideSelectors: cleanSelectors(o.hideSelectors) });
   }
   return out;
+}
+
+/** Fills in anything missing from an older or partial save; rejects anything unusable (never throws). */
+export function sanitizeComposition(raw: unknown): Composition | null {
+  try {
+    return sanitize(raw);
+  } catch {
+    return null;
+  }
 }
 
 /** The autosaved canvas. `ok` is false when the read failed (as opposed to nothing being saved),
