@@ -27,7 +27,15 @@ export async function renderComposition(doc: Composition, m: number): Promise<HT
  *  Also draws every frame of the scrolling video (lib/video/render.ts). */
 export function drawLayouts(x: CanvasRenderingContext2D, doc: Composition, m: number, imgs: (HTMLImageElement | HTMLCanvasElement | ImageBitmap | null)[]): void {
   const u = unit(doc.W, doc.H);
+  const tilt = doc.tilt ?? 0;
+  if (tilt) {
+    x.save();
+    x.translate((doc.W * m) / 2, (doc.H * m) / 2);
+    x.rotate((tilt * Math.PI) / 180);
+    x.translate(-(doc.W * m) / 2, -(doc.H * m) / 2);
+  }
   doc.order.filter((i) => i < doc.count).forEach((i) => drawShot(x, doc.slots[i], doc.frame, u, m, imgs[i] ?? null));
+  if (tilt) x.restore();
 }
 
 export function exportFileName(doc: Pick<Composition, 'preset'>, w: number, h: number, format: UiState['exportFormat']): string {

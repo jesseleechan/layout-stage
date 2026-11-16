@@ -1,8 +1,17 @@
 'use client';
 import { useEffect, useId, useRef, useState, type KeyboardEvent } from 'react';
-import { statusOf, useProjects } from '@/lib/projects/library';
+import { loadImage } from '@/lib/images';
+import { paletteOf } from '@/lib/palette';
+import { PIN_TEXT_FILE, pinTextFile } from '@/lib/pin-text';
+import { useProjects, statusOf } from '@/lib/projects/library';
 import { readThumb } from '@/lib/projects/local';
 import { editedAgo, listedProjects, megabytes, type LocalProject } from '@/lib/projects/model';
+import { renderComposition } from '@/lib/render/export';
+import { renderPagesGrid } from '@/lib/render/pages-grid';
+import { renderPaletteCard } from '@/lib/render/palette-card';
+import { etsySet } from '@/lib/sets';
+import { useEditor } from '@/lib/store';
+import { zipBlobs } from '@/lib/zip';
 import { NameInput } from './ProjectsControl';
 
 /* The projects list: a sheet over the editor with a card per project (thumbnail, name, last edited)
@@ -25,6 +34,8 @@ function Sheet() {
   const pendingDeletes = useProjects((s) => s.pendingDeletes);
   const { closeSheet, create } = useProjects.getState();
   const [now, setNow] = useState(() => Date.now());
+  const [selected, setSelected] = useState<string[]>([]);
+  const [batching, setBatching] = useState<string | null>(null);
   const cardRef = useRef<HTMLDivElement>(null);
   const listRef = useRef<HTMLUListElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
@@ -33,6 +44,69 @@ function Sheet() {
   const status = statusOf({ ...useProjects.getState(), items, mode, phase, transfer, pendingDeletes });
   const openingName = opening ? items.find((p) => p.id === opening)?.name : null;
   const shown = listedProjects(items, mode);
+
+  const toggleSelect = (id: string) => {
+    setSelected((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
+  };
+
+  const runBatchEtsy = async () => {
+    if (batching || !selected.length) return;
+    const { readProjectDoc } = useProjects.getState();
+    const { showToast } = useEditor.getState();
+    const usedFolders = new Set<string>();
+    const files: { name: string; blob: Blob }[] = [];
+    try {
+      for (const id of selected) {
+        const p = shown.find((x) => x.id === id);
+        if (!p || p.stub) continue;
+        setBatching(p.name);
+        const doc = await readProjectDoc(id);
+        if (!doc) continue;
+        const base = p.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 40) || 'project';
+        let folder = base;
+        for (let k = 2; usedFolders.has(folder); k++) folder = `${base}-${k}`;
+        usedFolders.add(folder);
+
+        const plan = etsySet(doc);
+        const texts: { file: string; doc: typeof doc }[] = [];
+        for (const item of plan) {
+          let c: HTMLCanvasElement;
+          if (item.kind === 'pages') {
+            c = await renderPagesGrid(item.doc, item.pages, item.doc.W, item.doc.H, 1);
+          } else if (item.kind === 'palette') {
+            const slot = item.doc.slots[item.slot];
+            const pal = await paletteOf(slot.imageId, loadImage);
+            if (!pal) continue;
+            c = await renderPaletteCard(item.doc, slot, pal, 1);
+          } else {
+            c = await renderComposition(item.doc, 1);
+          }
+          const blob = await new Promise<Blob | null>((res) => c.toBlob(res, 'image/png'));
+          c.width = 0;
+          c.height = 0;
+          if (!blob) continue;
+          const fileName = `${item.key}.png`;
+          files.push({ name: `${folder}/${fileName}`, blob });
+          if (item.key === 'hero') texts.push({ file: fileName, doc: item.doc });
+        }
+        if (texts.length) {
+          files.push({ name: `${folder}/${PIN_TEXT_FILE}`, blob: new Blob([pinTextFile(texts)], { type: 'text/plain;charset=utf-8' }) });
+        }
+      }
+      if (!files.length) { showToast('Nothing could be exported.'); return; }
+      const z = await zipBlobs(files);
+      const url = URL.createObjectURL(z);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'layout-stage-etsy-batch.zip';
+      a.click();
+      setTimeout(() => URL.revokeObjectURL(url), 30_000);
+    } catch {
+      showToast('Couldn’t make the batch Etsy zip.');
+    } finally {
+      setBatching(null);
+    }
+  };
 
   // Focus the open project's card; give focus back to whatever opened the sheet.
   useEffect(() => {
@@ -107,6 +181,11 @@ function Sheet() {
         <div className="sheet-head">
           <h2 id={`${uid}t`}>Projects</h2>
           <div className="proj-head-actions">
+            {selected.length > 0 && (
+              <button className="btn sm" type="button" disabled={!!opening || !!batching} onClick={() => void runBatchEtsy()}>
+                {batching ? `Exporting ${batching}…` : `Etsy sets (${selected.length})`}
+              </button>
+            )}
             <input
               ref={fileRef}
               type="file"
@@ -118,10 +197,10 @@ function Sheet() {
                 if (file) void useProjects.getState().openFile(file);
               }}
             />
-            <button className="btn sm" type="button" disabled={!!opening} onClick={() => fileRef.current?.click()}>
+            <button className="btn sm" type="button" disabled={!!opening || !!batching} onClick={() => fileRef.current?.click()}>
               Open file…
             </button>
-            <button className="btn primary sm" id={`${uid}new`} type="button" disabled={!!opening} onClick={() => void create()}>
+            <button className="btn primary sm" id={`${uid}new`} type="button" disabled={!!opening || !!batching} onClick={() => void create()}>
               New project
             </button>
             <button className="icon-btn" type="button" aria-label="Close" onClick={closeSheet}>
@@ -135,7 +214,18 @@ function Sheet() {
         </p>
         <ul className="proj-grid" ref={listRef} aria-label="Your projects">
           {shown.map((p, i) => (
-            <Card key={p.id} p={p} current={p.id === currentId} now={now} syncOn={mode === 'blob' || mode === 'local'} busy={!!opening} opening={opening === p.id} onDeleted={() => focusAfter(i)} />
+            <Card
+              key={p.id}
+              p={p}
+              current={p.id === currentId}
+              now={now}
+              syncOn={mode === 'blob' || mode === 'local'}
+              busy={!!opening || !!batching}
+              opening={opening === p.id}
+              picked={selected.includes(p.id)}
+              onToggle={() => toggleSelect(p.id)}
+              onDeleted={() => focusAfter(i)}
+            />
           ))}
         </ul>
         {opening && (
@@ -183,8 +273,8 @@ function useProjectThumb(id: string, stamp: number | undefined): string | null {
   return url;
 }
 
-function Card({ p, current, now, syncOn, busy, opening, onDeleted }: {
-  p: LocalProject; current: boolean; now: number; syncOn: boolean; busy: boolean; opening: boolean; onDeleted(): void;
+function Card({ p, current, now, syncOn, busy, opening, picked, onToggle, onDeleted }: {
+  p: LocalProject; current: boolean; now: number; syncOn: boolean; busy: boolean; opening: boolean; picked: boolean; onToggle(): void; onDeleted(): void;
 }) {
   const { open, rename, duplicate, remove } = useProjects.getState();
   const [mode, setMode] = useState<'idle' | 'rename' | 'confirm'>('idle');
@@ -215,6 +305,16 @@ function Card({ p, current, now, syncOn, busy, opening, onDeleted }: {
 
   return (
     <li className="proj-card" data-current={current || undefined} data-stub={p.stub || undefined}>
+      {!p.stub && (
+        <input
+          className="proj-pick"
+          type="checkbox"
+          checked={picked}
+          disabled={busy}
+          aria-label={`Select ${p.name} for batch export`}
+          onChange={onToggle}
+        />
+      )}
       <button
         className="proj-open" type="button" aria-current={current ? 'true' : undefined} disabled={busy && !opening}
         aria-label={`Open ${p.name}`} aria-describedby={`${uid}m`} onClick={() => void open(p.id)}

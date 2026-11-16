@@ -4,7 +4,8 @@ import LayoutsPanel from './LayoutsPanel';
 import MediaPanel from './MediaPanel';
 import FramePanel from './FramePanel';
 import BackgroundPanel from './BackgroundPanel';
-import LegacyOverlays from './LegacyOverlays';
+import LooksPanel from './LooksPanel';
+import BrandPanel from './BrandPanel';
 import { Seg, type Option } from './controls';
 
 /* The left panel, as in Shots: Mockup (the screenshots, the media gallery and how they're framed) and
@@ -47,8 +48,9 @@ export default function LeftPanel() {
         </>
       ) : (
         <>
+          <LooksPanel />
           <BackgroundPanel />
-          <LegacyOverlays />
+          <BrandPanel />
         </>
       )}
     </aside>

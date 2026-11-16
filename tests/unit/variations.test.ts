@@ -21,14 +21,14 @@ describe('pinVariations', () => {
       'Columns · your background',
       'Scroll · site mesh',
       'Editorial · site gradient',
-      'Columns · site color',
+      'Stack · site color',
       'Inset · site mesh, moved',
       'Bento · your background',
     ]);
-    // No cascades: the last two are the spotlight and grid arrangements.
-    expect(v.map((x) => x.doc.arrangement)).toEqual(['showcase', 'showcase', 'showcase', 'showcase', 'spotlight', 'grid']);
+    // No cascades: includes stack, spotlight, and grid arrangements.
+    expect(v.map((x) => x.doc.arrangement)).toEqual(['showcase', 'showcase', 'showcase', 'stack', 'spotlight', 'grid']);
     expect(v.map((x) => shown(x.doc))).toEqual([
-      ['img_0', 'img_1'], ['img_1'], ['img_2', 'img_3', 'img_4'], ['img_2', 'img_3'], ['img_3', 'img_4'], ['img_4', 'img_0', 'img_1'],
+      ['img_0', 'img_1'], ['img_1'], ['img_2', 'img_3', 'img_4'], ['img_2', 'img_3', 'img_4'], ['img_3', 'img_4'], ['img_4', 'img_0', 'img_1'],
     ]);
     expect(v[1].doc.background).toMatchObject({ type: 'mesh', mesh: site.mesh });
     expect(v[2].doc.background).toMatchObject({ type: 'gradient', grad: site.grad });
@@ -39,12 +39,6 @@ describe('pinVariations', () => {
       expect(isArranged(x.doc, null)).toBe(true);
     }
     expect(src).toEqual(withMedia([0, 1, 2, 3, 4].map((k) => item(k)))); // untouched
-  });
-
-  it('a long lead page runs across two columns as one page', () => {
-    const v = pinVariations(withMedia([item(0, 12000), item(1), item(2)]), site, null);
-    const one = v.find((x) => x.label.startsWith('One page'))!;
-    expect(shown(one.doc)).toEqual(['img_0', 'img_0']);
   });
 
   it('one page gives fewer takes, never the same twice; without site colors the mesh moves', () => {

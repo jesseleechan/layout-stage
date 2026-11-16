@@ -128,9 +128,9 @@ export const showsWholePages = (a: Arrangement) => a === 'showcase' || a === 'co
  *  columns, every page of a stack, and spotlight's lead page. */
 export const runsOff = (a: Arrangement, i: number) => showsWholePages(a) || a === 'stack' || (a === 'spotlight' && i === 0);
 
-const isPhoneCapture = (s: Slot) => s.source.kind === 'url' && s.source.options.width === 390;
+const isPhoneCapture = (s: Pick<Slot, 'source'>) => s.source.kind === 'url' && s.source.options.width === 390;
 /** Phone pages: captured at phone width, or narrow screenshots. */
-const isPhonePage = (s: Slot) => isPhoneCapture(s) || (s.nw < 1100 && s.nw / s.nh < 0.75);
+export const isPhonePage = (s: Pick<Slot, 'source' | 'nw' | 'nh'>) => isPhoneCapture(s) || (s.nw < 1100 && s.nw / s.nh < 0.75);
 
 /** The crop of a layout in front in spotlight: a phone's screen for phone pages, 4:5 for others, or
  *  the image whole when it's wider than that. */

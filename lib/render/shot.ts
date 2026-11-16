@@ -1,7 +1,7 @@
 /* One framed layout on a canvas: shadow layers, cover-cropped image, inset border.
    The DOM preview (components/Stage.tsx) draws the same thing with CSS; keep them in step. */
 import type { Frame, Slot } from '../model';
-import { clampRadius, coverSource, hexA, rectOf, roundRectPath, shadowLayers, zoomOf } from './units';
+import { clampRadius, coverSource, hexA, rectOf, roundRectPath, shadowLayers, slotFrame, zoomOf } from './units';
 
 type Drawable = HTMLImageElement | HTMLCanvasElement | ImageBitmap;
 
@@ -10,12 +10,13 @@ type Drawable = HTMLImageElement | HTMLCanvasElement | ImageBitmap;
  * so everything is multiplied by k here rather than with ctx.scale).
  */
 export function drawShot(x: CanvasRenderingContext2D, s: Slot, frame: Frame, u: number, k: number, img: Drawable | null): void {
+  const f = slotFrame(s, frame);
   const r = rectOf(s);
   const X = r.l * k, Y = r.t * k, w = r.w * k, h = r.h * k;
-  const rad = clampRadius(frame.radius * u * k, w, h);
-  shadowLayers(frame.shadow).forEach((L) => {
+  const rad = clampRadius(f.radius * u * k, w, h);
+  shadowLayers(f.shadow).forEach((L) => {
     x.save();
-    x.shadowColor = hexA(frame.shadow.color, L.a);
+    x.shadowColor = hexA(f.shadow.color, L.a);
     x.shadowBlur = L.b * u * k;
     x.shadowOffsetX = L.x * u * k;
     x.shadowOffsetY = L.y * u * k;
@@ -36,12 +37,12 @@ export function drawShot(x: CanvasRenderingContext2D, s: Slot, frame: Frame, u: 
     x.drawImage(img, c.sx, c.sy, c.sw, c.sh, X, Y, w, h);
   }
   x.restore();
-  if (frame.borderW > 0) {
-    const b = frame.borderW * u * k;
+  if (f.borderW > 0) {
+    const b = f.borderW * u * k;
     x.save();
     roundRectPath(x, X + b / 2, Y + b / 2, w - b, h - b, Math.max(0, rad - b / 2));
     x.lineWidth = b;
-    x.strokeStyle = frame.borderC;
+    x.strokeStyle = f.borderC;
     x.stroke();
     x.restore();
   }

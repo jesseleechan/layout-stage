@@ -103,6 +103,10 @@ function sanitize(raw: unknown): Composition | null {
   // Texture came later: none for anything saved before it, or anything unusable. (A window bar
   // option existed briefly and was dropped; its field is removed.)
   delete (out.frame as { bar?: unknown }).bar;
+  if (out.frame.phoneFrame !== true) delete out.frame.phoneFrame;
+  const tilt = Number(out.tilt);
+  if (Number.isFinite(tilt) && tilt !== 0) out.tilt = Math.max(-45, Math.min(45, Math.round(tilt)));
+  else delete out.tilt;
   const tex = Number(out.background.texture);
   out.background.texture = Number.isFinite(tex) ? Math.max(0, Math.min(100, tex)) : 0;
   // A free height keeps a usable ratio (else it shows the whole page); other crops carry none.

@@ -2,7 +2,7 @@
 import type { Overlays } from './overlays';
 import type { PinText } from './pin-text';
 
-export type PresetId = 'pin' | 'story' | 'etsy43' | 'etsy11' | 'p45' | 'custom';
+export type PresetId = 'pin' | 'story' | 'etsy43' | 'etsy11' | 'p45' | 'land169' | 'sq11' | 'custom';
 /** 'custom': a free height (Slot.ar), set with the Height slider or the layout's bottom handle (lib/crop.ts). */
 export type CropId = 'full' | '16:10' | '4:3' | '1:1' | '4:5' | '2:3' | '9:16' | '1:2' | 'custom';
 export type ShadowPreset = 'none' | 'soft' | 'lifted' | 'float' | 'hard' | 'custom';
@@ -56,6 +56,7 @@ export interface Frame {
   borderW: number;
   borderC: string;
   shadow: Shadow;
+  phoneFrame?: boolean;
 }
 
 export interface Background {
@@ -110,6 +111,7 @@ export interface Composition {
   order: number[]; // z-order bottom → top, all 3 indices
   /** The placements left behind on other canvas sizes, by `${W}x${H}`, so switching back restores them. */
   placements?: Record<string, SizePlacement>;
+  tilt?: number;
   frame: Frame;
   background: Background;
   /** Headline, badge and watermark above the layouts (lib/overlays.ts). Absent: none. */
@@ -153,9 +155,11 @@ export const PRESETS: Record<PresetId, Preset> = {
   etsy43: { label: 'Etsy listing · 4:3', w: 3000, h: 2250, scale: 1, safe: 'etsy', slug: 'etsy-4x3' },
   etsy11: { label: 'Etsy listing · 1:1', w: 2000, h: 2000, scale: 1, safe: 'etsy', slug: 'etsy-square' },
   p45: { label: 'Portrait · 4:5', w: 1080, h: 1350, scale: 2, safe: 'inset', slug: 'portrait' },
+  land169: { label: 'Landscape · 16:9', w: 1920, h: 1080, scale: 1, safe: 'inset', slug: 'landscape-16x9' },
+  sq11: { label: 'Square · 1:1', w: 1080, h: 1080, scale: 2, safe: 'inset', slug: 'square' },
   custom: { label: 'Custom size…', w: 1000, h: 1500, scale: 1, safe: 'inset', slug: 'custom' },
 };
-export const PRESET_IDS: PresetId[] = ['pin', 'story', 'etsy43', 'etsy11', 'p45', 'custom'];
+export const PRESET_IDS: PresetId[] = ['pin', 'story', 'etsy43', 'etsy11', 'p45', 'land169', 'sq11', 'custom'];
 export const CUSTOM_MIN = 200;
 export const CUSTOM_MAX = 6000;
 export const EXPORT_MAX_SIDE = 8000;

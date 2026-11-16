@@ -2,7 +2,7 @@
 import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type DragEvent, type PointerEvent } from 'react';
 import { captureJobSlot, useEditor } from '@/lib/store';
 import { PRESETS, type Composition } from '@/lib/model';
-import { clampRadius, coverSource, rectOf, safeArea, scrollAxis, shadowCSS, unit, zoomOf } from '@/lib/render/units';
+import { clampRadius, coverSource, rectOf, safeArea, scrollAxis, shadowCSS, slotFrame, unit, zoomOf } from '@/lib/render/units';
 import { drawBackground } from '@/lib/render/background';
 import { useImageUrl, useLoadedImage } from '@/lib/images';
 import { MEDIA_DRAG } from '@/lib/media';
@@ -75,7 +75,7 @@ function imageStyle(s: Composition['slots'][number], w: number, h: number): CSSP
 
 function Shot({ i, doc, shadow, visible, onFocusRing }: ShotProps) {
   const s = doc.slots[i];
-  const f = doc.frame;
+  const f = slotFrame(s, doc.frame);
   const url = useImageUrl(s.imageId);
   const r = rectOf(s);
   const u = unit(doc.W, doc.H);
@@ -425,9 +425,13 @@ export default function Stage() {
         <div className="stage-wrap" id="stageWrap" ref={wrapRef} style={{ width: W * scale, height: H * scale, visibility: painted ? undefined : 'hidden' }}>
           <div className={'stage' + (space ? ' space' : '') + (panning ? ' panning' : '')} id="stage" style={{ width: W, height: H, transform: `scale(${scale})` }} onPointerDown={onStageDown}>
             <canvas id="bgCanvas" ref={bgRef} aria-hidden="true" />
-            {[0, 1, 2].map((i) => (
-              <Shot key={i} i={i} doc={doc} shadow={shadow} visible={hydrated && i < doc.count} onFocusRing={setFocusRing} />
-            ))}
+            <div style={doc.tilt ? { position: 'absolute', inset: 0, transform: `rotate(${doc.tilt}deg)`, transformOrigin: 'center center', pointerEvents: 'none' } : undefined}>
+              <div style={doc.tilt ? { pointerEvents: 'auto' } : undefined}>
+                {[0, 1, 2].map((i) => (
+                  <Shot key={i} i={i} doc={doc} shadow={shadow} visible={hydrated && i < doc.count} onFocusRing={setFocusRing} />
+                ))}
+              </div>
+            </div>
           </div>
           <OverlayCanvas />
           <div className="overlay" id="overlay">

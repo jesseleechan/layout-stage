@@ -4,7 +4,7 @@
    which page leads (the pages in Media, rotated), and the background (the canvas's own, or one made
    from the site's colors as Match site colors makes them). Pure: the export renders them, and any one
    can be put on the canvas. */
-import { applyArrangement, arrange, ARRANGEMENT_NAMES, canContinuePage, showFirstPage } from './arrange';
+import { applyArrangement, arrange, ARRANGEMENT_NAMES, canContinuePage, presetOf, showFirstPage } from './arrange';
 import { mediaItemOf, mediaOf, putImage } from './media';
 import { clone, type Arrangement, type Background, type Composition } from './model';
 import { variantPatch, type SiteBackgrounds } from './palette';
@@ -27,7 +27,7 @@ const RECIPES: Recipe[] = [
   { count: 2, arrangement: 'showcase', lead: 0, bg: 'current' },
   { count: 1, arrangement: 'showcase', lead: 1, bg: 'mesh' },
   { count: 3, arrangement: 'showcase', lead: 2, bg: 'gradient' },
-  { count: 2, arrangement: 'showcase', lead: 0, bg: 'solid', continued: 2 },
+  { count: 3, arrangement: 'stack', lead: 2, bg: 'solid' },
   { count: 2, arrangement: 'spotlight', lead: 3, bg: 'moved' },
   { count: 3, arrangement: 'grid', lead: 4, bg: 'current' },
 ];
@@ -61,16 +61,17 @@ export function pinVariations(src: Composition, site: SiteBackgrounds | null, me
   const seen = new Set<string>();
   for (const r of RECIPES) {
     const n = Math.min(r.count, pages.length) as 1 | 2 | 3;
+    const arr = presetOf(r.arrangement, n);
     const take = (lead: number) => {
       const d = clone(src);
       d.count = n;
-      d.arrangement = r.arrangement;
+      d.arrangement = arr;
       for (let j = 0; j < n; j++) putImage(d, j, pages[(lead + j) % pages.length]);
-      applyArrangement(d, r.arrangement, measure);
+      applyArrangement(d, arr, measure);
       return d;
     };
     let d = take(r.lead);
-    let name = ARRANGEMENT_NAMES[r.arrangement][n];
+    let name = ARRANGEMENT_NAMES[arr][n];
     if (r.continued != null) {
       if (canContinuePage(d, measure)) {
         showFirstPage(d, 1);

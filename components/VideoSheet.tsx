@@ -20,7 +20,7 @@ import './video.css';
 type Phase = 'setup' | 'rendering' | 'done';
 
 /** The video's shape: the canvas as it is, or re-laid on another size as Export all sizes does it. */
-type Shape = 'canvas' | Exclude<PresetId, 'custom' | 'p45' | 'etsy11'>;
+type Shape = 'canvas' | Exclude<PresetId, 'custom' | 'p45' | 'etsy11' | 'land169' | 'sq11'>;
 const SHAPES: { value: Shape; label: string }[] = [
   { value: 'canvas', label: 'This canvas' },
   { value: 'story', label: 'Pin 9:16' },

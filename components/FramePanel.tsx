@@ -40,11 +40,14 @@ const SHADOW_OPTIONS: TileOption<Exclude<ShadowPreset, 'custom'>>[] = SHADOW_PRE
 export default function FramePanel() {
   const f = useEditor(
     useShallow((s) => {
-      const { radius, borderW, borderC, shadow } = s.doc.frame;
-      return { radius, borderW, borderC, preset: shadow.preset, blur: shadow.blur, x: shadow.x, y: shadow.y, opacity: shadow.opacity, color: shadow.color };
+      const { radius, borderW, borderC, shadow, phoneFrame } = s.doc.frame;
+      return {
+        radius, borderW, borderC, phoneFrame: !!phoneFrame, tilt: s.doc.tilt ?? 0,
+        preset: shadow.preset, blur: shadow.blur, x: shadow.x, y: shadow.y, opacity: shadow.opacity, color: shadow.color,
+      };
     }),
   );
-  const { editFrame, editShadow, setShadowPreset, change } = useEditor.getState();
+  const { edit, editFrame, editShadow, setShadowPreset, change } = useEditor.getState();
   const [adjust, setAdjust] = useState(false);
   const corner = CORNERS.find((c) => c.radius === f.radius)?.id ?? null;
 
@@ -66,6 +69,23 @@ export default function FramePanel() {
         </div>
         <RangeRow id="fBorderW" label="Width" min={0} max={16} value={f.borderW} onInput={(v) => editFrame({ borderW: v })} />
         <ColorRow id="fBorderC" label="Color" value={f.borderC} onInput={(v) => editFrame({ borderC: v })} />
+        <label className="brand-toggle">
+          <input
+            type="checkbox"
+            checked={f.phoneFrame}
+            onChange={(e) => change((d) => { d.frame.phoneFrame = e.target.checked || undefined; })}
+          />
+          <span>Phone bezel for phone pages</span>
+        </label>
+        <RangeRow
+          id="fTilt"
+          label="Tilt"
+          min={-25}
+          max={25}
+          format="deg"
+          value={f.tilt}
+          onInput={(v) => edit((d) => { if (v) d.tilt = v; else delete d.tilt; })}
+        />
       </section>
       <section className="group">
         <div className="group-head">

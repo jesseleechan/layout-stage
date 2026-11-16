@@ -76,6 +76,8 @@ export interface ProjectsState {
   download(id: string): Promise<{ file: Blob; name: string } | null>;
   /** Opens a project file as a new project. */
   openFile(file: Blob): Promise<boolean>;
+  /** Loads a project's composition (and its images if synced) for batch export. */
+  readProjectDoc(id: string): Promise<Composition | null>;
   rename(id: string, name: string): Promise<void>;
   remove(id: string): Promise<void>;
   /** Pushes everything now and pulls what changed elsewhere (tests; also the list's first look). */
@@ -786,6 +788,15 @@ export const useProjects = create<ProjectsState>()((set, get) => {
       const opened = await get().open(item.id);
       scheduleFlush();
       return opened;
+    },
+
+    async readProjectDoc(id) {
+      const p = L.findLocal(id);
+      if (!p || p.stub || !index()) return null;
+      const doc = id === index()!.currentId ? useEditor.getState().doc : await L.readDoc(id);
+      if (!doc) return null;
+      if (canSync()) await fetchImages(id, p.name, doc, null, p.remoteImages ?? []).catch(() => 0);
+      return doc;
     },
 
     async rename(id, raw) {

@@ -8,7 +8,7 @@ import { resizeCanvas } from '../canvas-size';
 import { addMedia, putImage, slotFor } from '../media';
 import { applyStyleTo, PRESETS, STYLES, type Composition, type MediaItem } from '../model';
 
-export const CANVASES = ['pin', 'story', 'etsy43', 'etsy11', 'p45'] as const;
+export const CANVASES = ['pin', 'story', 'etsy43', 'etsy11', 'p45', 'land169', 'sq11'] as const;
 export type CanvasId = (typeof CANVASES)[number];
 
 export class DraftError extends Error {}

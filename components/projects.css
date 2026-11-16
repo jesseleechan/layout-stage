@@ -47,6 +47,7 @@
   background: var(--paper); min-width: 0;
 }
 .proj-card[data-current] { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+.proj-pick { position: absolute; top: 10px; left: 10px; z-index: 2; width: 16px; height: 16px; accent-color: var(--accent); cursor: pointer; }
 .proj-open { display: block; width: 100%; padding: 0; border: 0; background: transparent; border-radius: 8px; cursor: pointer; }
 .proj-open:disabled { cursor: default; }
 .proj-thumb {

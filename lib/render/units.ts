@@ -1,6 +1,7 @@
 /* Units, geometry and frame math shared by the DOM preview and the canvas export.
    Preview and export must render identically: change both or neither. */
-import { CROPS, EXPORT_MAX_SIDE, type Composition, type CropId, type Shadow, type Slot } from '../model';
+import { isPhonePage } from '../arrange';
+import { CROPS, EXPORT_MAX_SIDE, type Composition, type CropId, type Frame, type Shadow, type Slot } from '../model';
 
 /** 1 unit = 1/1000 of the canvas's short side. Radius, border, shadow and background blur are in units. */
 export const unit = (W: number, H: number) => Math.min(W, H) / 1000;
@@ -140,4 +141,12 @@ export function coverSource(nw: number, nh: number, w: number, h: number, fx: nu
   const sc = Math.max(w / nw, h / nh) * Math.max(1, zoom);
   const sw = w / sc, sh = h / sc;
   return { sx: ((nw - sw) * fx) / 100, sy: ((nh - sh) * fy) / 100, sw, sh };
+}
+
+/** Frame for a single layout: applies a dark phone bezel when `f.phoneFrame` is on and the page is a phone page. */
+export function slotFrame(s: Pick<Slot, 'source' | 'nw' | 'nh'>, f: Frame): Frame {
+  if (f.phoneFrame && isPhonePage(s)) {
+    return { ...f, radius: Math.max(f.radius, 42), borderW: Math.max(f.borderW, 14), borderC: '#16161A' };
+  }
+  return f;
 }
