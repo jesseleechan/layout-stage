@@ -19,7 +19,7 @@ Each plan is self-contained: an executor needs only the plan file and the repo.
 | [007](007-pin-text-in-exports.md) | Feature: the export zips carry the pin text for each image | P2 | S | — (e2e left to CI; unit tests pass) | DONE |
 | [008](008-stack-layout-preset.md) | Feature: a new layout preset, "Stack" (one page in front, the others behind it) | P2 | M | — (owner reviews the look before merging; no browser locally for screenshots) | DONE |
 | [009](009-project-file-download-open.md) | Feature: download a project as a file, and open one | P2 | M | 002 (apply after 001 and 002; manual browser check in Step 4 not run locally — no browser) | DONE |
-| [010](010-claude-connector-mcp.md) | Feature: a Claude connector (MCP) that builds draft projects from page links | P3 | L | 003. Packages approved and sync confirmed on by the owner (2026-11-16). After it deploys, remind the owner to set `MCP_TOKEN` and create the bypass secret (see the plan's first box) | TODO |
+| [010](010-claude-connector-mcp.md) | Feature: a Claude connector (MCP) that builds draft projects from page links | P3 | L | 003 (operator: set `MCP_TOKEN` and create Protection Bypass secret in Vercel, then redeploy) | DONE |
 
 > **When plan 009 is marked DONE**: remind the owner of the "Feature suggestions" table below. They
 > asked (2026-11-15) to be reminded of those suggestions once 009 is finished, so they can pick which

@@ -99,6 +99,19 @@ export function blobStore(): ProjectStore {
       const r = await open(path, false);
       return r && { body: r.stream, size: r.blob.size, type: r.blob.contentType };
     },
+
+    async writeFile(path, data, type) {
+      try {
+        await put(path, Buffer.from(data), {
+          access: ACCESS,
+          contentType: type,
+          addRandomSuffix: false,
+          allowOverwrite: false,
+        });
+      } catch (e) {
+        if (!lostRace(e)) throw e;
+      }
+    },
   };
 }
 

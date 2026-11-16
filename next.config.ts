@@ -11,6 +11,7 @@ const nextConfig: NextConfig = {
   outputFileTracingIncludes: {
     '/api/capture': ['./lib/capture/banners.css', './node_modules/playwright/**/*', './node_modules/playwright-core/**/*'],
     '/api/pages': ['./node_modules/playwright/**/*', './node_modules/playwright-core/**/*'],
+    '/api/mcp': ['./lib/capture/banners.css', './node_modules/playwright/**/*', './node_modules/playwright-core/**/*'],
   },
   // The dev badge sits over the Frame panel's shadow chips.
   devIndicators: false,

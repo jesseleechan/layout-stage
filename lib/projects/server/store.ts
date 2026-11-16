@@ -40,6 +40,8 @@ export interface ProjectStore {
   directUrl(path: string, fresh: boolean): Promise<string | null>;
   /** The file as a stream (the files route), or null. */
   read(path: string): Promise<FileStream | null>;
+  /** Writes a file (an image the server made) if there is none at that path yet. */
+  writeFile(path: string, data: Uint8Array, type: string): Promise<void>;
 }
 
 let pending: Promise<ProjectStore | null> | null = null;

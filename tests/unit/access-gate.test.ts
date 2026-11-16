@@ -101,4 +101,11 @@ describe('proxy', () => {
     expect(gateMissing({ VERCEL_ENV: 'production', ACCESS_OPEN: '1' })).toBe(false);
     expect(gateMissing({ VERCEL_ENV: 'preview' })).toBe(false);
   });
+  it('lets /api/mcp through with the right MCP_TOKEN even when ACCESS_PASSWORD is set', () => {
+    const token = '0123456789abcdef0123456789abcdef';
+    vi.stubEnv('ACCESS_PASSWORD', 'hunter2');
+    vi.stubEnv('MCP_TOKEN', token);
+    expect(proxy(new Request(`https://layout-stage.example/api/mcp?key=${token}`, { method: 'POST' }))).toBeUndefined();
+    expect(proxy(new Request('https://layout-stage.example/api/mcp?key=wrong', { method: 'POST' }))?.status).toBe(401);
+  });
 });

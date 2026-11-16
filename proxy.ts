@@ -4,6 +4,7 @@
    to anyone with the URL. When ACCESS_PASSWORD is set, every request needs HTTP Basic auth with that
    password and any user name. Next 16's request interceptor (formerly middleware); runs on Node. */
 import { createHash, timingSafeEqual } from 'node:crypto';
+import { mcpAccess } from './lib/mcp/auth';
 
 export const ACCESS_REALM = 'Layout Stage';
 
@@ -31,6 +32,7 @@ const NO_GATE =
   'This deployment has no access password. Set ACCESS_PASSWORD in the Vercel project’s environment variables and redeploy (or ACCESS_OPEN=1 to run it without one).';
 
 export function proxy(request: Request): Response | undefined {
+  if (new URL(request.url).pathname === '/api/mcp' && mcpAccess(request) === 'ok') return undefined;
   const password = process.env.ACCESS_PASSWORD;
   if (!password) {
     if (!gateMissing()) return undefined;

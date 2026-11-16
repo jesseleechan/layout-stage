@@ -139,6 +139,13 @@ export function fsStore(dir: string): FsStore {
       }
     },
 
+    writeFile(p, data) {
+      return locked(p, async () => {
+        if (await exists(file(p))) return;
+        await atomicWrite(p, Buffer.from(data));
+      });
+    },
+
     writeChunk(p, offset, total, bytes, overwrite) {
       return locked(p, async () => {
         const f = file(p);

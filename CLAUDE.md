@@ -78,6 +78,9 @@ npx playwright install chromium          # once per machine, for URL capture and
   `PROJECTS_SYNC=off` switches sync off for a deployment even with a Blob store connected (`storeKind`);
   `server/api.ts` route logic for `app/api/projects/`. UI: `components/ProjectsControl.tsx`,
   `components/ProjectsSheet.tsx`
+- `lib/mcp/` the Claude connector: `draft.ts` pure canvas building, `tools.ts` the tools on a store
+  and a capture function, `auth.ts` the token check; route `app/api/mcp/route.ts`. Drafts only:
+  nothing renders on the server.
 - `components/` one file per panel / surface: `Editor.tsx` (the shell), `TopBar.tsx` (the three top
   clusters), `LeftPanel.tsx` (Mockup: screenshots, `MediaPanel.tsx` the gallery, frame; Canvas:
   background; there is no Styles or Text & logo panel, and `LegacyOverlays.tsx` only lets a canvas saved
@@ -129,4 +132,4 @@ stay under 4.5 MB: a capture over 4 MB as PNG is sent as WebP slices (`multipart
   Blob client uploads and presigned GETs (locally, 4 MB chunks). Keep project pushes spaced out (Hobby
   Blob operation budget).
 - Ask before adding a dependency the handoff doesn't name (approved so far: `@vercel/blob`,
-  `@sparticuz/chromium-min`; `zod` is pinned to a patched 4.x through `overrides`).
+  `@sparticuz/chromium-min`, `mcp-handler`, `@modelcontextprotocol/server`, `zod`).

@@ -125,6 +125,15 @@ describe('local store', () => {
     expect(new Uint8Array(await new Response(f!.body).arrayBuffer())).toEqual(new Uint8Array([1, 2, 3, 4, 5]));
   });
 
+  it('writes a file once and keeps the first on a repeat', async () => {
+    const p = `projects/${P}/images/img_bbbb-2222.png`;
+    await store.writeFile(p, new Uint8Array([1, 2, 3]), 'image/png');
+    await store.writeFile(p, new Uint8Array([9, 9, 9]), 'image/png');
+    const f = await store.read(p);
+    expect(f).toMatchObject({ size: 3, type: 'image/png' });
+    expect(new Uint8Array(await new Response(f!.body).arrayBuffer())).toEqual(new Uint8Array([1, 2, 3]));
+  });
+
   it('never leaves its folder', async () => {
     await expect(store.readJson('../outside.json')).rejects.toThrow();
     await expect(store.writeJson('projects/../../x.json', {}, null)).rejects.toThrow();

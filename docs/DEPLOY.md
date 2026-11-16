@@ -42,6 +42,7 @@ scratch:
    | `NEXT_PUBLIC_CAPTURE` | `off` | Optional. Switches URL capture off: the editor offers uploads only and the capture routes refuse, so no browser runs (it's the heaviest use of a function's CPU time). Delete it and redeploy to switch capture back on. |
    | `BLOB_READ_WRITE_TOKEN` | Set by Vercel when the Blob store is connected to the project | Connect the `layout-stage-projects` store for Production **and** Preview (Storage → the store → Projects). |
    | `PROJECTS_SYNC` | `off` | Optional. Switches projects sync off: projects stay in each browser and the Blob store goes unused (it stays connected, nothing in it is deleted). Delete it and redeploy to sync again. |
+   | `MCP_TOKEN` | A long random string (24+ letters and digits) | Optional. Enables the Claude connector (`/api/mcp`). Unset or shorter than 24 characters = connector off (404). |
 
    Environment variable changes take effect on the next deployment.
 4. Deploy: push to `main` (or use **Redeploy** in the dashboard).
@@ -58,6 +59,24 @@ A deployment reachable without the gate exposes two things: `/api/capture` as a 
 service on your account, and `/api/projects`, through which anyone could read, change and delete every
 synced project and fill the Blob store. That is why production now refuses to start serving without a
 password or an explicit `ACCESS_OPEN=1`.
+
+### Claude connector (MCP)
+
+`/api/mcp` lets Claude build draft projects from page links in the synced projects store (it does not
+render or export images; you open the draft in the editor to adjust and export). It requires both
+projects sync on and URL capture on.
+
+1. Set `MCP_TOKEN` for Production (e.g. `openssl rand -hex 32`; at least 24 characters, letters and
+   digits only). Unset = endpoint answers `404`.
+2. Create a **Protection Bypass for Automation** secret in Vercel (**Settings → Deployment
+   Protection**) so the connector can pass Vercel Authentication, then redeploy.
+3. Paste this connector URL into Claude:
+   `https://<your-domain>/api/mcp?x-vercel-protection-bypass=<bypass-secret>&key=<MCP_TOKEN>`.
+
+Treat the URL as a password: anyone with it can create and edit drafts in the synced store (there is
+no delete tool). To rotate it, change `MCP_TOKEN`, redeploy, and update the connector. Note that a
+three-page draft uses roughly 13 Blob store operations (out of the 2,000/month Hobby budget), and each
+`add_page` call takes 20–60 s on Vercel while the capture runs.
 
 ## What to expect
 
