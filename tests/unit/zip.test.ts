@@ -5,7 +5,7 @@ import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { crc32, dosDateTime, zipBlobs, zipBytes, ZipWriter } from '@/lib/zip';
+import { crc32, dosDateTime, readStoredZip, zipBlobs, zipBytes, ZipWriter } from '@/lib/zip';
 
 interface Parsed {
   name: string;
@@ -174,3 +174,42 @@ describe('zip writer', () => {
     }
   });
 });
+
+describe('zip reader', () => {
+  it('round-trips names and bytes in order', async () => {
+    const data = bytes('hello');
+    const data2 = noise(512, 17);
+    const raw = zipBytes([{ name: 'a.txt', data }, { name: 'dir/b é.bin', data: data2 }]);
+    const entries = await readStoredZip(new Blob([raw]));
+    expect(entries.map((e) => e.name)).toEqual(['a.txt', 'dir/b é.bin']);
+    expect(new Uint8Array(await entries[0].blob.arrayBuffer())).toEqual(data);
+    expect(new Uint8Array(await entries[1].blob.arrayBuffer())).toEqual(data2);
+  });
+
+  it('reads an empty archive', async () => {
+    const entries = await readStoredZip(new Blob([zipBytes([])]));
+    expect(entries).toEqual([]);
+  });
+
+  it('rejects malformed, trailing, compressed, and absolute-path archives', async () => {
+    await expect(readStoredZip(new Blob([new Uint8Array(10)]))).rejects.toThrow();
+
+    const valid = zipBytes([{ name: 'a.txt', data: bytes('abc') }]);
+    const withTrailing = new Uint8Array(valid.length + 1);
+    withTrailing.set(valid);
+    await expect(readStoredZip(new Blob([withTrailing]))).rejects.toThrow();
+
+    const compressed = new Uint8Array(valid);
+    const cv = new DataView(compressed.buffer);
+    const cdOff = cv.getUint32(compressed.length - 22 + 16, true);
+    cv.setUint16(cdOff + 10, 8, true);
+    await expect(readStoredZip(new Blob([compressed]))).rejects.toThrow();
+
+    const absPath = new Uint8Array(valid);
+    const av = new DataView(absPath.buffer);
+    const acdOff = av.getUint32(absPath.length - 22 + 16, true);
+    absPath[acdOff + 46] = '/'.charCodeAt(0);
+    await expect(readStoredZip(new Blob([absPath]))).rejects.toThrow();
+  });
+});
+

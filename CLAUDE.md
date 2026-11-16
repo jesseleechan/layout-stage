@@ -73,7 +73,7 @@ npx playwright install chromium          # once per machine, for URL capture and
 - `lib/projects/` projects library and sync: `model.ts` pure rules (store layout, `planSync`, names,
   upload rules), `local.ts` projects in IndexedDB (the autosave is the open project's canvas; migrates
   the old single autosave), `library.ts` `useProjects` (list, actions, background sync), `api.ts`
-  browser transfers; `blob-upload.ts` and `server/blob-store.ts` are the only Vercel Blob code;
+  browser transfers, `file.ts` a project as one file (Projects → Download / Open file…; `readStoredZip` in `lib/zip.ts`); `blob-upload.ts` and `server/blob-store.ts` are the only Vercel Blob code;
   `server/fs-store.ts` the local store (`.data/sync`, `PROJECTS_STORE_DIR`, `off` disables);
   `PROJECTS_SYNC=off` switches sync off for a deployment even with a Blob store connected (`storeKind`);
   `server/api.ts` route logic for `app/api/projects/`. UI: `components/ProjectsControl.tsx`,

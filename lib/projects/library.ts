@@ -17,6 +17,7 @@ import { sanitizeComposition } from '../persist';
 import { renderComposition } from '../render/export';
 import { useEditor } from '../store';
 import * as api from './api';
+import { packProject, projectFileName, unpackProject } from './file';
 import * as L from './local';
 import {
   cleanName, copyName, deviceCopyName, imageFileName, imageIdOf, megabytes, mergeImages, newProjectId, planSync, projectImageIds,
@@ -71,6 +72,10 @@ export interface ProjectsState {
   open(id: string, opts?: { keepSheet?: boolean }): Promise<boolean>;
   cancelOpen(): void;
   duplicate(id: string): Promise<void>;
+  /** The project as a file to save, or null (a stub that isn't on this device). */
+  download(id: string): Promise<{ file: Blob; name: string } | null>;
+  /** Opens a project file as a new project. */
+  openFile(file: Blob): Promise<boolean>;
   rename(id: string, name: string): Promise<void>;
   remove(id: string): Promise<void>;
   /** Pushes everything now and pulls what changed elsewhere (tests; also the list's first look). */
@@ -750,6 +755,37 @@ export const useProjects = create<ProjectsState>()((set, get) => {
       if (thumb) await L.writeThumb(item.id, thumb);
       await get().open(item.id);
       scheduleFlush();
+    },
+
+    async download(id) {
+      const p = L.findLocal(id);
+      if (!p || p.stub || !index()) return null;
+      const doc = id === index()!.currentId ? useEditor.getState().doc : await L.readDoc(id);
+      if (!doc) return null;
+      // Images it has only in the store come first, so the file is whole.
+      if (canSync()) await fetchImages(id, p.name, doc, null, p.remoteImages ?? []).catch(() => 0);
+      const { file, missing } = await packProject(p.name, doc, getImageBlob);
+      if (missing) toast(`${missing === 1 ? 'An image isn’t' : `${missing} images aren’t`} on this device, so the file doesn’t have ${missing === 1 ? 'it' : 'them'}.`);
+      return { file, name: projectFileName(p.name) };
+    },
+
+    async openFile(file) {
+      if (get().opening || !index()) return false;
+      const got = await unpackProject(file);
+      if (!got) {
+        toast('That file isn’t a Layout Stage project.');
+        return false;
+      }
+      for (const { id, blob } of got.images) if (!(await hasImage(id))) await storeImage(id, blob);
+      const names = get().items.map((x) => x.name);
+      const item = await L.addLocalProject(
+        { id: newProjectId(), name: names.includes(got.name) ? copyName(got.name, names) : got.name, blank: false },
+        got.doc,
+      );
+      if (got.missing) toast(`${got.missing === 1 ? 'An image is' : `${got.missing} images are`} missing from that file.`);
+      const opened = await get().open(item.id);
+      scheduleFlush();
+      return opened;
     },
 
     async rename(id, raw) {

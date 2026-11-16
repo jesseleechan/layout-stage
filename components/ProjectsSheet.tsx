@@ -27,6 +27,7 @@ function Sheet() {
   const [now, setNow] = useState(() => Date.now());
   const cardRef = useRef<HTMLDivElement>(null);
   const listRef = useRef<HTMLUListElement>(null);
+  const fileRef = useRef<HTMLInputElement>(null);
   const downOnScrim = useRef(false);
   const uid = useId();
   const status = statusOf({ ...useProjects.getState(), items, mode, phase, transfer, pendingDeletes });
@@ -106,6 +107,20 @@ function Sheet() {
         <div className="sheet-head">
           <h2 id={`${uid}t`}>Projects</h2>
           <div className="proj-head-actions">
+            <input
+              ref={fileRef}
+              type="file"
+              accept=".zip,application/zip"
+              hidden
+              onChange={(e) => {
+                const file = e.target.files?.[0];
+                e.target.value = '';
+                if (file) void useProjects.getState().openFile(file);
+              }}
+            />
+            <button className="btn sm" type="button" disabled={!!opening} onClick={() => fileRef.current?.click()}>
+              Open file…
+            </button>
             <button className="btn primary sm" id={`${uid}new`} type="button" disabled={!!opening} onClick={() => void create()}>
               New project
             </button>
@@ -178,6 +193,16 @@ function Card({ p, current, now, syncOn, busy, opening, onDeleted }: {
   const cancelRef = useRef<HTMLButtonElement>(null);
   const renameRef = useRef<HTMLButtonElement>(null);
   const deleteRef = useRef<HTMLButtonElement>(null);
+  const save = async () => {
+    const got = await useProjects.getState().download(p.id);
+    if (!got) return;
+    const url = URL.createObjectURL(got.file);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = got.name;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(url), 30_000);
+  };
 
   useEffect(() => {
     if (mode === 'confirm') cancelRef.current?.focus();
@@ -252,6 +277,12 @@ function Card({ p, current, now, syncOn, busy, opening, onDeleted }: {
             disabled={busy || p.stub} onClick={() => void duplicate(p.id)}
           >
             <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round" aria-hidden="true"><rect x="5" y="5" width="8.5" height="8.5" rx="1.5" /><path d="M11 3.2V3a.5.5 0 0 0-.5-.5h-7A.5.5 0 0 0 3 3v7.5a.5.5 0 0 0 .5.5h.2" /></svg>
+          </button>
+          <button
+            className="icon-btn xs" type="button" aria-label={`Download ${p.name}`} title={p.stub ? 'Open it first, then download it' : 'Download'}
+            disabled={busy || p.stub} onClick={() => void save()}
+          >
+            <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M8 2.5v7.5M5 7.5l3 3 3-3M3 13h10" /></svg>
           </button>
           <button className="icon-btn xs" type="button" ref={deleteRef} aria-label={`Delete ${p.name}`} title="Delete" disabled={busy} onClick={() => setMode('confirm')}>
             <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M2.5 4.5h11M6 4.5V3h4v1.5M4 4.5l.7 9h6.6l.7-9" /></svg>

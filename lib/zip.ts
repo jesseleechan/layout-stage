@@ -1,10 +1,11 @@
-/* A small ZIP writer for "Save all (.zip)". Entries are stored, not compressed: PNG and JPG are
-   compressed already, so deflate would only cost time. Names are UTF-8 (general-purpose flag bit 11).
-   No ZIP64, so the archive stays under 4 GiB and 65,535 entries, which a listing set never nears.
+/* A small ZIP writer for "Save all (.zip)", and a reader for archives this writer made. Entries are
+   stored, not compressed: PNG and JPG are compressed already, so deflate would only cost time. Names
+   are UTF-8 (general-purpose flag bit 11). No ZIP64, so the archive stays under 4 GiB and 65,535
+   entries, which a listing set never nears.
 
    Streaming-friendly: ZipWriter hands back each entry's local header to place in front of its data,
    so a caller can keep each file as the Blob it already has (zipBlobs) and only reads one file at a
-   time to compute its CRC. Pure apart from zipBlobs, which needs Blob. */
+   time to compute its CRC. Pure apart from zipBlobs and readStoredZip, which need Blob. */
 
 const CRC_TABLE = (() => {
   const t = new Uint32Array(256);
@@ -154,3 +155,57 @@ export async function zipBlobs(files: { name: string; blob: Blob }[], date?: Dat
   parts.push(w.end());
   return new Blob(parts, { type: 'application/zip' });
 }
+
+/** The entries of a ZIP whose files are all stored (this module's own archives): each as a slice of
+ *  `file`, nothing copied. Throws on anything else: a compressed or encrypted entry, ZIP64, a comment,
+ *  a name that is absolute or climbs out, or sizes that don't fit the file. */
+export async function readStoredZip(file: Blob): Promise<{ name: string; blob: Blob }[]> {
+  if (file.size < 22) throw new Error('not a zip');
+  const eocd = new DataView(await file.slice(file.size - 22, file.size).arrayBuffer());
+  if (eocd.getUint32(0, true) !== 0x06054b50 || eocd.getUint16(20, true) !== 0) throw new Error('not a zip');
+  const count = eocd.getUint16(10, true);
+  if (eocd.getUint16(8, true) !== count) throw new Error('not a zip');
+  const cdSize = eocd.getUint32(12, true);
+  const cdOff = eocd.getUint32(16, true);
+  if (cdOff + cdSize + 22 !== file.size) throw new Error('not a zip');
+
+  const cdBuf = await file.slice(cdOff, cdOff + cdSize).arrayBuffer();
+  const cdBytes = new Uint8Array(cdBuf);
+  const cd = new DataView(cdBuf);
+  const decoder = new TextDecoder('utf-8', { fatal: true });
+  const records: { name: string; size: number; local: number }[] = [];
+  let p = 0;
+  for (let i = 0; i < count; i++) {
+    if (p + 46 > cdBytes.length || cd.getUint32(p, true) !== 0x02014b50) throw new Error('bad zip record');
+    const flags = cd.getUint16(p + 8, true);
+    const method = cd.getUint16(p + 10, true);
+    if ((flags & ~UTF8) !== 0 || method !== 0) throw new Error('unsupported zip entry');
+    const csize = cd.getUint32(p + 20, true);
+    const size = cd.getUint32(p + 24, true);
+    if (csize !== size) throw new Error('bad zip entry size');
+    const nameLen = cd.getUint16(p + 28, true);
+    const extraLen = cd.getUint16(p + 30, true);
+    const commentLen = cd.getUint16(p + 32, true);
+    if (p + 46 + nameLen + extraLen + commentLen > cdBytes.length) throw new Error('bad zip record');
+    const name = decoder.decode(cdBytes.subarray(p + 46, p + 46 + nameLen));
+    if (!name || name.startsWith('/') || name.includes('\\') || name.split('/').includes('..')) {
+      throw new Error(`bad zip entry name: ${name}`);
+    }
+    const local = cd.getUint32(p + 42, true);
+    records.push({ name, size, local });
+    p += 46 + nameLen + extraLen + commentLen;
+  }
+  if (p !== cdBytes.length) throw new Error('bad zip directory');
+
+  const entries: { name: string; blob: Blob }[] = [];
+  for (const r of records) {
+    if (r.local + 30 > cdOff) throw new Error('bad zip local header');
+    const lh = new DataView(await file.slice(r.local, r.local + 30).arrayBuffer());
+    if (lh.getUint32(0, true) !== 0x04034b50) throw new Error('bad zip local header');
+    const start = r.local + 30 + lh.getUint16(26, true) + lh.getUint16(28, true);
+    if (start + r.size > cdOff) throw new Error('bad zip entry bounds');
+    entries.push({ name: r.name, blob: file.slice(start, start + r.size) });
+  }
+  return entries;
+}
+
