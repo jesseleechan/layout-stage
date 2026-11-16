@@ -220,6 +220,7 @@ const isImageFile = (f: Blob) => f.type.startsWith('image/');
 let history = new History(defaultComposition());
 let nudgeTimer: ReturnType<typeof setTimeout> | undefined;
 let autosave = false; // on once the saved canvas has been read
+let storageWarned = false; // one warning per session
 let toastSeq = 0;
 let jobSeq = 0;
 let initStarted = false;
@@ -250,10 +251,17 @@ const mediaFull = (n: number) =>
   `Media keeps ${MAX_MEDIA}: ${n === 1 ? 'the oldest unused image was' : `the ${n} oldest unused images were`} removed.`;
 
 export const useEditor = create<EditorState>()((set, get) => {
+  const toast = (msg: string) => set({ toast: { id: ++toastSeq, msg } });
+  /** The browser couldn't store an image or the canvas: said once, so the work can be exported first. */
+  const warnStorage = () => {
+    if (storageWarned) return;
+    storageWarned = true;
+    toast('This browser couldn’t save your work (its storage is full or blocked). It’s safe while this tab stays open: export what you need before closing it.');
+  };
   /** Autosave: stores the last undo step (never a half-finished drag) as soon as it's saved, as the
    *  open project's canvas (lib/projects/local.ts). */
   const persist = () => {
-    if (autosave) void saveOpenProject(history.current);
+    if (autosave) void saveOpenProject(history.current).then((ok) => { if (!ok) warnStorage(); });
   };
   const syncHistory = () => set({ canUndo: history.canUndo, canRedo: history.canRedo });
   const edit = (recipe: (d: Composition) => void) => {
@@ -280,7 +288,6 @@ export const useEditor = create<EditorState>()((set, get) => {
       persist();
     }
   };
-  const toast = (msg: string) => set({ toast: { id: ++toastSeq, msg } });
   const setUi = (patch: Partial<UiState>) => set({ ui: { ...get().ui, ...patch } });
   const afterRestore = (d: Composition) => {
     const sel = get().ui.selected;
@@ -306,6 +313,7 @@ export const useEditor = create<EditorState>()((set, get) => {
       toast(`Couldn’t read ${img.name || 'that image'}.`);
       return null;
     }
+    if (got.stored === false) warnStorage();
     return { imageId: got.id, name: img.name || 'Pasted image', source: img.source, nw: got.nw, nh: got.nh };
   };
   /** Layouts still where arrange() put them are placed again after an image changes (classic ones

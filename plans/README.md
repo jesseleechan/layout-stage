@@ -14,7 +14,7 @@ Each plan is self-contained: an executor needs only the plan file and the repo.
 | [002](002-unreadable-canvas-safety.md) | A canvas that can't be read is never overwritten, and can't stall sync | P1 | S | 001 | DONE |
 | [003](003-access-gate-fail-closed.md) | A hosted production deployment without a password refuses to serve | P1 | S | — (the owner set `ACCESS_OPEN=1` in Vercel on 2026-11-15; check it is set for Production) | DONE |
 | [004](004-site-pages-malformed-links.md) | One badly escaped link no longer breaks whole-site capture | P2 | S | — | DONE |
-| [005](005-storage-failure-warning.md) | The editor says so when the browser can't save | P2 | S | — (apply after 001 and 002) | TODO |
+| [005](005-storage-failure-warning.md) | The editor says so when the browser can't save | P2 | S | — (apply after 001 and 002) | DONE |
 | [006](006-ci-hardening.md) | CI can't go green with the browser tests skipped; the goldens job keeps its token to itself | P2 | S | — (apply after 004; workflow needs one manual run on GitHub) | DONE |
 | [007](007-pin-text-in-exports.md) | Feature: the export zips carry the pin text for each image | P2 | S | — | TODO |
 | [008](008-stack-layout-preset.md) | Feature: a new layout preset, "Stack" (one page in front, the others behind it) | P2 | M | — (owner reviews the look before merging) | TODO |

@@ -45,6 +45,8 @@ interface ThumbEntry {
   p: Promise<string | null>;
 }
 const thumbs = new Map<string, ThumbEntry>();
+/** Images whose blob couldn't be stored: they last for this session only. */
+const unsaved = new Set<string>();
 
 const listeners = new Set<() => void>();
 let version = 0;
@@ -56,12 +58,14 @@ function emit() {
 const newId = () =>
   'img_' + (typeof crypto !== 'undefined' && 'randomUUID' in crypto ? crypto.randomUUID() : Date.now().toString(36) + Math.random().toString(36).slice(2));
 
-async function save(key: string, blob: Blob): Promise<void> {
+async function save(key: string, blob: Blob): Promise<boolean> {
   try {
     const s = db();
-    if (s) await set(key, blob, s);
+    if (!s) return false;
+    await set(key, blob, s);
+    return true;
   } catch {
-    /* storage blocked or full: the in-memory copy still works for this session */
+    return false; // storage blocked or full: the in-memory copy still works for this session
   }
 }
 
@@ -70,7 +74,7 @@ export async function putImage(blob: Blob): Promise<string> {
   const id = newId();
   fresh.add(id);
   blobs.set(id, blob);
-  await save(id, blob);
+  if (!(await save(id, blob))) unsaved.add(id);
   return id;
 }
 
@@ -344,6 +348,8 @@ export interface StoredImage {
   /** Natural size of the stored image. */
   nw: number;
   nh: number;
+  /** False when the browser couldn't store it: it is gone after a reload. */
+  stored?: boolean;
 }
 
 /** Stores an incoming image (upload, drop, paste, capture) with its thumbnail, decoded and ready to show.
@@ -371,7 +377,7 @@ export async function ingestImage(blob: Blob): Promise<StoredImage | null> {
         await save(THUMB + id, thumb);
       }
       const el = await loadImage(id);
-      return el && { id, nw: el.naturalWidth, nh: el.naturalHeight };
+      return el && { id, nw: el.naturalWidth, nh: el.naturalHeight, stored: !unsaved.has(id) };
     }
     // Couldn't make the smaller copy: keep the original, as before.
     if (c) freeCanvas(c);
@@ -381,7 +387,7 @@ export async function ingestImage(blob: Blob): Promise<StoredImage | null> {
   emit();
   // The thumbnail needs a full decode: it's made in the background, and a panel asking for it waits.
   trackThumb(id, makeThumb(id, blob, img));
-  return { id, nw, nh };
+  return { id, nw, nh, stored: !unsaved.has(id) };
 }
 
 /* ---------------- thumbnails ---------------- */
