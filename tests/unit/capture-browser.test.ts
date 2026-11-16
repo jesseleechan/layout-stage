@@ -18,6 +18,9 @@ const hasBrowser = (() => {
     return false;
   }
 })();
+// CI installs Chromium before the unit tests (.github/workflows/ci.yml): there, a missing browser is
+// a broken setup, not a reason to skip the only tests that drive the real browser through the guard.
+if (process.env.CI && !hasBrowser) throw new Error('Playwright’s Chromium is missing: run `npx playwright install chromium` before the unit tests.');
 
 /* The production guard (publicOnly) refuses the loopback origin; this test policy is the injected
    stand-in, so the basic-auth "staging site" below is reachable only here. */
