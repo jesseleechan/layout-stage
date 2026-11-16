@@ -16,6 +16,7 @@ import { pinVariations, variationPages } from '@/lib/variations';
 import { pageMeasure } from '@/lib/arrange';
 import { renderPagesGrid } from '@/lib/render/pages-grid';
 import { zipBlobs } from '@/lib/zip';
+import { PIN_TEXT_FILE, pinTextFile } from '@/lib/pin-text';
 import PinTextSection from './PinText';
 import VideoBody from './VideoSheet';
 import FeedBody from './FeedPreview';
@@ -125,7 +126,15 @@ export const useExport = create<ExportState>()((set, get) => {
   /** Renders `plan` one file at a time into the open sheet, then zips the files. */
   const runMulti = async (
     mode: MultiMode,
-    plan: { key: string; label: string; render(): Promise<HTMLCanvasElement>; name(w: number, h: number): string; doc?: Composition }[],
+    plan: {
+      key: string;
+      label: string;
+      render(): Promise<HTMLCanvasElement>;
+      name(w: number, h: number): string;
+      doc?: Composition;
+      /** The canvas whose pin text goes into the zip's pin-text.txt for this file. */
+      pin?: Composition;
+    }[],
     zipName: string,
     format: Format,
     returnTo: string,
@@ -155,6 +164,12 @@ export const useExport = create<ExportState>()((set, get) => {
       }
     }
     const files = get().items.filter((it) => it.blob).map((it) => ({ name: it.name, blob: it.blob! }));
+    // The pin text for the images that rendered, as one text file beside them.
+    const texts = plan.flatMap((p, i) => {
+      const it = get().items[i];
+      return p.pin && it?.blob ? [{ file: it.name, doc: p.pin }] : [];
+    });
+    if (texts.length) files.push({ name: PIN_TEXT_FILE, blob: new Blob([pinTextFile(texts)], { type: 'text/plain;charset=utf-8' }) });
     try {
       if (files.length) {
         const z = await zipBlobs(files);
@@ -203,6 +218,7 @@ export const useExport = create<ExportState>()((set, get) => {
       const plan = allSizes(clone(doc)).map((it) => ({
         key: it.key,
         label: it.label,
+        pin: it.doc,
         render: () => renderComposition(it.doc, exportScale(it.doc.W, it.doc.H, it.scale)),
         name: (w: number, h: number) => exportFileName(it.doc, w, h, format),
       }));
@@ -224,6 +240,7 @@ export const useExport = create<ExportState>()((set, get) => {
       const plan = etsySet(clone(doc)).map((it, i) => ({
         key: it.key,
         label: it.label,
+        ...(it.key === 'hero' ? { pin: it.doc } : {}),
         render: render(it),
         name: (w: number, h: number) => setFileName(i, it.key, w, h, format),
       }));
@@ -240,6 +257,7 @@ export const useExport = create<ExportState>()((set, get) => {
         key: v.key,
         label: v.label,
         doc: v.doc,
+        pin: v.doc,
         render: () => renderComposition(v.doc, exportScale(v.doc.W, v.doc.H, ui.exportScale)),
         name: (w: number, h: number) => `layout-stage-${PRESETS[v.doc.preset].slug}-variation-${i + 1}-${w}x${h}.${format === 'jpg' ? 'jpg' : 'png'}`,
       }));

@@ -9,8 +9,8 @@ async function openEditor(page: Page) {
   await page.waitForFunction(() => window.__layoutStage?.store.getState().hydrated === true, null, { timeout: 45_000 });
 }
 
-/** Entries of a stored zip: name and the PNG size from each file's IHDR. */
-function readZip(buf: Buffer): { name: string; method: number; w: number; h: number }[] {
+/** Entries of a stored zip: name, PNG size from IHDR (0 for text), and text for `.txt` entries. */
+function readZip(buf: Buffer): { name: string; method: number; w: number; h: number; text?: string }[] {
   const eocd = buf.length - 22;
   expect(buf.readUInt32LE(eocd)).toBe(0x06054b50);
   const n = buf.readUInt16LE(eocd + 10);
@@ -18,11 +18,15 @@ function readZip(buf: Buffer): { name: string; method: number; w: number; h: num
   const out = [];
   for (let i = 0; i < n; i++) {
     expect(buf.readUInt32LE(p)).toBe(0x02014b50);
-    const nameLen = buf.readUInt16LE(p + 28), local = buf.readUInt32LE(p + 42);
+    const nameLen = buf.readUInt16LE(p + 28), local = buf.readUInt32LE(p + 42), size = buf.readUInt32LE(p + 20);
     const name = buf.toString('utf8', p + 46, p + 46 + nameLen);
     const data = local + 30 + buf.readUInt16LE(local + 26) + buf.readUInt16LE(local + 28);
-    expect(buf.readUInt32BE(data)).toBe(0x89504e47); // PNG
-    out.push({ name, method: buf.readUInt16LE(p + 10), w: buf.readUInt32BE(data + 16), h: buf.readUInt32BE(data + 20) });
+    if (name.endsWith('.txt')) {
+      out.push({ name, method: buf.readUInt16LE(p + 10), w: 0, h: 0, text: buf.toString('utf8', data, data + size) });
+    } else {
+      expect(buf.readUInt32BE(data)).toBe(0x89504e47); // PNG
+      out.push({ name, method: buf.readUInt16LE(p + 10), w: buf.readUInt32BE(data + 16), h: buf.readUInt32BE(data + 20) });
+    }
     p += 46 + nameLen + buf.readUInt16LE(p + 30) + buf.readUInt16LE(p + 32);
   }
   return out;
@@ -61,12 +65,17 @@ test.describe('multi-image export', () => {
   test('Export all sizes: pin at 2:3 and 9:16, Etsy 4:3 and Etsy square in one zip', async ({ page }) => {
     await openEditor(page);
     const zip = await runFromMenu(page, 'Export all sizes');
-    expect(readZip(zip)).toEqual([
+    const entries = readZip(zip);
+    expect(entries.map(({ name, method, w, h }) => ({ name, method, w, h }))).toEqual([
       { name: 'layout-stage-pinterest-2000x3000.png', method: 0, w: 2000, h: 3000 },
       { name: 'layout-stage-pinterest-9x16-1080x1920.png', method: 0, w: 1080, h: 1920 },
       { name: 'layout-stage-etsy-4x3-3000x2250.png', method: 0, w: 3000, h: 2250 },
       { name: 'layout-stage-etsy-square-2000x2000.png', method: 0, w: 2000, h: 2000 },
+      { name: 'pin-text.txt', method: 0, w: 0, h: 0 },
     ]);
+    const txt = entries.find((e) => e.name === 'pin-text.txt')?.text ?? '';
+    expect(txt).toContain('Title: ');
+    expect(txt).toContain('layout-stage-pinterest-2000x3000.png');
     await expect(page.locator('#sheetTitle')).toHaveText('All sizes');
     await expect(page.locator('.multi-item a.btn')).toHaveCount(4);
     await page.keyboard.press('Escape');
@@ -84,8 +93,9 @@ test.describe('multi-image export', () => {
       '03-layout-stage-etsy-middle-3000x2250.png',
       '04-layout-stage-etsy-bottom-3000x2250.png',
       '05-layout-stage-etsy-palette-3000x2250.png',
+      'pin-text.txt',
     ]);
-    entries.forEach((e) => expect([e.w, e.h]).toEqual([3000, 2250]));
+    entries.filter((e) => e.name.endsWith('.png')).forEach((e) => expect([e.w, e.h]).toEqual([3000, 2250]));
   });
 });
 

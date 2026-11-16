@@ -5,7 +5,7 @@ import { defaultComposition } from '@/lib/arrange';
 import { clone, DEFAULT_CAPTURE, type Composition, type Slot } from '@/lib/model';
 import { sanitizeComposition } from '@/lib/persist';
 import {
-  copyAllText, firstCaptureUrl, joinNames, PIN_LIMITS, pinTextOf, sanitizePinText, siteName, siteNames, suggestPinText, trimTo,
+  copyAllText, firstCaptureUrl, joinNames, PIN_LIMITS, PIN_TEXT_FILE, pinTextFile, pinTextOf, sanitizePinText, siteName, siteNames, suggestPinText, trimTo,
 } from '@/lib/pin-text';
 
 const url = (u: string, width: 1440 | 390 = 1440): Slot['source'] => ({ kind: 'url', url: u, capturedAt: '2026-01-01T00:00:00Z', options: { ...DEFAULT_CAPTURE, width } });
@@ -139,5 +139,36 @@ describe('edited text', () => {
     expect(sanitizePinText({ title: 'x'.repeat(150), alt: '' })).toEqual({ title: 'x'.repeat(100), alt: '' });
     const saved = sanitizeComposition({ ...clone(defaultComposition()), pin: { description: 'Mine' } })!;
     expect(saved.pin).toEqual({ description: 'Mine' });
+  });
+});
+
+describe('pinTextFile', () => {
+  it('formats one image under its file name', () => {
+    const d = doc();
+    expect(pinTextFile([{ file: 'pin.png', doc: d }])).toBe(`pin.png\n\n${copyAllText(pinTextOf(d).values)}\n`);
+  });
+
+  it('separates different texts with a line of ten dashes in input order', () => {
+    const a = doc((d) => { d.preset = 'pin'; });
+    const b = doc((d) => { d.preset = 'etsy43'; });
+    expect(pinTextFile([{ file: 'a.png', doc: a }, { file: 'b.png', doc: b }])).toBe(
+      `a.png\n\n${copyAllText(pinTextOf(a).values)}\n\n----------\n\nb.png\n\n${copyAllText(pinTextOf(b).values)}\n`,
+    );
+  });
+
+  it('collapses images with identical text into one block', () => {
+    const d = doc();
+    expect(pinTextFile([{ file: 'a.png', doc: d }, { file: 'b.png', doc: d }])).toBe(
+      `a.png\nb.png\n\n${copyAllText(pinTextOf(d).values)}\n`,
+    );
+  });
+
+  it('includes edited pin fields', () => {
+    const d = doc((d) => { d.pin = { title: 'My title' }; });
+    expect(pinTextFile([{ file: 'pin.png', doc: d }])).toContain('Title: My title');
+  });
+
+  it('names the text file pin-text.txt', () => {
+    expect(PIN_TEXT_FILE).toBe('pin-text.txt');
   });
 });

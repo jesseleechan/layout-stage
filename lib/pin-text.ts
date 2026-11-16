@@ -150,6 +150,22 @@ export function copyAllText(v: PinValues): string {
     .join('\n\n');
 }
 
+/** The text file that goes into a multi-image export's zip. */
+export const PIN_TEXT_FILE = 'pin-text.txt';
+
+/** The pin text for each exported image, under its file name: one block per image, a line of dashes
+ *  between them. Images whose text is the same share one block, listed together. */
+export function pinTextFile(entries: { file: string; doc: Parameters<typeof pinTextOf>[0] }[]): string {
+  const blocks: { files: string[]; text: string }[] = [];
+  for (const e of entries) {
+    const text = copyAllText(pinTextOf(e.doc).values);
+    const same = blocks.find((b) => b.text === text);
+    if (same) same.files.push(e.file);
+    else blocks.push({ files: [e.file], text });
+  }
+  return blocks.map((b) => `${b.files.join('\n')}\n\n${b.text}`).join('\n\n----------\n\n') + '\n';
+}
+
 /** Edited fields from a save; undefined when there are none (older saves have no `pin`). */
 export function sanitizePinText(raw: unknown): PinText | undefined {
   if (!raw || typeof raw !== 'object') return undefined;
