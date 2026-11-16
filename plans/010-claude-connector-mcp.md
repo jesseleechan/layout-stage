@@ -15,19 +15,22 @@
 
 > **Operator, before an executor starts** (the executor cannot do these):
 >
-> 1. **Approve three new packages**: `mcp-handler`, `@modelcontextprotocol/server` and `zod` as a
->    direct dependency (CLAUDE.md: "Ask before adding a dependency the handoff doesn't name").
+> 1. **Three new packages**: `mcp-handler`, `@modelcontextprotocol/server` and `zod` as a direct
+>    dependency. **Approved by the owner on 2026-11-16** (CLAUDE.md: "Ask before adding a dependency
+>    the handoff doesn't name"). Add them to the approved list in CLAUDE.md's last bullet in Step 7.
 > 2. **Projects sync must be on** in production (a Blob store connected, `PROJECTS_SYNC` not `off`).
->    The connector writes projects into the synced store; the editor picks them up from there. With
->    sync off there is nowhere for Claude's drafts to go.
-> 3. **Check one Claude Design page link in the app's own Capture dialog.** The connector gets page
->    images by capturing a URL, exactly as the Capture dialog does, and that only works for links
->    reachable without signing in. If the capture shows a sign-in page, stop: this plan needs a
->    different way to get images in (see "Maintenance notes").
+>    The connector writes projects into the synced store; the editor picks them up from there.
+>    **The owner confirmed on 2026-11-16 that sync is on.**
+> 3. **Claude Design page links must be reachable without signing in.** The connector gets page
+>    images by capturing a URL, exactly as the Capture dialog does. The owner will make the links
+>    reachable when the connector is in use; nothing to check before building. (If a capture shows a
+>    sign-in page later, see "Maintenance notes".)
 > 4. After deployment: create a **Protection Bypass for Automation** secret in Vercel (Settings →
->    Deployment Protection) and set `MCP_TOKEN` (a long random string) for Production. The connector
->    URL to paste into Claude is
->    `https://<your-domain>/api/mcp?x-vercel-protection-bypass=<bypass secret>&key=<MCP_TOKEN>`.
+>    Deployment Protection) and set `MCP_TOKEN` for Production, then redeploy. **The owner asked to
+>    be reminded of this step**: the executor's report must say so (Step 8). To make the token, run
+>    `openssl rand -hex 32` in a terminal, or use a password manager's generator: at least 24
+>    characters, letters and digits only (it goes into a URL). The connector URL to paste into Claude
+>    is `https://<your-domain>/api/mcp?x-vercel-protection-bypass=<bypass secret>&key=<MCP_TOKEN>`.
 >    Treat that URL as a password.
 
 ## Status
@@ -444,8 +447,11 @@ route `app/api/mcp/route.ts`. Drafts only: nothing renders on the server. ``
 
 ### Step 8: Hand over to the operator
 
-In your report, give the operator the checklist from the top of this plan (item 4), and this
-acceptance test to run in Claude after deploying: add the connector URL as a custom connector, then
+In your report, give the operator the checklist from the top of this plan (item 4) and open it with
+this reminder, which the owner asked for: "Reminder: set `MCP_TOKEN` in Vercel for Production now
+(generate it with `openssl rand -hex 32`, or a password manager: 24+ letters and digits), create the
+Protection Bypass secret, and redeploy. The connector stays off until `MCP_TOKEN` is set." Then give
+this acceptance test to run in Claude after deploying: add the connector URL as a custom connector, then
 ask: "Use Layout Stage to make a Pinterest pin project called Test from https://example.com". Expected:
 Claude calls `create_project` and `add_page`, and within a few minutes the project appears in the
 editor's Projects sheet as "On another device" and opens with the captured page.
@@ -475,8 +481,7 @@ connector by the operator's acceptance test in Step 8. No e2e spec in this plan.
 
 Stop and report back (do not improvise) if:
 
-- The operator has not approved the packages, or sync is off in production, or the Claude Design
-  link could not be captured (items 1–3 at the top).
+- You need a package other than the three approved ones.
 - The installed `mcp-handler` / `@modelcontextprotocol/server` API differs from the excerpt in a way
   the README doesn't resolve, or the packages need a zod version the repo's override can't satisfy.
 - `next build` fails because of the new packages (bundling, ESM/CJS).
