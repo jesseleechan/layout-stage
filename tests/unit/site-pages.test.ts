@@ -59,6 +59,23 @@ describe('sitePages', () => {
     expect(titleFromPath('/about-us/')).toBe('About us');
     expect(titleFromPath('/shop/linen_dress')).toBe('Linen dress');
     expect(titleFromPath('/caf%C3%A9')).toBe('Café');
+    expect(titleFromPath('/sale/50%-off')).toBe('50% off');
+  });
+
+  it('keeps going past a link with a stray percent sign', () => {
+    const pages = sitePages(scan({
+      nav: [{ href: '/sale/50%-off', text: '' }, { href: '/about', text: 'About' }],
+      sitemap: ['https://studio.example/100%', 'https://studio.example/contact'],
+    }));
+    expect(pages.map((p) => new URL(p.url).pathname)).toEqual(['/', '/sale/50%-off', '/about', '/100%', '/contact']);
+    expect(pages[1].title).toBe('50% off');
+  });
+
+  it('lists a page once when its escapes differ only in form', () => {
+    const pages = sitePages(scan({
+      nav: [{ href: '/caf%C3%A9', text: 'Café' }, { href: '/café', text: 'Café' }],
+    }));
+    expect(pages).toHaveLength(2);
   });
 });
 
@@ -81,6 +98,9 @@ const hasBrowser = (() => {
     return false;
   }
 })();
+// CI installs Chromium before the unit tests (.github/workflows/ci.yml): there, a missing browser is
+// a broken setup, not a reason to skip the only tests that drive the real browser through the guard.
+if (process.env.CI && !hasBrowser) throw new Error('Playwright’s Chromium is missing: run `npx playwright install chromium` before the unit tests.');
 
 const policy: HostPolicy = async (host) =>
   host === 'public.test'

@@ -59,11 +59,20 @@ export function pageUrl(raw: string, base: URL): URL | null {
   return u;
 }
 
-const key = (u: URL) => `${host(u)}${decodeURI(u.pathname).toLowerCase()}`;
+/** Decodes percent-escapes; a path with a stray "%" (e.g. /50%-off) is used as it is. */
+const decoded = (s: string, how: (s: string) => string) => {
+  try {
+    return how(s);
+  } catch {
+    return s;
+  }
+};
+
+const key = (u: URL) => `${host(u)}${decoded(u.pathname, decodeURI).toLowerCase()}`;
 
 /** "about-us" → "About us"; the root is "Home". */
 export function titleFromPath(pathname: string): string {
-  const last = decodeURIComponent(pathname.replace(/\/+$/, '').split('/').pop() || '');
+  const last = decoded(pathname.replace(/\/+$/, '').split('/').pop() || '', decodeURIComponent);
   if (!last) return 'Home';
   const words = last.replace(/\.[a-z0-9]+$/i, '').replace(/[-_+]+/g, ' ').trim();
   return words ? words[0].toUpperCase() + words.slice(1) : 'Home';
