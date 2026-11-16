@@ -1,8 +1,12 @@
 # Plan 009: A project can be downloaded as a file and opened from one
 
-> **Executor instructions**: Follow this plan step by step. Run every
-> verification command and confirm the expected result before moving to the
-> next step. If anything in the "STOP conditions" section occurs, stop and
+> **Executor instructions**: Follow this plan step by step, in order. Do NOT
+> run the typecheck or the test suite after each step: the "Verify" lines under
+> the steps describe what should be true, and are checked once, at the end.
+> When every step is done, run the "Done criteria" in one pass (install,
+> typecheck and the unit tests once each) and fix what they show. A "Verify"
+> that is a quick `grep` or a file check may be run at any time. If anything
+> in the "STOP conditions" section occurs, stop and
 > report — do not improvise. When done, update the status row for this plan
 > in `plans/README.md` — unless a reviewer dispatched you and told you they
 > maintain the index.

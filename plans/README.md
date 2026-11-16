@@ -27,6 +27,21 @@ Each plan is self-contained: an executor needs only the plan file and the repo.
 
 Status values: TODO | IN PROGRESS | DONE | BLOCKED (with one-line reason) | REJECTED (with one-line rationale — finding fixed independently or approach abandoned)
 
+## How much to verify (the owner's choice, 2026-11-16)
+
+Verify once per plan, at the end, not after every step:
+
+- Work through a plan's steps in order without running the typecheck or the tests in between. The
+  "Verify" lines under each step say what should be true; they are checked at the end.
+- When all steps are done, run the plan's "Done criteria" in one pass: install once, typecheck once,
+  unit tests once. Fix what they show, then run them once more.
+- Quick checks (`grep`, "does this file exist") can be run whenever they help.
+- Don't run the browser (e2e) suite locally. CI runs it on push.
+- Still write the tests each plan lists. They are what CI and the reviewer check the work with.
+- To go further, plans that don't share files can be done back to back with one final check for the
+  group: 003 + 004 + 006 together, and 007 + 008 together. Keep 001, 002, 005, 009 and 010 checked
+  one at a time, since each builds on the one before and a failure is much harder to trace across them.
+
 ## Dependency notes
 
 - 002 requires 001 only because both edit `lib/projects/local.ts`, `lib/projects/library.ts` and
