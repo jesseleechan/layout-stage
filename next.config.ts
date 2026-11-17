@@ -15,6 +15,9 @@ const nextConfig: NextConfig = {
   },
   // The dev badge sits over the Frame panel's shadow chips.
   devIndicators: false,
+  experimental: {
+    agentUpgrade: 'security',
+  },
 };
 
 export default nextConfig;
