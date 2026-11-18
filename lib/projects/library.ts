@@ -149,6 +149,16 @@ export const useProjects = create<ProjectsState>()((set, get) => {
     try {
       const doc = useEditor.getState().doc;
       const c = await renderComposition(doc, THUMB_PX / Math.max(doc.W, doc.H));
+      if (doc.background.type === 'transparent') {
+        const x = c.getContext('2d');
+        if (x) {
+          x.save();
+          x.globalCompositeOperation = 'destination-over';
+          x.fillStyle = '#FFFFFF';
+          x.fillRect(0, 0, c.width, c.height);
+          x.restore();
+        }
+      }
       const blob = await new Promise<Blob | null>((res) => c.toBlob(res, 'image/jpeg', 0.82));
       c.width = c.height = 0;
       if (!blob || index()?.currentId !== id) return;

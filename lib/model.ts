@@ -6,7 +6,9 @@ export type PresetId = 'pin' | 'story' | 'etsy43' | 'etsy11' | 'p45' | 'land169'
 /** 'custom': a free height (Slot.ar), set with the Height slider or the layout's bottom handle (lib/crop.ts). */
 export type CropId = 'full' | '16:10' | '4:3' | '1:1' | '4:5' | '2:3' | '9:16' | '1:2' | 'custom';
 export type ShadowPreset = 'none' | 'soft' | 'lifted' | 'float' | 'hard' | 'custom';
-export type BackgroundType = 'solid' | 'gradient' | 'mesh' | 'image';
+export type BackgroundType = 'solid' | 'gradient' | 'mesh' | 'image' | 'transparent';
+export const BACKGROUND_TYPES: readonly BackgroundType[] = ['solid', 'gradient', 'mesh', 'image', 'transparent'];
+export const isBackgroundType = (t: unknown): t is BackgroundType => BACKGROUND_TYPES.includes(t as BackgroundType);
 
 export interface CaptureOptions {
   width: 1440 | 1280 | 834 | 390;
@@ -304,4 +306,9 @@ export function applyStyleTo(doc: Composition, st: Style): void {
 
 export function defaultUi(): UiState {
   return { selected: 0, showSafeArea: false, exportFormat: 'png', exportScale: PRESETS.pin.scale };
+}
+
+/** Forces PNG when the composition has a transparent background (JPEG has no alpha channel). */
+export function effectiveExportFormat(doc: Pick<Composition, 'background'>, format: UiState['exportFormat']): UiState['exportFormat'] {
+  return doc.background.type === 'transparent' ? 'png' : format;
 }

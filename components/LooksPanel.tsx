@@ -1,4 +1,5 @@
 'use client';
+import type { CSSProperties } from 'react';
 import { STYLES, type Style } from '@/lib/model';
 import { useEditor } from '@/lib/store';
 
@@ -7,6 +8,11 @@ function lookPreview(st: Style): string {
   if (b.type === 'gradient' && b.grad) return `linear-gradient(${b.grad.angle}deg, ${b.grad.a}, ${b.grad.b})`;
   if (b.type === 'mesh' && b.mesh) return `radial-gradient(circle at 25% 25%, ${b.mesh[1]}, transparent 65%), radial-gradient(circle at 80% 75%, ${b.mesh[2]}, ${b.mesh[0]})`;
   return b.solid ?? '#F4F5F7';
+}
+
+function lookSwatchProps(st: Style): { className: string; style?: CSSProperties } {
+  if (st.background.type === 'transparent') return { className: 'look-sw checker', style: { '--checker': '8px' } as CSSProperties };
+  return { className: 'look-sw', style: { background: lookPreview(st) } };
 }
 
 /* One-click looks in the Canvas tab: the nine built-in styles plus any saved in this browser. */
@@ -31,7 +37,7 @@ export default function LooksPanel() {
             title={st.name}
             onClick={() => applyStyle(st)}
           >
-            <span className="look-sw" style={{ background: lookPreview(st) }} aria-hidden="true" />
+            <span {...lookSwatchProps(st)} aria-hidden="true" />
             <span>{st.name}</span>
           </button>
         ))}
@@ -43,7 +49,7 @@ export default function LooksPanel() {
               title={st.name}
               onClick={() => applyStyle(st)}
             >
-              <span className="look-sw" style={{ background: lookPreview(st) }} aria-hidden="true" />
+              <span {...lookSwatchProps(st)} aria-hidden="true" />
               <span>{st.name}</span>
             </button>
             <button

@@ -405,6 +405,10 @@ describe('background', () => {
     S().setBackgroundType('gradient');
     expect(doc().background.type).toBe('gradient');
     expect(S().toast).toBeNull();
+    S().setBackgroundType('transparent');
+    expect(doc().background.type).toBe('transparent');
+    expect(doc().background.grain).toBe(10);
+    expect(S().toast).toBeNull();
     S().setBackgroundType('image');
     expect(doc().background.type).toBe('image');
     expect(S().toast?.msg).toBe('Upload an image, or blur one of your layouts.');
@@ -440,6 +444,7 @@ describe('each discrete action is exactly one undo step', () => {
     ['setCrop', () => S().setCrop(1, '1:1')],
     ['setShadowPreset', () => S().setShadowPreset('hard')],
     ['setBackgroundType', () => S().setBackgroundType('solid')],
+    ['setBackgroundType transparent', () => S().setBackgroundType('transparent')],
     ['pickSolid', () => S().pickSolid('#2B2F3A')],
     ['pickGradient', () => S().pickGradient(7)],
     ['pickMesh', () => S().pickMesh(2)],

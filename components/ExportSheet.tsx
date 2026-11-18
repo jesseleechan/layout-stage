@@ -1,8 +1,8 @@
 'use client';
-import { useEffect, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type CSSProperties, type KeyboardEvent, type ReactNode } from 'react';
 import { create } from 'zustand';
 import { useEditor } from '@/lib/store';
-import { clone, PRESETS, type Composition, type UiState } from '@/lib/model';
+import { clone, effectiveExportFormat, PRESETS, type Composition, type UiState } from '@/lib/model';
 import { exportComposition, exportFileName, renderComposition, type ExportResult } from '@/lib/render/export';
 import { makeCanvas } from '@/lib/render/background';
 import { renderPaletteCard } from '@/lib/render/palette-card';
@@ -43,6 +43,8 @@ export interface SheetItem {
   /** A small preview. */
   thumb: string | null;
   error?: string;
+  /** Whether the rendered item has a transparent background (shows checkerboard). */
+  transparent?: boolean;
   /** A variation that can be put on the canvas. */
   doc?: Composition;
 }
@@ -87,12 +89,12 @@ const mime = (f: Format) => (f === 'jpg' ? 'image/jpeg' : 'image/png');
 const yieldFrame = () => new Promise((res) => setTimeout(res, 0));
 
 /** A preview at most 640 px on the long side. */
-async function thumbnail(c: HTMLCanvasElement): Promise<string> {
+async function thumbnail(c: HTMLCanvasElement, transparent = false): Promise<string> {
   const k = Math.min(1, 640 / Math.max(c.width, c.height));
   const [t, x] = makeCanvas(Math.max(1, Math.round(c.width * k)), Math.max(1, Math.round(c.height * k)));
   x.imageSmoothingQuality = 'high';
   x.drawImage(c, 0, 0, t.width, t.height);
-  const b = await toBlob(t, 'image/jpeg', 0.9);
+  const b = await (transparent ? toBlob(t, 'image/png') : toBlob(t, 'image/jpeg', 0.9));
   t.width = t.height = 0;
   return URL.createObjectURL(b);
 }
@@ -131,6 +133,7 @@ export const useExport = create<ExportState>()((set, get) => {
       label: string;
       render(): Promise<HTMLCanvasElement>;
       name(w: number, h: number): string;
+      transparent?: boolean;
       doc?: Composition;
       /** The canvas whose pin text goes into the zip's pin-text.txt for this file. */
       pin?: Composition;
@@ -144,7 +147,11 @@ export const useExport = create<ExportState>()((set, get) => {
     clearMulti();
     set({
       mode, open: true, rendering: true, returnTo, note: null,
-      items: plan.map((p) => ({ key: p.key, label: p.label, status: 'pending', name: '', w: 0, h: 0, format, blob: null, url: null, thumb: null, ...(p.doc ? { doc: p.doc } : {}) })),
+      items: plan.map((p) => ({
+        key: p.key, label: p.label, status: 'pending', name: '', w: 0, h: 0, format, blob: null, url: null, thumb: null,
+        ...(p.transparent ? { transparent: true } : {}),
+        ...(p.doc ? { doc: p.doc } : {}),
+      })),
     });
     const update = (i: number, patch: Partial<SheetItem>) => set({ items: get().items.map((it, k) => (k === i ? { ...it, ...patch } : it)) });
     for (let i = 0; i < plan.length; i++) {
@@ -153,7 +160,7 @@ export const useExport = create<ExportState>()((set, get) => {
       try {
         const c = await plan[i].render();
         const blob = await toBlob(c, mime(format), 0.92);
-        const thumb = await thumbnail(c);
+        const thumb = await thumbnail(c, plan[i].transparent);
         const { width: w, height: h } = c;
         c.width = c.height = 0; // one full-size canvas at a time
         if (id !== runId) { revokeLater([thumb]); return; }
@@ -214,10 +221,12 @@ export const useExport = create<ExportState>()((set, get) => {
     },
     runAllSizes(returnTo = 'exportBtn') {
       const { doc, ui } = useEditor.getState();
-      const format = ui.exportFormat;
+      const format = effectiveExportFormat(doc, ui.exportFormat);
+      const transparent = doc.background.type === 'transparent';
       const plan = allSizes(clone(doc)).map((it) => ({
         key: it.key,
         label: it.label,
+        transparent,
         pin: it.doc,
         render: () => renderComposition(it.doc, exportScale(it.doc.W, it.doc.H, it.scale)),
         name: (w: number, h: number) => exportFileName(it.doc, w, h, format),
@@ -226,7 +235,8 @@ export const useExport = create<ExportState>()((set, get) => {
     },
     runEtsySet(returnTo = 'exportBtn') {
       const { doc, ui } = useEditor.getState();
-      const format = ui.exportFormat;
+      const format = effectiveExportFormat(doc, ui.exportFormat);
+      const transparent = doc.background.type === 'transparent';
       const scale = PRESETS.etsy43.scale;
       const render = (it: SetItem) => async () => {
         const m = exportScale(it.doc.W, it.doc.H, scale);
@@ -240,6 +250,7 @@ export const useExport = create<ExportState>()((set, get) => {
       const plan = etsySet(clone(doc)).map((it, i) => ({
         key: it.key,
         label: it.label,
+        transparent,
         ...(it.key === 'hero' ? { pin: it.doc } : {}),
         render: render(it),
         name: (w: number, h: number) => setFileName(i, it.key, w, h, format),
@@ -250,12 +261,13 @@ export const useExport = create<ExportState>()((set, get) => {
       if (get().rendering) return;
       const { doc, ui } = useEditor.getState();
       const snap = clone(doc);
-      const format = ui.exportFormat;
+      const format = effectiveExportFormat(snap, ui.exportFormat);
       const lead = variationPages(snap)[0];
       const pal = lead ? await paletteOf(lead.imageId, loadImage).catch(() => null) : null;
       const plan = pinVariations(snap, pal ? siteBackgrounds(pal) : null, pageMeasure()).map((v, i) => ({
         key: v.key,
         label: v.label,
+        transparent: v.doc.background.type === 'transparent',
         doc: v.doc,
         pin: v.doc,
         render: () => renderComposition(v.doc, exportScale(v.doc.W, v.doc.H, ui.exportScale)),
@@ -269,10 +281,12 @@ export const useExport = create<ExportState>()((set, get) => {
         showToast(captureOn() ? 'Add two or more pages to Media first: upload them, or capture a whole site.' : 'Add two or more pages to Media first: upload them.');
         return;
       }
-      const format = ui.exportFormat;
+      const format = effectiveExportFormat(doc, ui.exportFormat);
+      const transparent = doc.background.type === 'transparent';
       const plan = pagesImages(clone(doc)).map((it) => ({
         key: it.key,
         label: it.label,
+        transparent,
         render: () => renderPagesGrid(it.doc, it.pages, it.doc.W, it.doc.H, exportScale(it.doc.W, it.doc.H, PRESETS[it.preset].scale)),
         name: (w: number, h: number) => `layout-stage-all-pages-${PRESETS[it.preset].slug}-${w}x${h}.${format === 'jpg' ? 'jpg' : 'png'}`,
       }));
@@ -384,7 +398,12 @@ function SingleSheet() {
         <div className="sheet-main">
           <div className="sheet-preview">
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img id="sheetImg" src={result.url} alt="Preview of the exported image" />
+            <img
+              id="sheetImg"
+              className={result.doc.background.type === 'transparent' ? 'checker' : undefined}
+              src={result.url}
+              alt="Preview of the exported image"
+            />
           </div>
           <div className="sheet-meta">
             <strong id="sheetName">{result.name}</strong>
@@ -468,9 +487,17 @@ function MultiSheet({ mode }: { mode: MultiMode }) {
           return (
             <li key={it.key} className="multi-item" data-status={it.status} aria-busy={k === current}>
               <div className="multi-thumb">
-                {it.thumb
-                  ? /* eslint-disable-next-line @next/next/no-img-element */ <img src={it.thumb} alt={`Preview: ${it.label}`} />
-                  : <span className="multi-wait">{it.status === 'error' ? 'Not rendered' : k === current ? 'Rendering…' : 'Waiting'}</span>}
+                {it.thumb ? (
+                  /* eslint-disable-next-line @next/next/no-img-element */
+                  <img
+                    className={it.transparent ? 'checker' : undefined}
+                    style={it.transparent ? ({ '--checker': '12px' } as CSSProperties) : undefined}
+                    src={it.thumb}
+                    alt={`Preview: ${it.label}`}
+                  />
+                ) : (
+                  <span className="multi-wait">{it.status === 'error' ? 'Not rendered' : k === current ? 'Rendering…' : 'Waiting'}</span>
+                )}
               </div>
               <div className="multi-meta">
                 <span className="multi-label">{it.label}</span>

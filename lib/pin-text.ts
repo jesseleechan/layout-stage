@@ -121,7 +121,7 @@ export function suggestPinText(doc: Pick<Composition, 'preset' | 'slots' | 'coun
   else if (names.length) shots = `screenshots of ${names.length} websites (${sites})`;
   else shots = n > 1 ? `${n} website screenshots` : 'a website screenshot';
   const frames = n > 1 ? 'in frames' : 'in a frame';
-  const bg = { solid: 'a plain', gradient: 'a gradient', mesh: 'a soft color', image: 'a photo' }[doc.background.type] ?? 'a';
+  const bg = { solid: 'a plain', gradient: 'a gradient', mesh: 'a soft color', image: 'a photo', transparent: 'a transparent' }[doc.background.type] ?? 'a';
   const extras = [headline && `the headline “${headline}”`, badge && `a “${badge}” badge`].filter(Boolean);
   const alt = `${kind} showing ${shots} ${frames} on ${bg} background${extras.length ? `, with ${extras.join(' and ')}` : ''}.`;
 

@@ -151,3 +151,75 @@ test.describe('match site colors', () => {
     await expect(page.locator('#toast')).toContainText('layout 2');
   });
 });
+
+test.describe('transparent background', () => {
+  test('shows checkerboard preview, locks export format to PNG, and exports alpha-transparent PNG', async ({ page }) => {
+    await openEditor(page);
+    await page.selectOption('#fmtSel', 'jpg');
+    await page.getByRole('button', { name: 'Canvas', exact: true }).click();
+    await page.getByRole('group', { name: 'Background type' }).getByRole('button', { name: 'Transparent' }).click();
+
+    await expect(page.locator('#stage')).toHaveClass(/\bchecker\b/);
+    await expect(page.locator('[data-pane="transparent"]')).toBeVisible();
+    await expect(page.locator('#bgGrain')).toHaveCount(0);
+    await expect(page.locator('#bgTexture')).toHaveCount(0);
+    await expect(page.locator('#fmtSel')).toBeDisabled();
+    await expect(page.locator('#fmtSel')).toHaveValue('png');
+
+    // Preset thumbnails switch to transparent PNGs with checkerboard backing.
+    const presets = page.getByRole('group', { name: 'Arrangement' });
+    await expect.poll(() =>
+      presets.locator('img').evaluateAll((els) =>
+        els.map((e) => (e as HTMLImageElement).classList.contains('checker') && (e as HTMLImageElement).src.startsWith('data:image/png')),
+      ),
+      { timeout: 15_000 },
+    ).toEqual([true, true, true, true]);
+
+    // Single export produces a .png with checkerboard preview even though JPG was previously selected.
+    await page.click('#exportBtn');
+    await expect(page.locator('#sheetTitle')).toHaveText('Export ready');
+    await expect(page.locator('#sheetName')).toContainText(/\.png$/);
+    await expect(page.locator('#sheetMeta')).toContainText('PNG');
+    await expect(page.locator('#sheetImg')).toHaveClass(/\bchecker\b/);
+
+    // Verify exported image actually has transparent corner pixels (alpha 0) and opaque layout pixels (alpha 255).
+    const alphas = await page.evaluate(async () => {
+      const img = document.getElementById('sheetImg') as HTMLImageElement;
+      const c = document.createElement('canvas');
+      c.width = img.naturalWidth;
+      c.height = img.naturalHeight;
+      const x = c.getContext('2d')!;
+      x.drawImage(img, 0, 0);
+      const st = window.__layoutStage!.store.getState();
+      const s0 = st.doc.slots[0];
+      const sx = Math.round((s0.cx / st.doc.W) * c.width);
+      const sy = Math.round((s0.cy / st.doc.H) * c.height);
+      return {
+        corner: x.getImageData(0, 0, 1, 1).data[3],
+        slot: x.getImageData(sx, sy, 1, 1).data[3],
+      };
+    });
+    expect(alphas).toEqual({ corner: 0, slot: 255 });
+
+    await page.keyboard.press('Escape');
+
+    // Multi-size export also forces PNG (never JPG) and applies checkerboard thumbs.
+    const zip = await runFromMenu(page, 'Export all sizes');
+    const entries = readZip(zip).filter((e) => !e.name.endsWith('.txt'));
+    expect(entries.map((e) => e.name)).toEqual([
+      'layout-stage-pinterest-2000x3000.png',
+      'layout-stage-pinterest-9x16-1080x1920.png',
+      'layout-stage-etsy-4x3-3000x2250.png',
+      'layout-stage-etsy-square-2000x2000.png',
+    ]);
+    await expect(page.locator('.multi-thumb img.checker')).toHaveCount(4);
+    await page.keyboard.press('Escape');
+
+    // Switching back to an opaque background unlocks format selector and restores JPG preference.
+    await page.getByRole('group', { name: 'Background type' }).getByRole('button', { name: 'Solid' }).click();
+    await expect(page.locator('#stage')).not.toHaveClass(/\bchecker\b/);
+    await expect(page.locator('#bgGrain')).toBeVisible();
+    await expect(page.locator('#fmtSel')).toBeEnabled();
+    await expect(page.locator('#fmtSel')).toHaveValue('jpg');
+  });
+});

@@ -43,7 +43,9 @@ export default function FeedBody({ onClose }: { onClose: () => void }) {
       // An Etsy photo is cropped to the 5:4 card, so it's drawn a little wider than the card.
       const width = w === 'pinterest' ? PIN_FEED_WIDTH : ETSY_CARD_WIDTH * 1.4;
       void renderComposition(d, (width * 2) / d.W).then(
-        (c) => { if (on) setUrls((u) => ({ ...u, [w]: c.toDataURL('image/jpeg', 0.9) })); },
+        (c) => {
+          if (on) setUrls((u) => ({ ...u, [w]: d.background.type === 'transparent' ? c.toDataURL('image/png') : c.toDataURL('image/jpeg', 0.9) }));
+        },
         () => undefined,
       );
     }

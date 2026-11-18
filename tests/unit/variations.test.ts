@@ -51,6 +51,13 @@ describe('pinVariations', () => {
   it('with nothing in Media it varies the layouts on the canvas', () => {
     expect(pinVariations(defaultComposition(), site, null).length).toBeGreaterThan(1);
   });
+
+  it('keeps transparent on "your background" takes and gives others site backgrounds', () => {
+    const src = withMedia([0, 1, 2, 3, 4].map((k) => item(k)));
+    src.background.type = 'transparent';
+    const v = pinVariations(src, site, null);
+    expect(v.map((x) => x.doc.background.type)).toEqual(['transparent', 'mesh', 'gradient', 'solid', 'mesh', 'transparent']);
+  });
 });
 
 describe('store.putComposition', () => {

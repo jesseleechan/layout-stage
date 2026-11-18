@@ -157,12 +157,15 @@ function Hints() {
 function TopRight() {
   const W = useEditor((s) => s.doc.W);
   const H = useEditor((s) => s.doc.H);
+  const bgType = useEditor((s) => s.doc.background.type);
   const fmt = useEditor((s) => s.ui.exportFormat);
   const mult = useEditor((s) => s.ui.exportScale);
   const { setUi } = useEditor.getState();
   const rendering = useExport((s) => s.rendering);
   const runExport = useExport((s) => s.run);
   const dims = exportSize({ W, H }, mult);
+  const transparent = bgType === 'transparent';
+  const effectiveFmt = transparent ? 'png' : fmt;
 
   return (
     <div className="cluster top-right export" role="group" aria-label="Export">
@@ -174,9 +177,16 @@ function TopRight() {
         <option value="1">1×</option>
         <option value="2">2×</option>
       </select>
-      <select id="fmtSel" aria-label="File format" value={fmt} onChange={(e) => setUi({ exportFormat: e.target.value as UiState['exportFormat'] })}>
+      <select
+        id="fmtSel"
+        aria-label="File format"
+        value={effectiveFmt}
+        disabled={transparent}
+        title={transparent ? 'PNG is required for transparent backgrounds' : undefined}
+        onChange={(e) => setUi({ exportFormat: e.target.value as UiState['exportFormat'] })}
+      >
         <option value="png">PNG</option>
-        <option value="jpg">JPG</option>
+        <option value="jpg" disabled={transparent}>JPG</option>
       </select>
       <ExportMenu disabled={rendering} dims={`${dims.w} × ${dims.h}`} />
     </div>

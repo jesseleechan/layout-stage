@@ -94,7 +94,7 @@ function useThumbnails(doc: Composition, presets: Preset[]): Partial<Record<Pres
         try {
           const c = await renderComposition(p.doc(doc), m);
           if (run !== seq.current) return;
-          next[p.key] = c.toDataURL('image/jpeg', 0.86);
+          next[p.key] = doc.background.type === 'transparent' ? c.toDataURL('image/png') : c.toDataURL('image/jpeg', 0.86);
         } catch {
           /* an image still loading: drawn on the next change */
         }
@@ -116,6 +116,7 @@ export default function LayoutPresets() {
   const urls = useThumbnails(doc, hydrated ? presets : []);
   const now = presetOf(arrangementOf(doc), doc.count);
   const wide = canvasKind(doc.W, doc.H) === 'land';
+  const transparent = doc.background.type === 'transparent';
 
   const pick = (k: PresetKey) => {
     if (k === 'continue') continuePage(1);
@@ -139,7 +140,7 @@ export default function LayoutPresets() {
               title={p.key === now ? `${p.name}: pick again to start the layouts over` : p.name} onClick={() => pick(p.key)}
             >
               <span className="tile-face" aria-hidden="true">
-                {urls[p.key] ? <img alt="" src={urls[p.key]} /> : null}
+                {urls[p.key] ? <img className={transparent ? 'checker' : undefined} style={transparent ? ({ '--checker': '10px' } as CSSProperties) : undefined} alt="" src={urls[p.key]} /> : null}
               </span>
               <span className="tile-cap" aria-hidden="true">{p.name}</span>
             </button>

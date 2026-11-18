@@ -49,6 +49,8 @@ describe('shownIds', () => {
     expect([...shownIds(d)].sort()).toEqual(['img_a', 'img_b']);
     d.background = { ...d.background, type: 'image', imageId: null };
     expect([...shownIds(d)].sort()).toEqual(['img_a', 'img_b']);
+    d.background = { ...d.background, type: 'transparent', imageId: 'img_bg' };
+    expect([...shownIds(d)].sort()).toEqual(['img_a', 'img_b']);
   });
 });
 
@@ -100,6 +102,11 @@ describe('releasing images that are no longer shown', () => {
     S().setBackgroundType('image');
     S().pickGradient(0);
     S().applyStyle({ name: 't', frame: S().doc.frame, background: { type: 'image' } });
+    expect(rel()).toEqual(['img_bg']);
+  });
+
+  it('switching from image to transparent releases the background photo', () => {
+    S().setBackgroundType('transparent');
     expect(rel()).toEqual(['img_bg']);
   });
 

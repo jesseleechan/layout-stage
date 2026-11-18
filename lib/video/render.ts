@@ -104,7 +104,12 @@ export async function renderScrollVideo(doc: Composition, settings: VideoSetting
   if (signal?.aborted) throw aborted();
 
   const [bg, bx] = makeCanvas(w, h);
-  drawBackground(bx, doc.background, doc.W, doc.H, m, bgImg);
+  if (doc.background.type === 'transparent') {
+    bx.fillStyle = '#FFFFFF';
+    bx.fillRect(0, 0, w, h);
+  } else {
+    drawBackground(bx, doc.background, doc.W, doc.H, m, bgImg);
+  }
   const [c, x] = makeCanvas(w, h);
   x.imageSmoothingQuality = 'high';
 

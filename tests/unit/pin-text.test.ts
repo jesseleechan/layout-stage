@@ -72,6 +72,11 @@ describe('suggestions', () => {
     expect(s.alt).toBe('Etsy listing photo showing a screenshot of the Juniper & Co. website in a frame on a plain background.');
   });
 
+  it('describes transparent backgrounds accurately in alt text', () => {
+    const d = doc((d) => { d.background.type = 'transparent'; });
+    expect(suggestPinText(d).alt).toBe('Pinterest pin showing screenshots of 2 websites (Juniper & Co. and Northbeam) in frames on a transparent background.');
+  });
+
   it('the headline becomes the title; headline and badge are in the alt text', () => {
     const d = doc((d) => {
       d.overlays!.headline.enabled = true;

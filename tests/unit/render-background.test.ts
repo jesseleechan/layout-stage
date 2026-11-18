@@ -1,5 +1,6 @@
-import { describe, expect, it } from 'vitest';
-import { gradientLine, meshPoints, TEXTURE_CELLS, TEXTURE_SIZE, textureValues, xorshift } from '@/lib/render/background';
+import { describe, expect, it, vi } from 'vitest';
+import { defaultBackground } from '@/lib/model';
+import { drawBackground, gradientLine, meshPoints, TEXTURE_CELLS, TEXTURE_SIZE, textureValues, xorshift } from '@/lib/render/background';
 
 /** The prototype's meshPoints, copied verbatim from reference/layout-stage.html, as the oracle. */
 function prototypeMeshPoints(seed: number): number[][] {
@@ -160,5 +161,38 @@ describe('textureValues (the texture tile)', () => {
     }
     expect(Math.max(...blocks) - Math.min(...blocks)).toBeGreaterThan(40);
     expect(TEXTURE_CELLS).toEqual([64, 32, 16, 8, 4]);
+  });
+});
+
+describe('drawBackground (transparent)', () => {
+  it('clears the canvas and skips fill, grain, and texture', () => {
+    const clearRect = vi.fn();
+    const fillRect = vi.fn();
+    const createPattern = vi.fn();
+    const drawImage = vi.fn();
+    const createLinearGradient = vi.fn();
+    const createRadialGradient = vi.fn();
+    const ctx = {
+      canvas: { width: 800, height: 1200 },
+      clearRect,
+      fillRect,
+      createPattern,
+      drawImage,
+      createLinearGradient,
+      createRadialGradient,
+      save: vi.fn(),
+      restore: vi.fn(),
+    } as unknown as CanvasRenderingContext2D;
+
+    const bg = { ...defaultBackground(), type: 'transparent' as const, grain: 40, texture: 100 };
+    drawBackground(ctx, bg, 1000, 1500, 1, { width: 100, height: 100 } as HTMLCanvasElement);
+
+    expect(clearRect).toHaveBeenCalledTimes(1);
+    expect(clearRect).toHaveBeenCalledWith(0, 0, 800, 1200);
+    expect(fillRect).not.toHaveBeenCalled();
+    expect(createPattern).not.toHaveBeenCalled();
+    expect(drawImage).not.toHaveBeenCalled();
+    expect(createLinearGradient).not.toHaveBeenCalled();
+    expect(createRadialGradient).not.toHaveBeenCalled();
   });
 });

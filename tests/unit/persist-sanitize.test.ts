@@ -46,4 +46,13 @@ describe('sanitizeComposition', () => {
     d.media = 5 as never;
     expect(() => sanitizeComposition(d)).not.toThrow();
   });
+
+  it('round-trips transparent backgrounds and repairs unknown background types', () => {
+    const d = clone(defaultComposition());
+    d.background.type = 'transparent';
+    expect(sanitizeComposition(d)!.background.type).toBe('transparent');
+
+    (d.background as { type: unknown }).type = 'bogus';
+    expect(sanitizeComposition(d)!.background.type).toBe(defaultComposition().background.type);
+  });
 });

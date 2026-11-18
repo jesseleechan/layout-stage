@@ -95,4 +95,14 @@ describe('store', () => {
     applyStyleTo(d, st);
     expect(d.background.texture).toBe(33);
   });
+
+  it('saveStyle and applyStyle keep a transparent background', async () => {
+    S().setBackgroundType('transparent');
+    await S().saveStyle();
+    const st = S().savedStyles.at(-1)!;
+    expect(st.background.type).toBe('transparent');
+    const d: Composition = defaultComposition();
+    applyStyleTo(d, st);
+    expect(d.background.type).toBe('transparent');
+  });
 });

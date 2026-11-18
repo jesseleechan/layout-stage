@@ -24,6 +24,8 @@
   --font-mark: "Bricolage Grotesque", "Instrument Sans", ui-sans-serif, system-ui, sans-serif;
   --font-ui: "Instrument Sans", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   --font-num: "Geist Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  --checker-a: #FFFFFF;
+  --checker-b: #E5E5EA;
 }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
@@ -33,6 +35,7 @@
     --guide: #FF5EAA; --scrim: rgba(0, 0, 0, .62);
     --lift: 0 1px 2px rgba(0, 0, 0, .4), 0 8px 24px rgba(0, 0, 0, .3);
     --lift-sm: 0 0 0 1px rgba(255, 255, 255, .06), 0 1px 2px rgba(0, 0, 0, .4);
+    --checker-a: #1E1E22; --checker-b: #2A2A30;
     color-scheme: dark;
   }
 }
@@ -43,6 +46,7 @@
   --guide: #FF5EAA; --scrim: rgba(0, 0, 0, .62);
   --lift: 0 1px 2px rgba(0, 0, 0, .4), 0 8px 24px rgba(0, 0, 0, .3);
   --lift-sm: 0 0 0 1px rgba(255, 255, 255, .06), 0 1px 2px rgba(0, 0, 0, .4);
+  --checker-a: #1E1E22; --checker-b: #2A2A30;
   color-scheme: dark;
 }
 
@@ -89,6 +93,7 @@ select, .num {
   color: var(--ink); font: 500 13px var(--font-ui); padding: 0 8px;
 }
 select { padding-right: 4px; cursor: pointer; }
+select:disabled { opacity: .6; cursor: default; }
 .num { width: 70px; font: 12px var(--font-num); font-variant-numeric: tabular-nums; }
 .custom { display: flex; align-items: center; gap: 4px; color: var(--ink-2); }
 .spacer { flex: 1; }
@@ -402,3 +407,10 @@ a.btn { text-decoration: none; }
   transform: translateY(-200%);
 }
 .skip:focus-visible { transform: none; }
+
+/* Checkerboard backing for transparent backgrounds (Stage, ExportSheet, LayoutPresets, Look swatches). */
+.checker {
+  background-color: var(--checker-a);
+  background-image: conic-gradient(var(--checker-b) 90deg, var(--checker-a) 90deg 180deg, var(--checker-b) 180deg 270deg, var(--checker-a) 270deg);
+  background-size: var(--checker, 16px) var(--checker, 16px);
+}

@@ -1,7 +1,7 @@
 /* Export: one offscreen canvas at W·m × H·m, background first, then images in z-order.
    Uses the same drawing functions as the preview background, and the same formulas as the CSS
    preview of the images. Preview and export must render identically: change both or neither. */
-import { PRESETS, type Composition, type UiState } from '../model';
+import { effectiveExportFormat, PRESETS, type Composition, type UiState } from '../model';
 import { loadImage } from '../images';
 import { drawBackground, makeCanvas } from './background';
 import { drawShot } from './shot';
@@ -50,12 +50,13 @@ export interface ExportResult {
   format: UiState['exportFormat'];
 }
 
-/** Renders and encodes: PNG, or JPG at quality 0.92. The long side is capped at 8000 px. */
+/** Renders and encodes: PNG, or JPG at quality 0.92 (transparent backgrounds always encode as PNG). The long side is capped at 8000 px. */
 export async function exportComposition(doc: Composition, format: UiState['exportFormat'], scale: UiState['exportScale']): Promise<ExportResult> {
+  const actual = effectiveExportFormat(doc, format);
   const m = exportScale(doc.W, doc.H, scale);
   const c = await renderComposition(doc, m);
-  const type = format === 'jpg' ? 'image/jpeg' : 'image/png';
+  const type = actual === 'jpg' ? 'image/jpeg' : 'image/png';
   const blob = await new Promise<Blob | null>((res) => c.toBlob(res, type, 0.92));
   if (!blob) throw new Error('render failed');
-  return { blob, w: c.width, h: c.height, name: exportFileName(doc, c.width, c.height, format), format };
+  return { blob, w: c.width, h: c.height, name: exportFileName(doc, c.width, c.height, actual), format: actual };
 }

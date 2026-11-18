@@ -1,6 +1,6 @@
 /* Autosave and saved styles, in IndexedDB. Browser only. */
 import { createStore, del, get, set, type UseStore } from 'idb-keyval';
-import { clone, isArrangement, PRESETS, type Composition, type SlotSource, type Style } from './model';
+import { clone, isArrangement, isBackgroundType, PRESETS, type Composition, type SlotSource, type Style } from './model';
 import { defaultComposition } from './arrange';
 import { cleanSelectors } from './capture/selectors';
 import { sanitizePlacements } from './canvas-size';
@@ -107,6 +107,7 @@ function sanitize(raw: unknown): Composition | null {
   const tilt = Number(out.tilt);
   if (Number.isFinite(tilt) && tilt !== 0) out.tilt = Math.max(-45, Math.min(45, Math.round(tilt)));
   else delete out.tilt;
+  if (!isBackgroundType(out.background.type)) out.background.type = d.background.type;
   const tex = Number(out.background.texture);
   out.background.texture = Number.isFinite(tex) ? Math.max(0, Math.min(100, tex)) : 0;
   // A free height keeps a usable ratio (else it shows the whole page); other crops carry none.

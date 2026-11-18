@@ -423,7 +423,12 @@ export default function Stage() {
         onPointerEnter={() => { overRef.current = true; }} onPointerLeave={() => { overRef.current = false; }}
       >
         <div className="stage-wrap" id="stageWrap" ref={wrapRef} style={{ width: W * scale, height: H * scale, visibility: painted ? undefined : 'hidden' }}>
-          <div className={'stage' + (space ? ' space' : '') + (panning ? ' panning' : '')} id="stage" style={{ width: W, height: H, transform: `scale(${scale})` }} onPointerDown={onStageDown}>
+          <div
+            className={'stage' + (bg.type === 'transparent' ? ' checker' : '') + (space ? ' space' : '') + (panning ? ' panning' : '')}
+            id="stage"
+            style={{ width: W, height: H, transform: `scale(${scale})`, ...(bg.type === 'transparent' ? { '--checker': `${Math.max(12, Math.round(20 / scale))}px` } : {}) } as CSSProperties}
+            onPointerDown={onStageDown}
+          >
             <canvas id="bgCanvas" ref={bgRef} aria-hidden="true" />
             <div style={doc.tilt ? { position: 'absolute', inset: 0, transform: `rotate(${doc.tilt}deg)`, transformOrigin: 'center center', pointerEvents: 'none' } : undefined}>
               <div style={doc.tilt ? { pointerEvents: 'auto' } : undefined}>

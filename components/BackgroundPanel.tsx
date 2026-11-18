@@ -1,5 +1,5 @@
 'use client';
-import { useMemo, useRef, useState } from 'react';
+import { useMemo, useRef, useState, type CSSProperties } from 'react';
 import { useShallow } from 'zustand/react/shallow';
 import { GRADS, MESHES, SOLIDS, type Background, type BackgroundType } from '@/lib/model';
 import { useEditor } from '@/lib/store';
@@ -9,7 +9,7 @@ import { getMeshThumbs } from './thumbs';
 
 /** Background types as tiles, each face a small preview of that kind. */
 function typeOptions(b: { solid: string; ga: string; gb: string; angle: number }, meshThumb: string): TileOption<BackgroundType>[] {
-  const face = (style: React.CSSProperties) => <span style={{ position: 'absolute', inset: 0, ...style }} />;
+  const face = (style: CSSProperties) => <span style={{ position: 'absolute', inset: 0, ...style }} />;
   return [
     { value: 'solid', label: 'Solid', face: face({ background: b.solid }) },
     { value: 'gradient', label: 'Gradient', face: face({ background: `linear-gradient(${b.angle}deg, ${b.ga}, ${b.gb})` }) },
@@ -21,6 +21,10 @@ function typeOptions(b: { solid: string; ga: string; gb: string; angle: number }
           <rect x="2" y="3" width="12" height="10" rx="2" /><circle cx="6" cy="6.5" r="1.2" /><path d="m2.5 12 3.5-3.5 2.5 2.5 2-2 3 3" />
         </svg>
       ),
+    },
+    {
+      value: 'transparent', label: 'Transparent',
+      face: <span className="checker" style={{ position: 'absolute', inset: 0, '--checker': '12px' } as CSSProperties} />,
     },
   ];
 }
@@ -63,7 +67,7 @@ export default function BackgroundPanel() {
       <div className="group-head">
         <h2>Background</h2>
       </div>
-      <Tiles label="Background type" options={typeOptions(b, meshThumbs[0])} value={b.type} columns={4} ratio={1} onPick={setBackgroundType} />
+      <Tiles label="Background type" options={typeOptions(b, meshThumbs[0])} value={b.type} columns={3} ratio={1.35} onPick={setBackgroundType} />
       <MatchSiteColors layout={b.blurOf} />
 
       {b.type === 'solid' && (
@@ -159,9 +163,19 @@ export default function BackgroundPanel() {
         </div>
       )}
 
-      <div className="sub">Finish</div>
-      <RangeRow id="bgGrain" label="Grain" min={0} max={40} value={b.grain} onInput={(v) => editBackground({ grain: v })} />
-      <RangeRow id="bgTexture" label="Texture" min={0} max={100} value={b.texture} onInput={(v) => editBackground({ texture: v })} />
+      {b.type === 'transparent' && (
+        <div className="stack" data-pane="transparent">
+          <p className="fine">No background behind your layouts — exports as PNG with transparency.</p>
+        </div>
+      )}
+
+      {b.type !== 'transparent' && (
+        <>
+          <div className="sub">Finish</div>
+          <RangeRow id="bgGrain" label="Grain" min={0} max={40} value={b.grain} onInput={(v) => editBackground({ grain: v })} />
+          <RangeRow id="bgTexture" label="Texture" min={0} max={100} value={b.texture} onInput={(v) => editBackground({ texture: v })} />
+        </>
+      )}
       <input
         ref={fileRef}
         type="file"

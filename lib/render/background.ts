@@ -165,6 +165,10 @@ export function drawCover(x: CanvasRenderingContext2D, img: Drawable, cw: number
  */
 export function drawBackground(x: CanvasRenderingContext2D, bg: Background, W: number, H: number, k: number, bgImage: Drawable | null): void {
   const cw = x.canvas.width, ch = x.canvas.height;
+  if (bg.type === 'transparent') {
+    x.clearRect(0, 0, cw, ch);
+    return;
+  }
   x.save();
   x.globalAlpha = 1;
   x.globalCompositeOperation = 'source-over';
